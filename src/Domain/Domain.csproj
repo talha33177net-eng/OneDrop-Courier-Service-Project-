@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Business rules only. No package references: the domain must build and test without a database or UI. -->
+  <PropertyGroup>
+    <RootNamespace>Domain</RootNamespace>
+  </PropertyGroup>
+
+</Project>

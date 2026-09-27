@@ -1,0 +1,73 @@
+@page
+@model Web.Pages.Merchant.OrdersModel
+@{
+    ViewData["Title"] = "My orders";
+}
+
+<h1>@Model.MerchantName</h1>
+<p class="lead">Your OneDrop orders. Delivery costs you nothing; the customer pays the fee on delivery day.</p>
+
+<div class="card">
+    <h2>Orders</h2>
+    @if (Model.Orders.Count == 0)
+    {
+        <p class="muted">No orders yet. Send one with <code>POST /api/v1/orders</code> (see the API keys below).</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Order</th>
+                        <th>Your ref</th>
+                        <th>Recipient</th>
+                        <th>Area</th>
+                        <th>Status</th>
+                        <th class="num">Packages</th>
+                        <th class="num">COD</th>
+                        <th>Created (UTC)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var order in Model.Orders)
+                    {
+                        <tr>
+                            <td><strong>@order.Number</strong></td>
+                            <td>@order.Reference</td>
+                            <td>@order.Recipient</td>
+                            <td>@order.Area</td>
+                            <td><span class="status">@order.Status</span></td>
+                            <td class="num">@order.Packages</td>
+                            <td class="num">৳@order.Cod.ToString("N0")</td>
+                            <td>@order.Created.ToString("yyyy-MM-dd HH:mm")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<div class="card">
+    <h2>API keys</h2>
+    <p class="muted">Send the full key in the <code>X-Api-Key</code> header. Only the prefix is stored in clear.</p>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>Name</th><th>Prefix</th><th>Last used (UTC)</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var key in Model.Keys)
+                {
+                    <tr>
+                        <td>@key.Name</td>
+                        <td><code>od_@(key.Prefix)_…</code></td>
+                        <td>@(key.LastUsed?.ToString("yyyy-MM-dd HH:mm") ?? "Never")</td>
+                        <td>@(key.Active ? "Active" : "Revoked")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

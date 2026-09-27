@@ -1,0 +1,38 @@
+@page
+@model Web.Pages.Customer.IndexModel
+@{
+    ViewData["Title"] = "My deliveries";
+}
+
+<h1>My deliveries</h1>
+<p class="lead">Orders from every shop that chose OneDrop for you. Orders to the same address will travel together.</p>
+
+<div class="card">
+    @if (Model.Orders.Count == 0)
+    {
+        <p class="muted">Nothing on its way yet. Choose OneDrop at checkout and your orders appear here.</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr><th>Order</th><th>Shop</th><th>Address</th><th>Status</th><th class="num">Packages</th><th class="num">To pay (COD)</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var order in Model.Orders)
+                    {
+                        <tr>
+                            <td><strong>@order.Number</strong></td>
+                            <td>@order.Shop</td>
+                            <td>@order.Address</td>
+                            <td><span class="status">@order.Status</span></td>
+                            <td class="num">@order.Packages</td>
+                            <td class="num">৳@order.Cod.ToString("N0")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

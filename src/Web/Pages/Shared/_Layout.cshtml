@@ -1,0 +1,62 @@
+@using System.Security.Claims
+@inject ITenantContext TenantContext
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Environment
+@{
+    var tenant = TenantContext.Tenant;
+    var user = Context.User;
+    var signedIn = user.Identity?.IsAuthenticated == true;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#26215c" />
+    <title>@ViewData["Title"] · @(tenant?.Name ?? "OneDrop")</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <header class="topbar">
+        <div class="topbar-inner">
+            <a class="brand" href="/"><span class="brand-dot"></span>OneDrop</a>
+            <span class="tenant-badge">@(tenant?.Name ?? "Platform")</span>
+            <nav>
+                @if (signedIn)
+                {
+                    if (user.IsInRole(Roles.Merchant))
+                    {
+                        <a asp-page="/Merchant/Orders">My orders</a>
+                    }
+                    if (user.IsInRole(Roles.Customer))
+                    {
+                        <a asp-page="/Customer/Index">My deliveries</a>
+                    }
+                    if (user.IsInRole(Roles.PlatformAdmin))
+                    {
+                        <a asp-page="/Platform/Tenants">Tenants</a>
+                    }
+                    <span>@user.FindFirstValue(ClaimTypes.GivenName)</span>
+                    <form method="post" asp-page="/Account/Logout">
+                        <button type="submit">Sign out</button>
+                    </form>
+                }
+                else
+                {
+                    <a asp-page="/Account/Login">Staff sign in</a>
+                    @if (tenant is not null)
+                    {
+                        <a asp-page="/Account/PhoneLogin">Customer sign in</a>
+                    }
+                }
+                @if (Environment.IsDevelopment())
+                {
+                    <a asp-page="/Dev/Sms">SMS outbox</a>
+                }
+            </nav>
+        </div>
+    </header>
+    <main>
+        @RenderBody()
+    </main>
+</body>
+</html>

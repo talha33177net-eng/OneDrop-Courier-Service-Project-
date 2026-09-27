@@ -1,0 +1,34 @@
+@page
+@model Web.Pages.Dev.SmsModel
+@{
+    ViewData["Title"] = "SMS outbox";
+}
+
+<h1>SMS outbox</h1>
+<p class="lead">Development only. The fake SMS sender keeps the last 50 messages here instead of sending them.</p>
+
+<div class="card table-wrap">
+    @if (Model.Messages.Count == 0)
+    {
+        <p class="muted">No messages yet.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr><th>Sent (UTC)</th><th>To</th><th>From</th><th>Message</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var message in Model.Messages)
+                {
+                    <tr>
+                        <td>@message.On.ToString("HH:mm:ss")</td>
+                        <td>@message.To</td>
+                        <td>@message.Sender</td>
+                        <td style="white-space: normal">@message.Text</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>

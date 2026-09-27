@@ -1,0 +1,40 @@
+@page
+@model Web.Pages.Platform.TenantsModel
+@{
+    ViewData["Title"] = "Tenants";
+}
+
+<h1>Tenants</h1>
+<p class="lead">Every operator on the platform. Each one only ever sees its own data.</p>
+
+<div class="card table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>Tenant</th>
+                <th>Subdomain</th>
+                <th>Price</th>
+                <th class="num">Hubs</th>
+                <th class="num">Zones</th>
+                <th class="num">Merchants</th>
+                <th class="num">Customers</th>
+                <th class="num">Orders</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var tenant in Model.Tenants)
+            {
+                <tr>
+                    <td><strong>@tenant.Name</strong></td>
+                    <td><code>@tenant.Slug</code></td>
+                    <td>৳@tenant.BaseFee.ToString("0") + ৳@tenant.ExtraFee.ToString("0")</td>
+                    <td class="num">@tenant.Hubs</td>
+                    <td class="num">@tenant.Zones</td>
+                    <td class="num">@tenant.Merchants</td>
+                    <td class="num">@tenant.Customers</td>
+                    <td class="num">@tenant.Orders</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

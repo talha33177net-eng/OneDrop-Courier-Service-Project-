@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    DbUp data migrations, built as dbup.exe. DATA ONLY: tables, columns, indexes and procedures belong in
+    src/Database. See Scripts/README.md.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>DatabaseUpdate</RootNamespace>
+    <AssemblyName>dbup</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="dbup-core" />
+    <PackageReference Include="dbup-sqlserver" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Scripts\**\*.sql" />
+    <None Include="Scripts\README.md" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Copied for local runs, never published: a server keeps its own settings -->
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+    </None>
+    <!-- Git-ignored; holds the connection string on a developer machine. publish.ps1 passes it by environment instead -->
+    <None Include="appsettings.Local.json" Condition="Exists('appsettings.Local.json')">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

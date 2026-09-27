@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- What users touch: Razor Pages portals, the merchant REST API, and the composition root. -->
+  <PropertyGroup>
+    <RootNamespace>Web</RootNamespace>
+    <UserSecretsId>07a36b68-765d-4e95-914c-48452c8ef108</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Serilog.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Integration.Tests" />
+  </ItemGroup>
+
+</Project>

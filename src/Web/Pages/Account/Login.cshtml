@@ -1,0 +1,19 @@
+@page
+@model Web.Pages.Account.LoginModel
+@{
+    ViewData["Title"] = "Staff sign in";
+}
+
+<div class="card narrow">
+    <h1>Staff sign in</h1>
+    <p class="lead">Signing in to @Model.Where.</p>
+    <form method="post">
+        <div asp-validation-summary="All"></div>
+        <label asp-for="Input.Email">Email</label>
+        <input asp-for="Input.Email" type="email" autocomplete="username" />
+        <label asp-for="Input.Password">Password</label>
+        <input asp-for="Input.Password" type="password" autocomplete="current-password" />
+        <label class="check"><input asp-for="Input.RememberMe" /> Keep me signed in</label>
+        <button class="button" type="submit">Sign in</button>
+    </form>
+</div>

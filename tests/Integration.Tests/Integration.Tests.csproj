@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Runs against a real database published from src/Database - OneDrop-Test on ras-x2. The connection string
+    comes from testsettings.Local.json (git-ignored, see README); INTEGRATION_TEST_DB overrides it. With neither,
+    every test here is skipped (reported as skipped, not passed). Create or update the test database with:
+      ./tools/db/publish.ps1 -Database OneDrop-Test
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Web\Web.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="testsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="testsettings.Local.json" Condition="Exists('testsettings.Local.json')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

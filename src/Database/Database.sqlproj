@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SDK-style database project (Microsoft.Build.Sql). This project OWNS the schema: EF Core in
+  Infrastructure maps onto it and never migrates. Build with "dotnet build"; the output is
+  bin/Debug/Database.dacpac, published by tools/db/publish.ps1 (or Visual Studio → Publish).
+
+  WHY THE FILES ARE LISTED. The SDK could glob **/*.sql, but Visual Studio's SQL project system only shows
+  items a project declares. The list is checked by DatabaseProjectFileTests in Architecture.Tests:
+  a .sql file on disk that is not listed, or a listed file that is missing, fails the test run.
+
+  THE SDK VERSION IS PINNED TO 2.1.0 as in DCN: 2.2.0 passes AutomaticIndexCompaction to SqlBuildTask,
+  which the DacFx inside Visual Studio does not accept, so builds in the IDE fail while "dotnet build"
+  passes. Confirm a newer version by building THIS project inside Visual Studio before bumping it.
+-->
+<Project Sdk="Microsoft.Build.Sql/2.1.0">
+  <PropertyGroup>
+    <Name>Database</Name>
+    <!-- Azure SQL, so nothing can depend on a feature the deploy target lacks. Publishing to SQL Server 2025
+         works as-is; the local profile allows the platform difference. -->
+    <DSP>Microsoft.Data.Tools.Schema.Sql.SqlAzureV12DatabaseSchemaProvider</DSP>
+    <ModelCollation>1033,CI</ModelCollation>
+    <DefaultCollation>SQL_Latin1_General_CP1_CI_AS</DefaultCollation>
+    <DefaultFilegroup>PRIMARY</DefaultFilegroup>
+    <IncludeCompositeObjects>True</IncludeCompositeObjects>
+    <TargetDatabaseSet>True</TargetDatabaseSet>
+    <DeployToDatabase>True</DeployToDatabase>
+    <SqlServerVerification>False</SqlServerVerification>
+    <TreatWarningsAsErrors>False</TreatWarningsAsErrors>
+    <EnableDefaultSqlItems>false</EnableDefaultSqlItems>
+    <SkipCheckForNewSDKVersion>true</SkipCheckForNewSDKVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Build Include="Security/Customers.sql" />
+    <Build Include="Security/Identity.sql" />
+    <Build Include="Security/Merchants.sql" />
+    <Build Include="Security/Network.sql" />
+    <Build Include="Security/Orders.sql" />
+    <Build Include="Security/Platform.sql" />
+    <Build Include="Platform/Tables/Tenant.sql" />
+    <Build Include="Identity/Tables/Role.sql" />
+    <Build Include="Identity/Tables/RoleClaim.sql" />
+    <Build Include="Identity/Tables/User.sql" />
+    <Build Include="Identity/Tables/UserClaim.sql" />
+    <Build Include="Identity/Tables/UserLogin.sql" />
+    <Build Include="Identity/Tables/UserRole.sql" />
+    <Build Include="Identity/Tables/UserToken.sql" />
+    <Build Include="Network/Tables/Area.sql" />
+    <Build Include="Network/Tables/Hub.sql" />
+    <Build Include="Network/Tables/Zone.sql" />
+    <Build Include="Customers/Tables/Customer.sql" />
+    <Build Include="Customers/Tables/CustomerAddress.sql" />
+    <Build Include="Customers/Tables/PhoneOtp.sql" />
+    <Build Include="Merchants/Tables/Merchant.sql" />
+    <Build Include="Merchants/Tables/MerchantApiKey.sql" />
+    <Build Include="Merchants/Tables/PickupPoint.sql" />
+    <Build Include="Orders/Sequences/OrderNumber.sql" />
+    <Build Include="Orders/Tables/Order.sql" />
+    <Build Include="Orders/Tables/OrderStatusHistory.sql" />
+    <Build Include="Orders/Tables/Package.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <PostDeploy Include="Script.PostDeployment.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Local.publish.xml" />
+  </ItemGroup>
+</Project>

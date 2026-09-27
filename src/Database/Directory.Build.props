@@ -1,0 +1,16 @@
+<Project>
+
+  <!--
+    Deliberately does NOT import the repository's Directory.Build.props: that one sets a .NET TargetFramework,
+    and the Microsoft.Build.Sql SDK picks its own (netstandard2.1 under dotnet build, net472 in Visual Studio).
+
+    The two hosts also get separate obj folders. Otherwise whichever built last leaves a project.assets.json for
+    its own framework and the other fails with NU1005 - the same fix as DCN's database project.
+  -->
+  <PropertyGroup>
+    <BaseIntermediateOutputPath Condition="'$(MSBuildRuntimeType)' == 'Core'">obj\dotnet\</BaseIntermediateOutputPath>
+    <BaseIntermediateOutputPath Condition="'$(MSBuildRuntimeType)' != 'Core'">obj\vs\</BaseIntermediateOutputPath>
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,72 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Home";
+}
+
+@if (Model.Tenant is null)
+{
+    <h1>Multiple shops. One delivery.</h1>
+    <p class="lead">The OneDrop platform. Each operator runs on its own address with its own customers, hubs and prices.</p>
+
+    <div class="cards">
+        @foreach (var (tenant, url) in Model.Tenants)
+        {
+            <div class="card">
+                <h2>@tenant.Name</h2>
+                <p class="muted">
+                    ৳@tenant.BaseDeliveryFee.ToString("0") for the first shop,
+                    +৳@tenant.ExtraShopFee.ToString("0") per extra shop
+                </p>
+                <a class="button" href="@url">Open @tenant.Slug</a>
+            </div>
+        }
+    </div>
+
+    @if (Model.Tenants.Count == 0)
+    {
+        <p class="notice">No tenants yet. Run <code>./tools/db/publish.ps1</code> to create the database and the launch tenants.</p>
+    }
+}
+else
+{
+    <h1>@Model.Tenant.Name</h1>
+    <p class="lead">
+        Orders from different shops to the same customer travel together.
+        ৳@Model.Tenant.BaseDeliveryFee.ToString("0") for the first shop,
+        +৳@Model.Tenant.ExtraShopFee.ToString("0") for each extra shop.
+    </p>
+
+    @if (User.Identity?.IsAuthenticated != true)
+    {
+        <div class="cards">
+            <div class="card">
+                <h2>Customers</h2>
+                <p class="muted">Follow your deliveries. We send a code to your phone.</p>
+                <a class="button" asp-page="/Account/PhoneLogin">Sign in with phone</a>
+            </div>
+            <div class="card">
+                <h2>Merchants and staff</h2>
+                <p class="muted">Merchant dashboard, hub and admin tools.</p>
+                <a class="button secondary" asp-page="/Account/Login">Staff sign in</a>
+            </div>
+        </div>
+    }
+
+    <div class="card">
+        <h2>Network</h2>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr><th>Zone</th><th>Served by</th><th class="num">Areas</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var zone in Model.Zones)
+                    {
+                        <tr><td>@zone.Zone</td><td>@zone.Hub</td><td class="num">@zone.Areas</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}

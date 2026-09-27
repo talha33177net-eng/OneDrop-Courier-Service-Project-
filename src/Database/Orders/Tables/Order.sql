@@ -1,0 +1,61 @@
+-- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+-- TABLE: Orders.Order
+-- Purpose: One merchant's order for one customer address. Status and Speed are TINYINT enums
+--          (Domain.Orders.OrderStatus / DeliverySpeed). A merchant's retry with the same Idempotency-Key
+--          returns the first order; RequestHash detects the key being reused for a different body.
+--          RowVersion guards concurrent status changes (hub scan versus rider app).
+-- Author: Courier team
+-- Date: 2026-09-27
+-- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+CREATE TABLE [Orders].[Order] (
+    [Id]                BIGINT          IDENTITY (1, 1) NOT NULL,
+    [TenantId]          BIGINT          NOT NULL,
+    [MerchantId]        BIGINT          NOT NULL,
+    [CustomerId]        BIGINT          NOT NULL,
+    [AddressId]         BIGINT          NOT NULL,
+    [PickupPointId]     BIGINT          NOT NULL,
+    [Number]            NVARCHAR (20)   CONSTRAINT [DF_Order_Number] DEFAULT (concat(N'OD-', NEXT VALUE FOR [Orders].[OrderNumber])) NOT NULL,
+    [ExternalReference] NVARCHAR (100)  NULL,
+    [IdempotencyKey]    NVARCHAR (100)  NULL,
+    [RequestHash]       BINARY (32)     NULL,
+    [RecipientName]     NVARCHAR (200)  NOT NULL,
+    [Status]            TINYINT         NOT NULL,
+    [Speed]             TINYINT         NOT NULL,
+    [DoNotHold]         BIT             DEFAULT ((0)) NOT NULL,
+    [CodAmount]         DECIMAL (12, 2) DEFAULT ((0)) NOT NULL,
+    [DeclaredValue]     DECIMAL (12, 2) DEFAULT ((0)) NOT NULL,
+    [Note]              NVARCHAR (500)  NULL,
+    [RowVersion]        ROWVERSION      NOT NULL,
+    [UpdatedId]         BIGINT          NULL,
+    [UpdatedOn]         DATETIME2 (7)   DEFAULT (getutcdate()) NOT NULL,
+    [Created]           DATETIME2 (0)   DEFAULT (getutcdate()) NOT NULL,
+    PRIMARY KEY CLUSTERED ([Id] ASC),
+    CONSTRAINT [FK_Order_Tenant] FOREIGN KEY ([TenantId]) REFERENCES [Platform].[Tenant] ([Id]),
+    CONSTRAINT [FK_Order_Merchant] FOREIGN KEY ([MerchantId]) REFERENCES [Merchants].[Merchant] ([Id]),
+    CONSTRAINT [FK_Order_Customer] FOREIGN KEY ([CustomerId]) REFERENCES [Customers].[Customer] ([Id]),
+    CONSTRAINT [FK_Order_CustomerAddress] FOREIGN KEY ([AddressId]) REFERENCES [Customers].[CustomerAddress] ([Id]),
+    CONSTRAINT [FK_Order_PickupPoint] FOREIGN KEY ([PickupPointId]) REFERENCES [Merchants].[PickupPoint] ([Id]),
+    CONSTRAINT [FK_Order_User] FOREIGN KEY ([UpdatedId]) REFERENCES [Identity].[User] ([Id]),
+    CONSTRAINT [chk_Order_Amounts] CHECK ([CodAmount] >= (0) AND [DeclaredValue] >= (0))
+);
+
+
+GO
+CREATE UNIQUE NONCLUSTERED INDEX [UX_Order_Number]
+    ON [Orders].[Order]([Number] ASC);
+
+
+GO
+CREATE UNIQUE NONCLUSTERED INDEX [UX_Order_Merchant_IdempotencyKey]
+    ON [Orders].[Order]([MerchantId] ASC, [IdempotencyKey] ASC) WHERE ([IdempotencyKey] IS NOT NULL);
+
+
+GO
+CREATE NONCLUSTERED INDEX [IX_Order_Tenant_Merchant_Created]
+    ON [Orders].[Order]([TenantId] ASC, [MerchantId] ASC, [Created] DESC);
+
+
+GO
+CREATE NONCLUSTERED INDEX [IX_Order_Tenant_Customer_Status]
+    ON [Orders].[Order]([TenantId] ASC, [CustomerId] ASC, [Status] ASC)
+    INCLUDE([AddressId]);
