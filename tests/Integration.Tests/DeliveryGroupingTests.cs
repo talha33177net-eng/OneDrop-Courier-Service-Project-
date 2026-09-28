@@ -160,6 +160,36 @@ public class DeliveryGroupingTests(WebAppFactory factory)
         Assert.Equal(new DateTime(2026, 10, 4, 18, 0, 0, DateTimeKind.Utc).AddDays(tenant!.GroupJoinDays), group.LocksAt);
     }
 
+    [Fact]
+    public async Task A_quote_joins_the_group_until_Day_3_then_prices_a_new_one_and_locks_nothing()
+    {
+        WebAppFactory.RequireDatabase();
+        var cancellation = TestContext.Current.CancellationToken;
+        var clock = new FakeTimeProvider(Monday);
+        var address = await NewAddressAsync();
+        var group = await PlaceAsync(clock, address);
+        await using var scope = await ScopeForAsync("dhaka");
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
+        var inGroup = await db.Orders
+            .Where(o => o.DeliveryGroupId == group.Id)
+            .Select(o => o.MerchantId)
+            .SingleAsync(cancellation);
+        var otherShop = await db.Merchants.Where(m => m.Id != inGroup).Select(m => m.Id).FirstAsync(cancellation);
+        var grouping = new DeliveryGrouping(db, tenantContext, clock);
+        var request = new QuoteRequest(otherShop, address.CustomerId, address.Id, DeliverySpeed.Combine, false);
+
+        clock.SetUtcNow(Day3.AddSeconds(-1));
+        var lastSecondOfDay2 = await grouping.QuoteAsync(request, cancellation);
+        clock.SetUtcNow(Day3);
+        var onDay3 = await grouping.QuoteAsync(request, cancellation);
+
+        var fees = tenantContext.Tenant!.Fees;
+        Assert.Equal(new DeliveryQuote(fees.ExtraShopFee, JoinsDelivery: true), lastSecondOfDay2);
+        Assert.Equal(new DeliveryQuote(fees.BaseDeliveryFee, JoinsDelivery: false), onDay3);
+        Assert.Equal(DeliveryGroupStatus.Open, (await FindGroupAsync(group.Id)).Status);
+    }
+
     /// <summary>
     /// The race the unique index settles, made certain: as this order's new group is about to be inserted, a rival
     /// order commits a group for the same customer and address. The insert fails and the order joins the rival's.

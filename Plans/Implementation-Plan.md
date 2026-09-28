@@ -13,9 +13,9 @@ The one place to see where we are and what comes next. Built from the two projec
 
 | | |
 |---|---|
-| Current week | **Week 2 — Grouping core** (in progress, 3 of 9) |
-| Next task | 2.4 Quote endpoint |
-| Last session | 2026-09-28 — tasks 2.1–2.3: delivery groups, grouping on create, pricing from the tenant's settings (committed on `day2`) |
+| Current week | **Week 2 — Grouping core** (in progress, 5 of 9) |
+| Next task | 2.6 Ship now |
+| Last session | 2026-09-28 — tasks 2.1–2.5 committed on `day2` (not pushed): delivery groups, pricing, checkout quote, Hangfire and the lock job |
 | Blockers | None |
 
 ---
@@ -45,11 +45,11 @@ A task is **not done** until all of these pass. Record the result in the daily l
 | Week | Theme | Done when | Status |
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
-| 2 | Grouping core | 3 shops' orders form 1 group | 🟡 In progress (2.1–2.3 done) |
+| 2 | Grouping core | 3 shops' orders form 1 group | 🟡 In progress (2.1–2.5 done) |
 | 3 | Operations and money | Group delivered, merchants settled | ⬜ |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
-Tests today: **124 passing** (87 domain, 6 architecture, 31 integration).
+Tests today: **144 passing** (87 domain, 6 architecture, 51 integration).
 
 ---
 
@@ -131,11 +131,27 @@ Tasks:
       Get Order return **`fee` only**; **no `groupFee`** (owner's choice): the total would tell the merchant how
       many other shops the customer bought from. The group total is for the customer page (2.8) and the door
       (3.5), recalculated there on what is actually delivered.
-- [ ] **2.4 Quote endpoint.** `GET /api/v1/quote?phone=&area=&line1=` → "৳60" or "+৳25" for the checkout, without
+- [x] **2.4 Quote endpoint.** `GET /api/v1/quote?phone=&area=&line1=` → "৳60" or "+৳25" for the checkout, without
       revealing which other shops are in the group (merchant privacy). *Tests:* quote matches the fee on create.
-- [ ] **2.5 Hangfire and the lock job.** Hangfire on SQL Server; jobs take the tenant as a parameter.
+      *Done 2026-09-28:* `Application/Pricing/GetQuote` (query, validator, handler) and `Web/Api/V1/QuoteController`.
+      Also takes `areaId`, `line2`, `speed` and `doNotHold`. Returns `{ fee, currency, joinsDelivery }`:
+      `joinsDelivery` lets the checkout print "+৳25"; it tells no more than the fee already does, and nothing
+      about which shops or how many. Read only: the customer and address are looked up by phone and match key,
+      never created. `DeliveryGrouping.QuoteAsync` picks the group exactly as Create Order would (fast / Don't
+      hold / unknown customer or address / open group past its deadline → a new delivery) and shares its fee
+      query, so the quote and the order's `fee` cannot drift. A shop already in the delivery is quoted ৳0.
+- [x] **2.5 Hangfire and the lock job.** Hangfire on SQL Server; jobs take the tenant as a parameter.
       `LockDueGroups` every 5 minutes. *Tests:* job locks due groups only, per tenant; an order after the lock
       opens a new group.
+      *Done 2026-09-28:* Hangfire 1.8.25 on the application database; **Hangfire owns its `HangFire` schema**
+      (created on first use; the dacpac publish keeps objects it does not know). `Application/Abstractions/ITenantJob`;
+      `Application/Grouping/LockDueGroups/LockDueGroupsJob` locks each open group past `LocksAt` with `LockIfDue`
+      (`LockedOn` = the deadline, however late), saving group by group and skipping one locked meanwhile.
+      `Infrastructure/Jobs`: the recurring `lock-due-groups` (cron `Jobs:LockDueGroups`, `*/5 * * * *`) queues one
+      `TenantJobRunner.RunAsync(job name, tenant id)` per active tenant, which sets the tenant on the job's scope.
+      Jobs are stored by **name** (`TenantJobRegistry`), not as a generic method: Hangfire cannot load a generic
+      method back from storage (found by the live check). `Jobs:Server` switches the server off (the test host).
+      Dashboard at `/jobs`, platform admins only.
 - [ ] **2.6 Ship now.** Customer page button and API; locks the group immediately. *Tests:* only the owning
       customer can do it; a locked group rejects it.
 - [ ] **2.7 Outbox and domain events.** `Notifications.OutboxMessage` saved in the same transaction; sender job
@@ -256,6 +272,11 @@ Payments stay fake in the MVP either way.
 | 2026-09-28 | Create Order returns only `fee`, what this order adds (base, extra or 0), stored as `Order.AddedFee`; no `groupFee` | The group total reveals how many other shops are in the delivery. Stored so a replay answers the same |
 | 2026-09-28 | A Don't hold order costs the base fee; Deliver fast costs `FastDeliveryFee` | Don't hold is the merchant's choice, so the customer pays as for a one-shop group |
 | 2026-09-28 | A new NOT NULL column with no default on a table with rows goes through `Scripts/Pre` (add nullable, fill, NOT NULL) | SqlPackage cannot add it, and a SQL default would be a hidden business value |
+| 2026-09-28 | The checkout quote is read only and shares the group choice and fee query with Create Order; it returns `fee`, `currency` and `joinsDelivery`, never shops or a group total | The quote must equal the order's fee; a checkout may call it for any visitor, so it must leave no customer behind |
+| 2026-09-28 | Hangfire owns its `HangFire` schema in the application database; the SQL project does not model it | Third-party tables upgraded by Hangfire itself; the publish never drops objects outside the project |
+| 2026-09-28 | Tenant jobs: one recurring entry per job queues one run per active tenant, stored as (job name, tenant id); the runner sets the tenant on the job's scope | Tenants fail and retry independently; new tenants need no new schedule; Hangfire cannot load generic methods |
+| 2026-09-28 | The lock job saves group by group and skips a group changed meanwhile | An order past the deadline may lock the same group; one conflict must not stop the rest |
+| 2026-09-28 | Job dashboard `/jobs` for platform admins only | It lists every tenant's jobs |
 
 ## Quick reference
 
@@ -320,7 +341,36 @@ Newest first. One entry per working day: what was done, how it was tested, what 
   a new phone, Fashion House ৳60, Gadget BD ৳25 (replay: same order, ৳25), Beauty Shop ৳25, Fashion House again
   ৳0 → one open group of 3 shops totalling ৳110; fast ৳60 and Don't hold ৳60 alone; Chattogram ৳70; GET shows the
   fee to its merchant and 404 to another merchant and another tenant; no group data in any response.
-- **Next:** task 2.4, the checkout quote (reuses `DeliveryFeeCalculator.AddedFee`).
+- **Done (task 2.4):** `GET /api/v1/quote` (`Application/Pricing/GetQuote`, `QuoteController`);
+  `DeliveryGrouping.QuoteAsync` (read-only twin of the group choice in `SaveInGroupAsync`, same fee query).
+- **Tested:** build 0 errors, no new warnings; 11 new integration tests (for 3 shops each quote equals the fee
+  its order then gets, 60 / +25 / +25; a shop already in the delivery is quoted 0 with another spelling of phone
+  and address; fast, Don't hold and another address quote a delivery of their own; Chattogram quotes its own
+  price beside a Dhaka delivery; a quote creates no customer; bad phone, missing area or line1 → 400 naming the
+  field; another tenant's area → `quote.area.unknown`; no key → 401; fake clock: the last second of Day 2 quotes
+  +extra, Day 3 quotes a new delivery and leaves the open group unlocked). No domain rule added (the calculator
+  is already covered). 87 + 6 + 42 = 135 pass, none skipped. No schema change, no publish. Live on dev with a new
+  phone: quote ৳60 → OD-100024 ৳60, quote +৳25 → OD-100025 ৳25, quote +৳25 → OD-100026 ৳25, Fashion House
+  again ৳0, fast ৳60, Don't hold ৳60, office ৳60, Chattogram ৳70, bad phone 400, no key 401.
+- **Done (task 2.5):** Hangfire 1.8.25 (`Infrastructure/Jobs`: `JobsSetup`, `TenantJobRunner`, `TenantJobRegistry`),
+  `ITenantJob`, `LockDueGroupsJob`, recurring `lock-due-groups` every 5 minutes, dashboard `/jobs`, `Jobs:Server`
+  setting (off in the test host).
+- **Tested:** build 0 errors, no new warnings; 9 new integration tests (only groups past their deadline lock, with
+  `LockedOn` = the deadline even when the job runs late; a Dhaka run leaves Chattogram's due group open until
+  Chattogram's run; an order after the lock opens a new group; a group locked by someone else mid-run is skipped
+  and the rest still lock — shown to fail with the conflict handling disabled; the runner sets the tenant from
+  its parameter, skips an inactive tenant and refuses an unknown job; the fan-out queues one job per active
+  tenant; the scheduled job and the jobs it queues survive Hangfire's storage format; the test host runs no job
+  server). Fake clock in January 2026 so a run never locks another test class's open group. 87 + 6 + 51 = 144
+  pass, none skipped. No SQL project change; Hangfire installed its tables on first start. Live (schedule
+  overridden to every minute): the **first** live run failed — Hangfire could not load the generic job method the
+  unit-level tests had called directly — fixed by storing jobs by name, and a round-trip test added (checked to
+  fail on a generic method). Second run: DG-100012 (deadline moved to the past by hand) locked with `LockedOn` =
+  its deadline, "dhaka Locked 1 of 1", "chattogram Locked 0 of 0", every other group untouched; the quote for that
+  customer then said ৳60, new delivery, and OD-100027 opened DG-100013. `/jobs`: platform admin 200 (lists
+  `lock-due-groups`), anonymous → login, Dhaka tenant admin → access denied.
+- **Committed:** tasks 2.4–2.5 on `day2` (not pushed).
+- **Next:** task 2.6, Ship now.
 
 ### 2026-09-27
 - **Done:** Week 1 complete (tasks 1.1–1.6).

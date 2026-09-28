@@ -65,7 +65,7 @@ The user supplied two PDFs (not stored in the repo): *OneDrop Implementation Pla
 | Week | Theme | Done when | Status |
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
-| 2 | Grouping core | 3 shops' orders form 1 group | 🟡 In progress — 2.1–2.3 done, next 2.4 |
+| 2 | Grouping core | 3 shops' orders form 1 group | 🟡 In progress — 2.1–2.5 done, next 2.6 |
 | 3 | Operations and money | Group delivered, merchants settled | ⬜ |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
@@ -74,18 +74,18 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 
 ---
 
-## 3. What exists today (Week 1, plus Week 2 tasks 2.1–2.3)
+## 3. What exists today (Week 1, plus Week 2 tasks 2.1–2.5)
 
 ### Solution layout (`Courier.sln`)
 | Project | Path | Contents |
 |---|---|---|
 | Domain | `src/Domain` | Entities and rules, no packages. `Common` (Entity, TenantEntity, Result/Error), `Platform/Tenant`, `Network` (Hub, Zone, Area), `Customers` (Customer, CustomerAddress, PhoneNumber, PhoneOtp), `Merchants` (Merchant, MerchantApiKey, PickupPoint), `Orders` (Order + state machine, Package, OrderStatusHistory), `Grouping` (DeliveryGroup + state machine and lock time), `Pricing` (DeliveryFeeCalculator, FeeSchedule) |
-| Application | `src/Application` | Use cases as vertical slices: `Orders/CreateOrder`, `Orders/GetOrder`, `Network/ListAreas`, `Auth/PhoneLogin`, `Customers/CustomerDirectory` (find-or-create by phone/address), `Grouping/DeliveryGrouping` (join or open the order's group). Interfaces: `IAppDbContext`, `ITenantContext` (`TenantInfo.Fees`), `ITenantCatalog`, `ICurrentUser`, `ISmsSender`; `QueryFilters` (filter names) |
-| Infrastructure | `src/Infrastructure` | `Persistence/AppDbContext` (EF Core, query filters), `Configurations/*` (mapping), `TenantSaveInterceptor`, `MultiTenancy` (TenantContext, TenantCatalog), `Identity` (AppUser, AppRole, claims), `Sms/FakeSmsSender`, `Seeding/DemoDataSeeder` |
-| Web | `src/Web` | Razor Pages portals, `Api/V1` (orders, areas), `Authentication/ApiKeyAuthenticationHandler`, `MultiTenancy` middleware, `Program.cs` |
+| Application | `src/Application` | Use cases as vertical slices: `Orders/CreateOrder`, `Orders/GetOrder`, `Network/ListAreas`, `Auth/PhoneLogin`, `Customers/CustomerDirectory` (find-or-create by phone/address), `Grouping/DeliveryGrouping` (join or open the order's group; quote), `Grouping/LockDueGroups` (the lock job), `Pricing/GetQuote`. Interfaces: `IAppDbContext`, `ITenantJob`, `ITenantContext` (`TenantInfo.Fees`), `ITenantCatalog`, `ICurrentUser`, `ISmsSender`; `QueryFilters` (filter names) |
+| Infrastructure | `src/Infrastructure` | `Persistence/AppDbContext` (EF Core, query filters), `Configurations/*` (mapping), `TenantSaveInterceptor`, `MultiTenancy` (TenantContext, TenantCatalog), `Identity` (AppUser, AppRole, claims), `Sms/FakeSmsSender`, `Seeding/DemoDataSeeder`, `Jobs` (Hangfire setup, TenantJobRunner, TenantJobRegistry) |
+| Web | `src/Web` | Razor Pages portals, `Api/V1` (orders, quote, areas), `Authentication/ApiKeyAuthenticationHandler`, `MultiTenancy` middleware, `Program.cs` |
 | Database | `src/Database` | SQL project (Microsoft.Build.Sql 2.1.0) → `Database.dacpac`. Owns the schema |
 | Database Update | `src/Database Update` | DbUp console (`dbup.exe`): data migrations in `Scripts/<Year>/`, data-loss scripts in `Scripts/Pre/` |
-| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 87 + 6 + 31 = **124 tests, all passing** |
+| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 87 + 6 + 51 = **144 tests, all passing** |
 | Tools | `tools/db/publish.ps1` | Deploys a database: `dbup pre` → dacpac publish → `dbup` |
 
 ### Features that work
@@ -106,8 +106,16 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   shops − 1), counting only orders not cancelled, refused or returned; Deliver fast = the fast fee; Don't hold
   alone = the base fee. Each order stores `AddedFee` (base, extra, or 0 for a shop already in the group), and
   Create Order / Get Order return it as `fee`. The group total is never shown to a merchant.
-- **Not yet:** the checkout quote (2.4), the lock job (2.5; until then a group locks when the next order
-  arrives after its deadline), Ship now, jobs (Hangfire), merchant screens to create API keys or enter orders
+- **Checkout quote** `GET /api/v1/quote?phone=&area=&line1=` (optional `areaId`, `line2`, `speed`, `doNotHold`):
+  `{ fee, currency, joinsDelivery }`, the fee Create Order would give the same order now (৳60, +৳25, or 0 for a
+  shop already in the delivery). Read only: creates no customer or address. `DeliveryGrouping.QuoteAsync` picks
+  the group the same way Create Order does and shares its fee query.
+- **Background jobs** (Hangfire, `Infrastructure/Jobs`): the recurring `lock-due-groups` (every 5 minutes,
+  `Jobs:LockDueGroups`) queues `LockDueGroupsJob` once per active tenant; the runner sets the tenant from the
+  job's parameter. Open groups past their deadline become `Locked` with `LockedOn` = the deadline. A new tenant job
+  implements `ITenantJob`, is added to `TenantJobRegistry` and gets a recurring entry in `JobsSetup.ScheduleJobs`.
+  Dashboard: http://localhost:5080/jobs (platform admin). `Jobs:Server` = false runs no server (integration tests).
+- **Not yet:** Ship now (2.6), SMS on join/lock (2.7), merchant screens to create API keys or enter orders
   manually, tenant admin screens.
 
 ### Database
@@ -129,7 +137,11 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   address 1, one group DG-100003**) and OD-100003 (Chattogram, same phone, different customer 2, DG-100004).
   OD-100005 onwards are the 2.2 live check (phone 01563583024: one Dhaka group of 10 orders, one fast order,
   one Chattogram order). OD-100017 to OD-100023 are the 2.3 live check (phone 01966225784: DG-100008 holds three
-  shops for ৳110). DG-100003 also totals ৳110. Group numbers have gaps: a sequence value used in a rolled-back
+  shops for ৳110). OD-100024 to OD-100026 are the 2.4 live check (phone 01950973272, three shops, quoted and
+  charged 60 / 25 / 25); for the 2.5 live check their group DG-100012 was given a deadline in the past by hand
+  and locked by the job, and OD-100027 then opened DG-100013. DG-100003 also totals ৳110. The Hangfire tables
+  are installed at app start in both databases (mapping the dashboard opens the storage); only `OneDrop` runs jobs,
+  as the integration tests start no job server. Group numbers have gaps: a sequence value used in a rolled-back
   dry run is not reused.
 
 ---
@@ -140,6 +152,8 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 |---|---|
 | Modular monolith, Clean Architecture, 4 projects | From the plan: fast to build, modules can be split out later |
 | **Schema owned by a SQL project + DbUp, no EF migrations** | The user asked for the database "just like DCN" (their project at `C:\Git\DCN`) so it is easy to maintain. `SchemaMatchesModelTests` fails if EF and SQL drift |
+| Exception: Hangfire owns its `HangFire` schema (installs and upgrades it itself) | Third-party tables that change with the Hangfire version; copying them into the SQL project would mean hand-maintaining its upgrades. The publish profile never drops objects outside the project |
+| Background jobs take the tenant as a parameter: one recurring entry per job queues one run per tenant, stored as (job name, tenant id) | A failing or slow tenant does not hold up another; a new tenant is picked up without new schedules; Hangfire cannot load generic methods |
 | **No product-name prefix in code** (`src/Web`, `AppDbContext`, `Courier.sln`) | User preference, DCN style. "OneDrop" appears only in UI text, SMS text, tenant data, demo logins and the database names |
 | `TenantId` on every row (not DCN's AccountId/LocationId) | The plan's design; named filters `Tenant` and `Merchant` in `AppDbContext` |
 | Isolation layers: 1 EF query filters, 2 save interceptor, 3 Row-Level Security (Week 4) | From the plan: if one layer has a bug the next still stops a leak |
@@ -156,6 +170,7 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 | Deliver fast / Don't hold → own group, `Locked` at once, `LocksAt` = next midnight | They never wait, so they must not take the customer's one `Open` slot |
 | The merchant API never returns group data | A merchant must not learn the customer also bought elsewhere |
 | Create Order returns only this order's `fee` (base, +extra or 0, stored as `Order.AddedFee`), never a group total | Owner's choice (2026-09-28): the total would show how many other shops are in the delivery |
+| The quote is read only, answers with the same fee Create Order would give, and says only `joinsDelivery` about the group | A checkout can call it for every visitor without creating customers; the "+৳25" is the product's promise and tells no more than the fee |
 | Don't hold costs the base fee; Deliver fast costs the tenant's `FastDeliveryFee` | Owner's choice: Don't hold is the merchant's decision, not the customer's |
 | A shop is charged only while it has an order not cancelled, refused or returned | "Fee is calculated on what is actually delivered" |
 
@@ -227,6 +242,8 @@ git push                                          # main tracks origin/main
 | `sqlcmd` runs with `QUOTED_IDENTIFIER OFF`; statements touching a filtered index fail | Pass `-I` when running scripts by hand (DbUp's connection already has it on) |
 | Detaching an added principal that a tracked order still points at throws (required relationship severed) | Re-point the order (`PlaceIn` + `Entry(order).DetectChanges()`) before detaching |
 | A running `dotnet run --project src/Web` locks `src/Web/bin`; builds then silently keep the old DLLs for tests | Stop the app before rebuilding or running the test suites |
+| Hangfire stores a generic method call but cannot load it back (`does not contain a method with signature …`); a direct call in a test works | Job methods are never generic (jobs go by name through `TenantJobRegistry`); `The_scheduled_job_and_the_jobs_it_queues_survive_hangfires_storage_format` round-trips them |
+| To see a job run without waiting for its schedule | `dotnet run --project src/Web -- --Jobs:LockDueGroups="* * * * *"` (the next normal start resets the schedule) |
 
 ---
 

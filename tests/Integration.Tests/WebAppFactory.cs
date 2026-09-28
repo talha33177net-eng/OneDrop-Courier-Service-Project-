@@ -67,6 +67,8 @@ public sealed class WebAppFactory : WebApplicationFactory<Program>, IAsyncLifeti
         {
             ["ConnectionStrings:Database"] = ConnectionString,
             ["Seed:DemoData"] = "true",
+            // No job server: jobs are run by the tests themselves, with a fake clock
+            ["Jobs:Server"] = "false",
             ["Seed:Password"] = "OneDrop#2026"
         };
 

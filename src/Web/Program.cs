@@ -3,7 +3,9 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication;
 using Application;
+using Hangfire;
 using Infrastructure;
+using Infrastructure.Jobs;
 using Infrastructure.Seeding;
 using Web.Authentication;
 using Web.MultiTenancy;
@@ -26,6 +28,8 @@ builder.Services.AddSerilog((services, logger) => logger
 builder.Services.Configure<TenancyOptions>(builder.Configuration.GetSection("Tenancy"));
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure();
+var runJobs = builder.Configuration.GetValue<bool>("Jobs:Server");
+builder.Services.AddJobs(runJobs);
 builder.Services.AddAppIdentity();
 builder.Services.ConfigureApplicationCookie(options =>
 {
@@ -69,6 +73,11 @@ if (app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("Seed:De
         .SeedAsync(app.Configuration["Seed:Password"] ?? throw new InvalidOperationException("Seed:Password is not set."));
 }
 
+if (runJobs)
+{
+    app.Services.ScheduleJobs(app.Configuration);
+}
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
@@ -89,6 +98,11 @@ app.UseRateLimiter();
 
 app.MapControllers();
 app.MapRazorPages().WithStaticAssets();
+// Every tenant's jobs in one view, so platform staff only. The policy replaces Hangfire's local-requests-only check
+app.MapHangfireDashboardWithAuthorizationPolicy(
+    Policies.PlatformAdmin,
+    "/jobs",
+    new DashboardOptions { Authorization = [], DisplayStorageConnectionString = false, DashboardTitle = "Jobs" });
 
 app.Run();
 

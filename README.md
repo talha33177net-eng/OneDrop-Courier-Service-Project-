@@ -99,6 +99,9 @@ curl http://localhost:5080/api/v1/orders \
 | `POST /api/v1/orders` | 201 with the order number; a retry with the same `Idempotency-Key` returns 200 and the same order, a different body with that key 409 |
 | `GET /api/v1/orders/{number}` | The caller's own order; anyone else's is 404 |
 | `GET /api/v1/areas` | The area list an address must pick from |
+| `GET /api/v1/quote?phone=&area=&line1=` | The delivery fee for the checkout: `{ fee, currency, joinsDelivery }` (৳60 for a new delivery, +৳25 when one is already on its way) |
+
+Background jobs run on Hangfire in the web app; the dashboard is at http://localhost:5080/jobs (platform admin).
 
 ## Layout
 

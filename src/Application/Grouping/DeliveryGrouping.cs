@@ -6,6 +6,12 @@ using Domain.Pricing;
 
 namespace Application.Grouping;
 
+/// <summary>A would-be order, for <see cref="DeliveryGrouping.QuoteAsync"/>. The ids are null for a customer or address not seen yet.</summary>
+public sealed record QuoteRequest(long MerchantId, long? CustomerId, long? AddressId, DeliverySpeed Speed, bool DoNotHold);
+
+/// <summary>What the would-be order adds to the delivery fee, and whether it joins a delivery already on its way.</summary>
+public sealed record DeliveryQuote(decimal Fee, bool JoinsDelivery);
+
 /// <summary>
 /// Puts a new order in its delivery group and saves them together. An order that waits joins the customer's
 /// open group for the address, or opens one; Deliver fast and Don't hold orders get a group of their own. The
@@ -32,11 +38,12 @@ public class DeliveryGrouping(IAppDbContext db, ITenantContext tenantContext, Ti
             tenant.GroupJoinDays);
 
         var fees = new DeliveryFeeCalculator(tenant.Fees);
+        var line = new FeeLine(order.MerchantId, order.Speed, order.Status);
 
         var group = order.WaitsForGroup
             ? await FindJoinableAsync(order, now, cancellationToken) ?? DeliveryGroup.Open(spec)
             : DeliveryGroup.OpenAlone(spec);
-        order.PlaceIn(group, await AddedFeeAsync(order, group, fees, cancellationToken));
+        order.PlaceIn(group, await AddedFeeAsync(group.Id, line, fees, cancellationToken));
         db.Orders.Add(order);
         try
         {
@@ -54,7 +61,7 @@ public class DeliveryGrouping(IAppDbContext db, ITenantContext tenantContext, Ti
 
             // Move the order before dropping the unsaved group: detaching a group an order still points at
             // would sever a required relationship
-            order.PlaceIn(winner, await AddedFeeAsync(order, winner, fees, cancellationToken));
+            order.PlaceIn(winner, await AddedFeeAsync(winner.Id, line, fees, cancellationToken));
             db.Entry(order).DetectChanges();
             db.Entry(group).State = EntityState.Detached;
             await db.SaveChangesAsync(cancellationToken);
@@ -88,16 +95,48 @@ public class DeliveryGrouping(IAppDbContext db, ITenantContext tenantContext, Ti
         return null;
     }
 
-    /// <summary>What <paramref name="order"/> adds to the fee of <paramref name="group"/> as it stands in the database.</summary>
+    /// <summary>
+    /// What an order would add to the customer's delivery fee if it were placed now: the checkout quote. The group
+    /// is chosen as <see cref="SaveInGroupAsync"/> would choose it, but nothing is changed or saved. A customer or
+    /// address not seen before opens a new group.
+    /// </summary>
+    public async Task<DeliveryQuote> QuoteAsync(QuoteRequest request, CancellationToken cancellationToken)
+    {
+        var tenant = tenantContext.Tenant ?? throw new InvalidOperationException("A quote needs a tenant.");
+        var fees = new DeliveryFeeCalculator(tenant.Fees);
+        var line = new FeeLine(request.MerchantId, request.Speed, OrderStatus.Created);
+        var newGroup = new DeliveryQuote(fees.AddedFee([], line), JoinsDelivery: false);
+        var waits = request.Speed == DeliverySpeed.Combine && !request.DoNotHold;
+        if (!waits || request.CustomerId is null || request.AddressId is null)
+        {
+            return newGroup;
+        }
+
+        var open = await db.DeliveryGroups
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                g => g.CustomerId == request.CustomerId &&
+                    g.AddressId == request.AddressId &&
+                    g.Status == DeliveryGroupStatus.Open,
+                cancellationToken);
+        // An open group past its deadline would be locked by the order, which then opens a new one
+        if (open is null || !open.CanJoin(time.GetUtcNow().UtcDateTime))
+        {
+            return newGroup;
+        }
+
+        return new DeliveryQuote(await AddedFeeAsync(open.Id, line, fees, cancellationToken), JoinsDelivery: true);
+    }
+
+    /// <summary>What <paramref name="line"/> adds to the fee of group <paramref name="groupId"/> as it stands in the database.</summary>
     private async Task<decimal> AddedFeeAsync(
-        Order order,
-        DeliveryGroup group,
+        long groupId,
+        FeeLine line,
         DeliveryFeeCalculator fees,
         CancellationToken cancellationToken)
     {
-        var line = new FeeLine(order.MerchantId, order.Speed, order.Status);
         // A group not saved yet is being opened by this order
-        if (group.Id == 0)
+        if (groupId == 0)
         {
             return fees.AddedFee([], line);
         }
@@ -106,7 +145,7 @@ public class DeliveryGrouping(IAppDbContext db, ITenantContext tenantContext, Ti
         // leaves this method, so the merchant filter is lifted for this query only
         var inGroup = await db.Orders
             .IgnoreQueryFilters([QueryFilters.Merchant])
-            .Where(o => o.DeliveryGroupId == group.Id)
+            .Where(o => o.DeliveryGroupId == groupId)
             .Select(o => new FeeLine(o.MerchantId, o.Speed, o.Status))
             .ToListAsync(cancellationToken);
 
