@@ -13,9 +13,9 @@ The one place to see where we are and what comes next. Built from the two projec
 
 | | |
 |---|---|
-| Current week | **Week 2 — Grouping core** (in progress, 2 of 9) |
-| Next task | 2.3 Pricing |
-| Last session | 2026-09-28 — tasks 2.1 and 2.2: delivery group table; orders join or open their group on create |
+| Current week | **Week 2 — Grouping core** (in progress, 3 of 9) |
+| Next task | 2.4 Quote endpoint |
+| Last session | 2026-09-28 — tasks 2.1–2.3: delivery groups, grouping on create, pricing from the tenant's settings (committed on `day2`) |
 | Blockers | None |
 
 ---
@@ -45,11 +45,11 @@ A task is **not done** until all of these pass. Record the result in the daily l
 | Week | Theme | Done when | Status |
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
-| 2 | Grouping core | 3 shops' orders form 1 group | 🟡 In progress (2.1–2.2 done) |
+| 2 | Grouping core | 3 shops' orders form 1 group | 🟡 In progress (2.1–2.3 done) |
 | 3 | Operations and money | Group delivered, merchants settled | ⬜ |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
-Tests today: **102 passing** (70 domain, 6 architecture, 26 integration).
+Tests today: **124 passing** (87 domain, 6 architecture, 31 integration).
 
 ---
 
@@ -74,7 +74,7 @@ Tests today: **102 passing** (70 domain, 6 architecture, 26 integration).
 another tenant, one customer for two phone spellings, same phone = different customer per tenant.
 
 **Carried forward from Week 1** (small gaps, fit them into later weeks):
-- [ ] Create Order returns the fee (৳60 / +৳25) → task 2.3.
+- [x] Create Order returns the fee (৳60 / +৳25) → task 2.3 (this order's fee only; see 2.3).
 - [ ] Merchant portal: issue and revoke API keys (only seeded keys exist today).
 - [ ] Merchant portal: manual order form for Facebook sellers (the API is the only way in today).
 - [ ] Tenant admin portal: zones, hubs, areas, merchants (today only through SQL/seed).
@@ -117,11 +117,20 @@ Tasks:
       to the unique index → join the winner's group. `Order.DeliveryGroupId` is NOT NULL; the orders saved
       before grouping were grouped by `Pre/001_GroupExistingOrders`. The API response does not mention the group
       (merchant privacy). Tenant setting defaults (৳60, ৳25, 2 days, time zone) removed from C# and SQL.
-- [ ] **2.3 Pricing.** One `DeliveryFeeCalculator` used everywhere (strategy per tenant settings). Create Order
+- [x] **2.3 Pricing.** One `DeliveryFeeCalculator` used everywhere (strategy per tenant settings). Create Order
       returns `fee` and `groupFee`. Every amount comes from the tenant's settings, never a constant in code.
       *Tests:* 1–4 shops give base, base + extra, base + 2 × extra, base + 3 × extra (Dhaka ৳60 / ৳85 / ৳110 /
       ৳135, read from the tenant); two orders from the same shop count once; Chattogram prices differ.
       Decide the fee for Deliver fast (`FastDeliveryFee`) and Don't hold orders.
+      *Done 2026-09-28:* `Domain/Pricing/DeliveryFeeCalculator` with the tenant's `FeeSchedule`
+      (`TenantInfo.Fees`): `GroupFee` = base + extra × (distinct shops − 1), counting only orders not cancelled,
+      refused or returned; a Deliver fast group costs `FastDeliveryFee`; a Don't hold order alone costs the base
+      fee (owner's choice). `AddedFee` = what one order adds to its group (base, extra, or 0 for a shop already
+      in it). `Order.AddedFee` is set when the order is placed in its group (also after losing the open-group
+      race) and saved with it; older orders were priced by `Pre/002_PriceExistingOrders`. Create Order and
+      Get Order return **`fee` only**; **no `groupFee`** (owner's choice): the total would tell the merchant how
+      many other shops the customer bought from. The group total is for the customer page (2.8) and the door
+      (3.5), recalculated there on what is actually delivered.
 - [ ] **2.4 Quote endpoint.** `GET /api/v1/quote?phone=&area=&line1=` → "৳60" or "+৳25" for the checkout, without
       revealing which other shops are in the group (merchant privacy). *Tests:* quote matches the fee on create.
 - [ ] **2.5 Hangfire and the lock job.** Hangfire on SQL Server; jobs take the tenant as a parameter.
@@ -219,7 +228,7 @@ Payments stay fake in the MVP either way.
 | Test | Status |
 |---|---|
 | An order on Day 3 starts a new group | ✅ `DeliveryGroupingTests` |
-| Fee = base + extra per distinct accepted shop (tenant settings; Dhaka ৳60 + ৳25) | ⬜ Week 2 |
+| Fee = base + extra per distinct accepted shop (tenant settings; Dhaka ৳60 + ৳25) | ✅ `DeliveryFeeCalculatorTests`, `PricingTests` |
 | Only one open group per customer + address, even with two orders at the same moment | ✅ `DeliveryGroupingTests` (race forced and recovered) |
 | Tenant A gets 404 for tenant B's order | ✅ `OrderApiTests` |
 | A merchant sees only its own parcels | ✅ `OrderApiTests` |
@@ -244,6 +253,9 @@ Payments stay fake in the MVP either way.
 | 2026-09-28 | Create Order locks an open group whose `LocksAt` has passed before opening the next one | Correct before the lock job (2.5) exists and whenever the job runs late; `LockedOn` records the deadline, not the late moment |
 | 2026-09-28 | `Order.DeliveryGroupId` NOT NULL; the change and the backfill of older orders run in `Scripts/Pre` | SqlPackage refuses NULL → NOT NULL on a table with rows; DCN makes deliberate schema changes in the pre phase |
 | 2026-09-28 | The merchant API never returns group data (number, delivery day, size) | A merchant must not learn that the customer also bought elsewhere |
+| 2026-09-28 | Create Order returns only `fee`, what this order adds (base, extra or 0), stored as `Order.AddedFee`; no `groupFee` | The group total reveals how many other shops are in the delivery. Stored so a replay answers the same |
+| 2026-09-28 | A Don't hold order costs the base fee; Deliver fast costs `FastDeliveryFee` | Don't hold is the merchant's choice, so the customer pays as for a one-shop group |
+| 2026-09-28 | A new NOT NULL column with no default on a table with rows goes through `Scripts/Pre` (add nullable, fill, NOT NULL) | SqlPackage cannot add it, and a SQL default would be a hidden business value |
 
 ## Quick reference
 
@@ -293,7 +305,22 @@ Newest first. One entry per working day: what was done, how it was tested, what 
   transaction on both databases, then published: dev OD-100001/002/004 share one group, OD-100003 has its own.
   Live: 9 parallel orders from the 3 Dhaka shops for a new phone → 201s, one open group locking at Wednesday
   00:00 Dhaka; a fast order → its own locked next-day group; the same phone in Chattogram → a separate group.
-- **Next:** task 2.3, pricing from the tenant's settings.
+- **Committed:** tasks 2.1–2.2 as `bb24f7b` and task 2.3 on branch `day2` (not pushed).
+- **Done (task 2.3):** `Domain/Pricing/DeliveryFeeCalculator` + `FeeSchedule` (`TenantInfo.Fees`); `Order.AddedFee`
+  set by `DeliveryGrouping` when it places the order (the other merchants' orders in the group are read with the
+  merchant filter lifted, for the calculation only); `fee` in the Create Order and Get Order responses, no group
+  total; `Orders.Order.AddedFee DECIMAL(10,2) NOT NULL` with `Pre/002_PriceExistingOrders` (add nullable, price
+  each older order in arrival order, NOT NULL); query filter names moved to `Application.Abstractions.QueryFilters`.
+- **Tested:** build 0 errors, no new warnings; 17 new domain tests (1–4 shops ৳60/85/110/135, Chattogram
+  prices, same shop once, cancelled/refused/returned shops not charged, fast fee, added fee per order, Don't
+  hold = base, no negative fee) and 5 new integration tests (3 shops → 60 + 25 + 25 and a ৳110 group, same shop
+  adds 0, fast and Don't hold fees, Chattogram's own prices, replay and GET show the same fee), amounts read from
+  the tenant. 87 + 6 + 31 = 124 pass, none skipped, schema-match green. `Pre/002` dry-run in a rolled-back
+  transaction on dev (DG-100003 = 60 + 25 + 25), then both databases published; dev kept its 16 orders. Live:
+  a new phone, Fashion House ৳60, Gadget BD ৳25 (replay: same order, ৳25), Beauty Shop ৳25, Fashion House again
+  ৳0 → one open group of 3 shops totalling ৳110; fast ৳60 and Don't hold ৳60 alone; Chattogram ৳70; GET shows the
+  fee to its merchant and 404 to another merchant and another tenant; no group data in any response.
+- **Next:** task 2.4, the checkout quote (reuses `DeliveryFeeCalculator.AddedFee`).
 
 ### 2026-09-27
 - **Done:** Week 1 complete (tasks 1.1–1.6).

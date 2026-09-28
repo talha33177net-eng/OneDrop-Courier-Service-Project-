@@ -139,6 +139,7 @@ public class CreateOrderHandler(
             area.Zone.Hub!.Name,
             order.Packages.Count,
             order.CodAmount,
+            order.AddedFee,
             order.Created);
     }
 
@@ -175,6 +176,7 @@ public class CreateOrderHandler(
                     hub.Name,
                     order.Packages.Count,
                     order.CodAmount,
+                    order.AddedFee,
                     order.Created)
             })
             .FirstOrDefaultAsync(cancellationToken);

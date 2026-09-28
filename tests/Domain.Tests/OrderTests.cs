@@ -119,10 +119,22 @@ public class OrderTests
         var own = DeliveryGroup.Open(new NewDeliveryGroup(1, 1, 1, opened, dhaka, 2));
         var otherAddress = DeliveryGroup.Open(new NewDeliveryGroup(1, 2, 1, opened, dhaka, 2));
 
-        order.PlaceIn(own);
+        order.PlaceIn(own, 25);
 
         Assert.Same(own, order.DeliveryGroup);
-        Assert.Throws<InvalidOperationException>(() => order.PlaceIn(otherAddress));
+        Assert.Equal(25, order.AddedFee);
+        Assert.Throws<InvalidOperationException>(() => order.PlaceIn(otherAddress, 25));
         Assert.Same(own, order.DeliveryGroup);
+    }
+
+    [Fact]
+    public void An_order_cannot_take_a_negative_fee()
+    {
+        var order = Order.Create(Spec(new NewPackage("Box", 500))).Value;
+        var opened = new DateTime(2026, 9, 28, 4, 0, 0, DateTimeKind.Utc);
+        var group = DeliveryGroup.Open(new NewDeliveryGroup(1, 1, 1, opened, TimeZoneInfo.Utc, 2));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => order.PlaceIn(group, -1));
+        Assert.Null(order.DeliveryGroup);
     }
 }

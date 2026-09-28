@@ -1,3 +1,5 @@
+using Domain.Pricing;
+
 namespace Application.Abstractions;
 
 /// <summary>A tenant and its settings, as cached by <see cref="ITenantCatalog"/>.</summary>
@@ -11,7 +13,11 @@ public sealed record TenantInfo(
     decimal BaseDeliveryFee,
     decimal ExtraShopFee,
     decimal FastDeliveryFee,
-    int GroupJoinDays);
+    int GroupJoinDays)
+{
+    /// <summary>The tenant's prices, for <see cref="DeliveryFeeCalculator"/>.</summary>
+    public FeeSchedule Fees => new(BaseDeliveryFee, ExtraShopFee, FastDeliveryFee);
+}
 
 /// <summary>
 /// The tenant the current request or job runs for. Resolved once per request from the subdomain, the

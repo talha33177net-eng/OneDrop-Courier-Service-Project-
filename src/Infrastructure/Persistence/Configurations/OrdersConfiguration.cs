@@ -25,6 +25,7 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(o => o.Note).HasMaxLength(500);
         builder.Property(o => o.CodAmount).IsMoney();
         builder.Property(o => o.DeclaredValue).IsMoney();
+        builder.Property(o => o.AddedFee).HasPrecision(10, 2);
         builder.Property(o => o.RowVersion).IsRowVersion();
         builder.Ignore(o => o.TotalWeightGrams);
 

@@ -8,10 +8,10 @@
 |---|---|
 | New table, column, index, view, procedure, sequence | `src/Database` — edit the object's own file |
 | Seed or reference data, moving or fixing data | Here: `Scripts/[Year]/NNN_PascalCaseName.sql` |
-| Intentional data loss (drop or rename a column), or a change SqlPackage would block such as NULL → NOT NULL on a table with rows | Here: `Scripts/Pre/NNN_Name.sql` — runs **before** the publish, against the old schema; guard every step so it also runs on a new database |
+| Intentional data loss (drop or rename a column), or a change SqlPackage would block on a table with rows: NULL → NOT NULL, or a new NOT NULL column with no default | Here: `Scripts/Pre/NNN_Name.sql` — runs **before** the publish, against the old schema; guard every step so it also runs on a new database. A new column is added nullable, filled, then made NOT NULL; its table file still defines it |
 | Ad-hoc analysis or support queries | `sql/` at the repository root (never deployed) |
 
-Never write `ALTER TABLE ... ADD` here: add the column to the table file and let the publish diff it.
+Never write `ALTER TABLE ... ADD` in a Year script: add the column to the table file and let the publish diff it.
 
 ## Deploy order
 

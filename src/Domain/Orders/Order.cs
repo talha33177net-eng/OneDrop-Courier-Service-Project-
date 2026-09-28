@@ -99,6 +99,14 @@ public class Order : TenantEntity, IMerchantOwned
     /// <summary>Liability cap if the parcel is lost or damaged.</summary>
     public decimal DeclaredValue { get; private set; }
 
+    /// <summary>
+    /// What this order added to its group's delivery fee when it was accepted, at the tenant's prices of that
+    /// moment: the base fee when it opened the group, the extra-shop fee for a new shop, 0 for a shop already in
+    /// it. Kept so the merchant's response, and any replay of it, never changes. The customer pays the group's
+    /// fee, recalculated at the door on what is actually delivered.
+    /// </summary>
+    public decimal AddedFee { get; private set; }
+
     public string? Note { get; private set; }
 
     public byte[] RowVersion { get; private set; } = [];
@@ -170,17 +178,21 @@ public class Order : TenantEntity, IMerchantOwned
 
     /// <summary>
     /// Puts the order in a delivery group of the same customer and address. The caller decides which group
-    /// (<see cref="DeliveryGroup.CanJoin"/>); a group for someone else is a bug, not a business "no".
+    /// (<see cref="DeliveryGroup.CanJoin"/>) and prices the move (<see cref="AddedFee"/>); a group for someone
+    /// else is a bug, not a business "no".
     /// </summary>
-    public void PlaceIn(DeliveryGroup group)
+    public void PlaceIn(DeliveryGroup group, decimal addedFee)
     {
         if (group.CustomerId != CustomerId || group.AddressId != AddressId)
         {
             throw new InvalidOperationException("An order can only travel in its own customer and address's group.");
         }
 
+        ArgumentOutOfRangeException.ThrowIfNegative(addedFee);
+
         DeliveryGroup = group;
         DeliveryGroupId = group.Id;
+        AddedFee = addedFee;
     }
 
     public bool CanMoveTo(OrderStatus status)

@@ -45,6 +45,10 @@ public sealed record AddressInput(long? AreaId, string? Area, string? Line1, str
 
 public sealed record PackageInput(string? Description, int WeightGrams);
 
+/// <param name="Fee">
+/// What this order adds to the customer's delivery fee (<c>Order.AddedFee</c>). Never the group's total, which
+/// would tell the merchant how many other shops the customer bought from.
+/// </param>
 public sealed record CreateOrderResult(
     long OrderId,
     string Number,
@@ -57,6 +61,7 @@ public sealed record CreateOrderResult(
     string Hub,
     int PackageCount,
     decimal CodAmount,
+    decimal Fee,
     DateTime Created)
 {
     /// <summary>True when this is an earlier order returned for a repeated Idempotency-Key.</summary>

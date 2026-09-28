@@ -17,6 +17,7 @@ public sealed record OrderDetails(
     string Zone,
     decimal CodAmount,
     decimal DeclaredValue,
+    decimal Fee,
     DateTime Created,
     IReadOnlyList<PackageDetails> Packages,
     IReadOnlyList<StatusDetails> History);
@@ -51,6 +52,7 @@ public class GetOrderHandler(IAppDbContext db)
                 zone.Name,
                 order.CodAmount,
                 order.DeclaredValue,
+                order.AddedFee,
                 order.Created,
                 order.Packages
                     .OrderBy(p => p.Sequence)

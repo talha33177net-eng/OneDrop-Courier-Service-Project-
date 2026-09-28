@@ -8,6 +8,9 @@
 -- Date: 2026-09-27
 -- Updated: 2026-09-28 - Added DeliveryGroupId (Grouping.DeliveryGroup), NOT NULL: every order travels in a group
 --          (Pre/001_GroupExistingOrders put the orders saved before grouping into groups)
+-- Updated: 2026-09-28 - Added AddedFee: what the order added to its group's delivery fee when accepted (the base
+--          fee, the extra-shop fee or 0), shown to the merchant; filled for older orders by
+--          Pre/002_PriceExistingOrders
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Orders].[Order] (
     [Id]                BIGINT          IDENTITY (1, 1) NOT NULL,
@@ -27,6 +30,7 @@ CREATE TABLE [Orders].[Order] (
     [DoNotHold]         BIT             DEFAULT ((0)) NOT NULL,
     [CodAmount]         DECIMAL (12, 2) DEFAULT ((0)) NOT NULL,
     [DeclaredValue]     DECIMAL (12, 2) DEFAULT ((0)) NOT NULL,
+    [AddedFee]          DECIMAL (10, 2) NOT NULL,
     [Note]              NVARCHAR (500)  NULL,
     [RowVersion]        ROWVERSION      NOT NULL,
     [UpdatedId]         BIGINT          NULL,
@@ -40,7 +44,7 @@ CREATE TABLE [Orders].[Order] (
     CONSTRAINT [FK_Order_DeliveryGroup] FOREIGN KEY ([DeliveryGroupId]) REFERENCES [Grouping].[DeliveryGroup] ([Id]),
     CONSTRAINT [FK_Order_PickupPoint] FOREIGN KEY ([PickupPointId]) REFERENCES [Merchants].[PickupPoint] ([Id]),
     CONSTRAINT [FK_Order_User] FOREIGN KEY ([UpdatedId]) REFERENCES [Identity].[User] ([Id]),
-    CONSTRAINT [chk_Order_Amounts] CHECK ([CodAmount] >= (0) AND [DeclaredValue] >= (0))
+    CONSTRAINT [chk_Order_Amounts] CHECK ([CodAmount] >= (0) AND [DeclaredValue] >= (0) AND [AddedFee] >= (0))
 );
 
 

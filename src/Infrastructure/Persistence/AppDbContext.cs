@@ -30,8 +30,8 @@ public class AppDbContext(
     ICurrentUser currentUser)
     : IdentityDbContext<AppUser, AppRole, long>(options), IAppDbContext
 {
-    public const string TenantFilter = "Tenant";
-    public const string MerchantFilter = "Merchant";
+    public const string TenantFilter = QueryFilters.Tenant;
+    public const string MerchantFilter = QueryFilters.Merchant;
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
 
