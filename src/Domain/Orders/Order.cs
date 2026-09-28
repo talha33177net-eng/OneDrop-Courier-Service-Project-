@@ -326,4 +326,34 @@ public class Order : TenantEntity, IMerchantOwned
 
         return ScanOutcome.Recorded;
     }
+
+    /// <summary>
+    /// True when every package is at <paramref name="hubId"/> and the order can go out from there: it is
+    /// <see cref="OrderStatus.AtHub"/> and none of its packages is still on the shuttle or at another hub.
+    /// </summary>
+    public bool IsReadyAt(long hubId)
+    {
+        return Status == OrderStatus.AtHub && packages.All(p => p.HubId == hubId);
+    }
+
+    /// <summary>
+    /// The rider takes the order out from <paramref name="hubId"/>: its packages leave the hub and the order is out
+    /// for delivery. False, and nothing changes, when it is not ready there (<see cref="IsReadyAt"/>): it stays behind.
+    /// </summary>
+    public bool HandToRider(long hubId)
+    {
+        if (!IsReadyAt(hubId))
+        {
+            return false;
+        }
+
+        foreach (var package in packages)
+        {
+            package.LeaveHub();
+        }
+
+        MoveTo(OrderStatus.OutForDelivery, "Out with the rider");
+
+        return true;
+    }
 }

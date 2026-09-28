@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Domain.Customers;
+using Domain.Delivery;
 using Domain.Grouping;
 using Domain.Merchants;
 using Domain.Network;
@@ -47,6 +48,12 @@ public interface IAppDbContext
     DbSet<DeliveryGroup> DeliveryGroups { get; }
 
     DbSet<OutboxMessage> OutboxMessages { get; }
+
+    DbSet<Rider> Riders { get; }
+
+    DbSet<Trip> Trips { get; }
+
+    DbSet<TripStop> TripStops { get; }
 
     EntityEntry<TEntity> Entry<TEntity>(TEntity entity)
         where TEntity : class;

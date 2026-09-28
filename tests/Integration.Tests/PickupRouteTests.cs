@@ -15,9 +15,11 @@ namespace Integration.Tests;
 
 /// <summary>
 /// Task 3.1: pickup routes and parcel labels. The demo shops are all in Mirpur and every test class orders from
-/// them, so these tests open shops of their own in Uttara (no other class picks up there) and check who is on a
-/// sheet, not Mirpur's totals.
+/// them, so these tests open shops of their own in Uttara and check who is on a sheet, not Mirpur's totals. The hub
+/// scan tests also open an Uttara shop, so the two classes share a collection and never run at the same time: the
+/// route list and a sheet read a moment apart would otherwise count another class's new parcels differently.
 /// </summary>
+[Collection("Uttara pickups")]
 public partial class PickupRouteTests(WebAppFactory factory)
 {
     private const string Password = "OneDrop#2026";

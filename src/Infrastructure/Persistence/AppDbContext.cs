@@ -5,6 +5,7 @@ using Application.Abstractions;
 using Application.Notifications;
 using Domain.Common;
 using Domain.Customers;
+using Domain.Delivery;
 using Domain.Grouping;
 using Domain.Merchants;
 using Domain.Network;
@@ -66,6 +67,12 @@ public class AppDbContext(
     public DbSet<DeliveryGroup> DeliveryGroups => Set<DeliveryGroup>();
 
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+
+    public DbSet<Rider> Riders => Set<Rider>();
+
+    public DbSet<Trip> Trips => Set<Trip>();
+
+    public DbSet<TripStop> TripStops => Set<TripStop>();
 
     /// <summary>Read by the tenant filter at query time. Null means "no tenant", which matches no row.</summary>
     public long? CurrentTenantId => tenantContext.TenantId;

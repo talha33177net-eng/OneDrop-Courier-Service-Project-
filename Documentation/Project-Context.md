@@ -66,7 +66,7 @@ The user supplied two PDFs (not stored in the repo): *OneDrop Implementation Pla
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
-| 3 | Operations and money | Group delivered, merchants settled | 🔄 3.1–3.3 done, next 3.4 |
+| 3 | Operations and money | Group delivered, merchants settled | 🔄 3.1–3.4 done, next 3.5 |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
 Task-level detail, the cut list, the job schedule, must-pass tests and the daily log are in
@@ -74,18 +74,18 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 
 ---
 
-## 3. What exists today (Weeks 1 and 2, tasks 3.1–3.3)
+## 3. What exists today (Weeks 1 and 2, tasks 3.1–3.4)
 
 ### Solution layout (`Courier.sln`)
 | Project | Path | Contents |
 |---|---|---|
-| Domain | `src/Domain` | Entities and rules, no packages. `Common` (Entity with domain events, TenantEntity, Result/Error), `Platform/Tenant`, `Network` (Hub, Zone, Area, PickupRoute), `Customers` (Customer, CustomerAddress, PhoneNumber, PhoneOtp), `Merchants` (Merchant, MerchantApiKey, PickupPoint), `Orders` (Order + state machine and scans, Package with its hub, PackageLabel, OrderStatusHistory), `Grouping` (DeliveryGroup + state machine, lock time and shelf, events), `Pricing` (DeliveryFeeCalculator, FeeSchedule), `Notifications` (OutboxMessage + retry rule) |
-| Application | `src/Application` | Use cases as vertical slices: `Orders/CreateOrder`, `Orders/GetOrder`, `Network/ListAreas`, `Network/PickupRoutes` (route list and sheet), `Network/HubScan` (collect, receive at a hub, shelves, shuttle load and manifest), `Orders/PackageLabels`, `Auth/PhoneLogin`, `Customers/CustomerDirectory` (find-or-create by phone/address), `Grouping/DeliveryGrouping` (join or open the order's group; quote), `Grouping/LockDueGroups` (the lock job), `Grouping/ShipNow`, `Grouping/CustomerDeliveries` ("My deliveries"), `Pricing/GetQuote`, `Notifications` (outbox contracts, `SendOutbox` job and SMS texts). Interfaces: `IAppDbContext`, `ITenantJob`, `ITenantContext` (`TenantInfo.Fees`), `ITenantCatalog`, `ICurrentUser`, `ISmsSender`; `QueryFilters` (filter names) |
+| Domain | `src/Domain` | Entities and rules, no packages. `Common` (Entity with domain events, TenantEntity, Result/Error), `Platform/Tenant`, `Network` (Hub, Zone, Area, PickupRoute), `Customers` (Customer, CustomerAddress, PhoneNumber, PhoneOtp), `Merchants` (Merchant, MerchantApiKey, PickupPoint), `Orders` (Order + state machine and scans, Package with its hub, PackageLabel, OrderStatusHistory), `Grouping` (DeliveryGroup + state machine, lock time and shelf, events), `Delivery` (Rider, Trip, TripStop, TripLoad, TripPlanner), `Pricing` (DeliveryFeeCalculator, FeeSchedule), `Notifications` (OutboxMessage + retry rule) |
+| Application | `src/Application` | Use cases as vertical slices: `Orders/CreateOrder`, `Orders/GetOrder`, `Network/ListAreas`, `Network/PickupRoutes` (route list and sheet), `Network/HubScan` (collect, receive at a hub, shelves, shuttle load and manifest), `Orders/PackageLabels`, `Auth/PhoneLogin`, `Customers/CustomerDirectory` (find-or-create by phone/address), `Grouping/DeliveryGrouping` (join or open the order's group; quote), `Grouping/LockDueGroups` (the lock job), `Grouping/ShipNow`, `Grouping/CustomerDeliveries` ("My deliveries"), `Delivery/PlanTrips` (planner and job), `Delivery/HubTrips`, `Delivery/RiderDay` (the rider's stops, Start trip), `Pricing/GetQuote`, `Notifications` (outbox contracts, `SendOutbox` job and SMS texts). Interfaces: `IAppDbContext`, `ITenantJob`, `ITenantContext` (`TenantInfo.Fees`), `ITenantCatalog`, `ICurrentUser`, `ISmsSender`; `QueryFilters` (filter names) |
 | Infrastructure | `src/Infrastructure` | `Persistence/AppDbContext` (EF Core, query filters), `Configurations/*` (mapping), `TenantSaveInterceptor`, `MultiTenancy` (TenantContext, TenantCatalog), `Identity` (AppUser, AppRole, claims), `Sms/FakeSmsSender`, `Seeding/DemoDataSeeder`, `Jobs` (Hangfire setup, TenantJobRunner, TenantJobRegistry, OutboxDispatcher); `AppDbContext.SaveChangesAsync` writes the outbox |
 | Web | `src/Web` | Razor Pages portals (merchant, customer, hub, platform), `Labels/LabelQrCode` (QRCoder), `Api/V1` (orders, quote, areas by API key; deliveries by customer cookie), `Authentication/ApiKeyAuthenticationHandler`, `MultiTenancy` middleware, `Program.cs` |
 | Database | `src/Database` | SQL project (Microsoft.Build.Sql 2.1.0) → `Database.dacpac`. Owns the schema |
 | Database Update | `src/Database Update` | DbUp console (`dbup.exe`): data migrations in `Scripts/<Year>/`, data-loss scripts in `Scripts/Pre/` |
-| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 154 + 6 + 81 = **241 tests, all passing** |
+| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 170 + 6 + 86 = **262 tests, all passing** |
 | Tools | `tools/db/publish.ps1` | Deploys a database: `dbup pre` → dacpac publish → `dbup` |
 
 ### Features that work
@@ -156,7 +156,18 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   other end with the normal scan, which shelves it. `/Hub/Shuttle?hub=MIR` is the printable manifest: parcels to
   load per destination hub, next-day ones first, and parcels on their way in. No job or time setting: staff load
   when the shuttle leaves. The order stays `AtHub` in transit (all packages have a `ReceivedOn`).
-- **Not yet:** riders and trips (3.4), a screen to change route times, Ship now by SMS "reply 1" (needs an inbound SMS gateway), a screen for failed outbox messages,
+- **Riders and trips** (3.4, `Delivery` schema): a `Rider` works from one hub with a bike limit of parcels and
+  weight (`MaxParcels`, `MaxWeightGrams`, per rider, no default) and signs in as staff (`Rider.UserId`, role
+  `Rider`). `TripPlanning` (job `plan-trips`, every 15 minutes, `Jobs:PlanTrips`; also **Plan trips now** on
+  `/Hub/Trips?hub=MIR`) puts each hub's deliveries due today (`Locked`, `LocksAt` passed, at least one parcel on the
+  shelf) on its riders' trips: late ones first, then area by area, each to the first rider by name with room
+  (`Domain/Delivery/TripPlanner`); one trip per rider a day (`Trip`, `Planned` → `Out`), a delivery on one trip a day
+  (`TripStop`); a trip still planned after its day is cancelled. The rider's **Today** (`/Rider`, installable,
+  `rider.webmanifest`): stops by area with recipient, address, landmark, phone, shelf, labels, readiness and what to
+  collect (fee on what is taken + COD). **Start trip** hands over every order with all parcels on the shelf
+  (`Order.HandToRider` → `OutForDelivery`, packages off the hub), dispatches its delivery and frees the shelf; a
+  delivery with nothing ready comes off the trip and stays `Locked`.
+- **Not yet:** the delivery screen and attempts (3.5), a screen to add riders or change a bike's limit, a screen to change route times, Ship now by SMS "reply 1" (needs an inbound SMS gateway), a screen for failed outbox messages,
   merchant screens to create API keys or enter orders manually, tenant admin screens.
 
 ### Database
@@ -164,7 +175,8 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   `Network` (Hub, Zone, Area, PickupRoute), `Customers` (Customer, CustomerAddress, PhoneOtp), `Merchants` (Merchant,
   MerchantApiKey, PickupPoint), `Orders` (Order, Package, OrderStatusHistory, sequence OrderNumber → `OD-100001`),
   `Grouping` (DeliveryGroup, sequence DeliveryGroupNumber → `DG-100001`; one `Open` group per customer + address
-  by filtered unique index), `Notifications` (OutboxMessage). `Order.DeliveryGroupId` is NOT NULL: every order travels in a group
+  by filtered unique index), `Delivery` (Rider, Trip — one per rider a day, TripStop — a delivery on one trip a
+  day), `Notifications` (OutboxMessage). `Order.DeliveryGroupId` is NOT NULL: every order travels in a group
   (`Scripts/Pre/001_GroupExistingOrders` grouped the orders saved before 2.2). `Order.AddedFee` is NOT NULL
   (`Scripts/Pre/002_PriceExistingOrders` priced the orders saved before 2.3). `Package.HubId`/`ReceivedOn` say
   where a parcel was last scanned in (null on the shuttle, when `ShuttleToHubId` says where it is going);
@@ -195,6 +207,12 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   DG-100023 on shelf MIR-01; OD-100046 (Gulshan 1) scanned at MIR then GUL, its DG-100024 on GUL-01.
   OD-100047 and OD-100048 are the 3.3 live check (phone 01745219083, Banani): OD-100048 (fast) went MIR → shuttle →
   GUL, shelf GUL-02; OD-100047 is still on the shuttle to GUL.
+  Demo riders (dev only): Rafiq Hasan (`rider@dhaka`, MIR, 30 parcels / 25 kg), Sumon Ali (`rider2@dhaka`, MIR,
+  12 / 15 kg), Kamal Uddin (`rider3@dhaka`, GUL), Jamal Chowdhury (`rider@chattogram`, AGR). OD-100049 to OD-100052
+  are the 3.4 live check: DG-100027 (Farhana Akter, 01893456120; Fashion House OD-100049 out with Rafiq, Gadget BD
+  OD-100050 never collected) and DG-100028 (OD-100051, fast) are out on Rafiq's trip of 28 September; DG-100029
+  (OD-100052, 1 of 2 parcels on MIR-02) is planned on Sumon's trip. Their delivery days were moved to 28 September
+  by hand, as were DG-100012 and DG-100020's earlier, which therefore show as due with no parcel at the hub.
   DG-100003 also totals ৳110. The Hangfire tables
   are installed at app start in both databases (mapping the dashboard opens the storage); only `OneDrop` runs jobs,
   as the integration tests start no job server. Group numbers have gaps: a sequence value used in a rolled-back
@@ -246,6 +264,12 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 | A delivery takes the lowest free shelf at its own hub at its first parcel and frees it when it leaves | Fixed, numbered shelves; the unique index settles two scans taking the same one |
 | Hub staff choose their hub on the page (`?hub=MIR`), not from their login | One hub-staff login per operator in the MVP; a hub on the user can come with the rider app |
 | The hub shuttle is a load scan and a receive scan; on the shuttle a package has no `HubId`, only `ShuttleToHubId` | "Scan at every handover"; a package is never at two hubs, and the manifest shows what is left to load |
+| A bike's limit is `Rider.MaxParcels` + `MaxWeightGrams`, per rider, no default | Bikes differ; both numbers are already on every package |
+| Trips are planned every 15 minutes from the start of delivery day (repeatable), not once at 08:00 | Parcels still arrive on delivery day; tenants have different time zones |
+| A delivery is planned once one parcel is on its shelf; Start trip takes only orders with every parcel here, and a delivery with nothing ready comes off the trip | "Merchant not ready → the group leaves without it" |
+| One trip per rider a day; riders filled in name order, late deliveries first, then area by area | One evening run; area order keeps stops together without geocoding |
+| `TripStop.DeliveryDate` copies the trip's date for `UX_TripStop_DeliveryGroup_DeliveryDate` | The database settles the job and the button planning at once |
+| `Rider.UserId` points at the login (riders sign in as staff on their subdomain) | Identity unchanged; a rider can exist before a login |
 
 ---
 
@@ -324,6 +348,8 @@ git push                                          # main tracks origin/main
 | `~/` links are rewritten by `MapStaticAssets().WithStaticAssets()` to a fingerprinted URL | Use a plain path for anything that needs a stable address (the web manifest, the service worker) |
 | Razor HTML-encodes `৳` (and other non-Latin text) written inside a C# expression (`@($"৳{x}")` → `&#x9F3;`) | Keep the symbol in the markup: `৳@amount.ToString("N0")` |
 | The integration database holds hundreds of waiting Mirpur orders from earlier runs | Tests that count what is waiting use shops of their own in another zone (Uttara), and lists must not assume a short backlog |
+| Test classes that count what waits on the Uttara pickup route (`PickupRouteTests`) race any class opening an Uttara shop (`HubScanTests`) | They share the xUnit collection `"Uttara pickups"`; a new class using Uttara pickup points joins it. Trip tests build a hub, zone and area of their own instead |
+| `chrome --headless --window-size=390,…` lays pages out wider than 390 px (a minimum window width), so a screenshot looks cut off | Use DevTools mobile emulation (`Emulation.setDeviceMetricsOverride`, width 390, `mobile: true`) and compare `scrollWidth` with `clientWidth` |
 | The link to ras-x2 is sometimes slow (DNS takes seconds): sqlpackage can stall before connecting, tests can hit a login timeout | Check `sys.dm_exec_sessions` for the process; if it has no session, stop it and run again. Do not pipe `publish.ps1` into `Select-Object -Last`, which hides its progress |
 
 ---
@@ -338,6 +364,7 @@ git push                                          # main tracks origin/main
 | Zone / Area / Hub | City part with its own pickup routes / neighbourhood picked from a list / local warehouse serving zones |
 | Collection (pickup) route | Scheduled daily pickup visiting many merchants in one zone |
 | Hub shuttle | Daily transfer of parcels between hubs to the customer's zone hub |
+| Trip / stop | One rider's run from their hub on one delivery day / one delivery on it |
 | COD | Cash on delivery: product money collected at the door, settled to the merchant next day |
 | Trust score | Customer record of refusals and no-shows; low score = pay the fee first |
 | Day 1 / 2 / 3 | First order day / last day to join / delivery day (tenant time zone) |

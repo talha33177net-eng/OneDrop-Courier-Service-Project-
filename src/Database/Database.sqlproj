@@ -32,6 +32,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Build Include="Security/Customers.sql" />
+    <Build Include="Security/Delivery.sql" />
     <Build Include="Security/Grouping.sql" />
     <Build Include="Security/Identity.sql" />
     <Build Include="Security/Merchants.sql" />
@@ -64,6 +65,9 @@
     <Build Include="Grouping/Sequences/DeliveryGroupNumber.sql" />
     <Build Include="Grouping/Tables/DeliveryGroup.sql" />
     <Build Include="Notifications/Tables/OutboxMessage.sql" />
+    <Build Include="Delivery/Tables/Rider.sql" />
+    <Build Include="Delivery/Tables/Trip.sql" />
+    <Build Include="Delivery/Tables/TripStop.sql" />
   </ItemGroup>
   <ItemGroup>
     <PostDeploy Include="Script.PostDeployment.sql" />

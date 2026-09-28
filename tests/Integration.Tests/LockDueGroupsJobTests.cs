@@ -10,6 +10,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Application.Abstractions;
+using Application.Delivery.PlanTrips;
 using Application.Grouping;
 using Application.Grouping.LockDueGroups;
 using Domain.Customers;
@@ -186,15 +187,22 @@ public class LockDueGroupsJobTests(WebAppFactory factory)
         var client = new RecordingJobClient();
         await using var scope = factory.Services.CreateAsyncScope();
         var runner = ActivatorUtilities.CreateInstance<TenantJobRunner>(scope.ServiceProvider, client);
-        var scheduled = recurring.Jobs["lock-due-groups"];
 
-        await runner.EnqueueForEveryTenantAsync((string)scheduled.Job.Args[0], TestContext.Current.CancellationToken);
+        foreach (var (_, scheduled) in recurring.Jobs)
+        {
+            await runner.EnqueueForEveryTenantAsync((string)scheduled.Job.Args[0], TestContext.Current.CancellationToken);
+        }
 
-        Assert.Equal(configuration["Jobs:LockDueGroups"], scheduled.Cron);
+        Assert.Equal(
+            [("lock-due-groups", configuration["Jobs:LockDueGroups"]), ("plan-trips", configuration["Jobs:PlanTrips"])],
+            recurring.Jobs.Select(job => (job.Key, (string?)job.Value.Cron)).OrderBy(job => job.Key));
         Assert.All(
-            [scheduled.Job, .. client.Jobs],
+            [.. recurring.Jobs.Values.Select(scheduled => scheduled.Job), .. client.Jobs],
             job => Assert.Equal(job.Method, InvocationData.SerializeJob(job).DeserializeJob().Method));
-        Assert.NotEmpty(client.Jobs);
+        Assert.Equal(
+            [nameof(LockDueGroupsJob), nameof(PlanTripsJob)],
+            client.Jobs.Select(job => (string)job.Args[0]).Distinct().Order());
+        Assert.Equal(typeof(PlanTripsJob), factory.Services.GetRequiredService<TenantJobRegistry>().Find(nameof(PlanTripsJob)));
     }
 
     [Fact]

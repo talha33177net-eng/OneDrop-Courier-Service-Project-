@@ -32,6 +32,11 @@ public class IndexModel(
             return RedirectToPage("/Customer/Index");
         }
 
+        if (User.IsInRole(Roles.Rider))
+        {
+            return RedirectToPage("/Rider/Index");
+        }
+
         if (Tenant is null)
         {
             var tenants = await catalog.ListAsync(cancellationToken);

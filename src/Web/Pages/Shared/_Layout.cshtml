@@ -39,6 +39,11 @@
                         <a asp-page="/Hub/Scan">Scan</a>
                         <a asp-page="/Hub/Shelves">Shelves</a>
                         <a asp-page="/Hub/Shuttle">Shuttle</a>
+                        <a asp-page="/Hub/Trips">Trips</a>
+                    }
+                    if (user.IsInRole(Roles.Rider))
+                    {
+                        <a asp-page="/Rider/Index">Today</a>
                     }
                     if (user.IsInRole(Roles.PlatformAdmin))
                     {

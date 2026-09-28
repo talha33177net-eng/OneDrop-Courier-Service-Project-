@@ -236,6 +236,11 @@ th.num {
     font-weight: 600;
 }
 
+.status.status-waiting {
+    background: #fdf1dc;
+    color: #9a5b00;
+}
+
 code {
     background: #eef0f6;
     padding: 1px 6px;
@@ -393,7 +398,8 @@ progress::-moz-progress-bar {
         padding: 16px;
     }
 
-    .delivery form .muted {
+    .delivery form .muted,
+    .start-trip .muted {
         display: block;
         margin-top: 8px;
     }
@@ -411,6 +417,10 @@ progress::-moz-progress-bar {
 
 .sheet-head .button {
     margin-top: 0;
+}
+
+.sheet-action {
+    margin-bottom: 16px;
 }
 
 .stop-head {

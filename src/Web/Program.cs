@@ -68,6 +68,7 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizeFolder("/Customer", Policies.CustomerPortal);
     options.Conventions.AuthorizeFolder("/Platform", Policies.PlatformAdmin);
     options.Conventions.AuthorizeFolder("/Hub", Policies.Operations);
+    options.Conventions.AuthorizeFolder("/Rider", Policies.Rider);
 });
 
 var app = builder.Build();

@@ -62,7 +62,8 @@ Tenants are subdomains. Browsers resolve `*.localhost` to your machine, so no ho
 |---|---|---|
 | `admin@onedrop.test` | localhost | Platform admin |
 | `admin@dhaka.onedrop.test` / `admin@chattogram.onedrop.test` | tenant | Tenant admin |
-| `hub@dhaka.onedrop.test` / `hub@chattogram.onedrop.test` | tenant | Hub staff (**Pickup routes**: route sheets per zone; **Scan**: collect, receive and load the shuttle; **Shelves**; **Shuttle** manifest) |
+| `hub@dhaka.onedrop.test` / `hub@chattogram.onedrop.test` | tenant | Hub staff (**Pickup routes**: route sheets per zone; **Scan**: collect, receive and load the shuttle; **Shelves**; **Shuttle** manifest; **Trips**: today's riders and deliveries, Plan trips now) |
+| `rider@dhaka.onedrop.test` (Mirpur, 30 parcels / 25 kg), `rider2@dhaka.onedrop.test` (Mirpur, 12 / 15 kg), `rider3@dhaka.onedrop.test` (Gulshan), `rider@chattogram.onedrop.test` (Agrabad) | tenant | Rider (**Today**: stops, what to collect, Start trip) |
 | `fashion@`, `gadget@`, `beauty@` + `dhaka.onedrop.test` / `chattogram.onedrop.test` | tenant | Merchant (orders, printable QR labels) |
 | Any mobile number via **Customer sign in** | tenant | Customer (code appears on **SMS outbox**) |
 

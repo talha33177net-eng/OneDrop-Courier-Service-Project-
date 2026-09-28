@@ -2,6 +2,9 @@ using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Application.Auth.PhoneLogin;
 using Application.Customers;
+using Application.Delivery.HubTrips;
+using Application.Delivery.PlanTrips;
+using Application.Delivery.RiderDay;
 using Application.Grouping;
 using Application.Grouping.CustomerDeliveries;
 using Application.Grouping.LockDueGroups;
@@ -37,6 +40,10 @@ public static class DependencyInjection
         services.AddScoped<PickupRoutesHandler>();
         services.AddScoped<HubScanHandler>();
         services.AddScoped<PackageLabelsHandler>();
+        services.AddScoped<TripPlanning>();
+        services.AddScoped<PlanTripsJob>();
+        services.AddScoped<HubTripsHandler>();
+        services.AddScoped<RiderDayHandler>();
         services.AddScoped<PhoneLoginService>();
 
         return services;

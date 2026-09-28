@@ -1,0 +1,156 @@
+@page
+@model Web.Pages.Hub.TripsModel
+@using Domain.Delivery
+@{
+    ViewData["Title"] = Model.Current is null ? "Trips" : $"{Model.Current.Name} trips";
+    var today = Model.Today;
+}
+
+@if (Model.Current is null)
+{
+    <h1>Trips</h1>
+    <p class="lead">Which hub's trips?</p>
+    <div class="card">
+        <ul class="hub-list">
+            @foreach (var hub in Model.Hubs)
+            {
+                <li><a asp-page="/Hub/Trips" asp-route-hub="@hub.Code">@hub.Name <span class="muted">@hub.Code</span></a></li>
+            }
+        </ul>
+    </div>
+    return;
+}
+
+<div class="sheet-head">
+    <div>
+        <h1>@Model.Current.Name trips</h1>
+        <p class="lead">
+            @today.Day.ToString("dddd d MMMM"). Closed deliveries due today go on a rider's bike once a parcel is on
+            their shelf, up to what each bike carries.
+        </p>
+    </div>
+    <form method="post" asp-page-handler="Plan" asp-route-hub="@Model.Current.Code" class="no-print sheet-action">
+        <button class="button" type="submit">Plan trips now</button>
+    </form>
+</div>
+
+@if (Model.Message is not null)
+{
+    <p class="notice">@Model.Message</p>
+}
+
+@if (today.Riders.Count == 0)
+{
+    <div class="card"><p class="muted">No rider works from this hub yet.</p></div>
+}
+
+@foreach (var rider in today.Riders)
+{
+    <section class="card">
+        <div class="stop-head">
+            <div>
+                <h2>@rider.Rider</h2>
+                <div class="muted">
+                    @rider.Carried.Parcels of @rider.Limit.Parcels parcels ·
+                    @Kilograms(rider.Carried.WeightGrams) of @Kilograms(rider.Limit.WeightGrams) kg
+                </div>
+            </div>
+            <span class="pill @(rider.Status == TripStatus.Planned ? "pill-open" : null)">@TripText(rider.Status)</span>
+        </div>
+        @if (rider.Stops.Count > 0)
+        {
+            var left = rider.Status != TripStatus.Planned;
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Delivery</th>
+                            <th>Area</th>
+                            <th>Shelf</th>
+                            <th class="num">@(left ? "Parcels taken" : "Parcels here")</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var stop in rider.Stops)
+                        {
+                            <tr>
+                                <td><strong>@stop.Delivery</strong></td>
+                                <td>@stop.Area</td>
+                                <td>
+                                    @if (stop.Shelf is null)
+                                    {
+                                        <text>—</text>
+                                    }
+                                    else
+                                    {
+                                        @stop.Shelf
+                                    }
+                                </td>
+                                <td class="num">@(left ? stop.ParcelsTaken : stop.ParcelsHere) of @stop.Parcels</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+}
+
+<h2 class="section-title">Due today, on no trip</h2>
+<div class="card">
+    @if (today.Waiting.Count == 0)
+    {
+        <p class="muted">Every delivery due today is on a trip.</p>
+    }
+    else
+    {
+        <p class="muted">
+            A delivery with no parcel here yet waits for its parcels; one with parcels here is planned when a bike has
+            room for it.
+        </p>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Delivery</th>
+                        <th>Area</th>
+                        <th>Due</th>
+                        <th class="num">Parcels here</th>
+                        <th class="num">Weight</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var delivery in today.Waiting)
+                    {
+                        <tr>
+                            <td><strong>@delivery.Delivery</strong></td>
+                            <td>@delivery.Area</td>
+                            <td>@delivery.DueOn.ToString("ddd d MMM")</td>
+                            <td class="num">@delivery.ParcelsHere of @delivery.Parcels</td>
+                            <td class="num">@Kilograms(delivery.WeightGrams) kg</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@functions {
+    private static string Kilograms(int grams)
+    {
+        return (grams / 1000m).ToString("0.#");
+    }
+
+    private static string TripText(TripStatus? status)
+    {
+        return status switch
+        {
+            null => "No trip yet",
+            TripStatus.Planned => "Planned",
+            TripStatus.Out => "Out",
+            TripStatus.Finished => "Back",
+            _ => "Cancelled"
+        };
+    }
+}

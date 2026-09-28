@@ -13,9 +13,9 @@ The one place to see where we are and what comes next. Built from the two projec
 
 | | |
 |---|---|
-| Current week | **Week 3 — Operations and money** (3 of 9) |
-| Next task | 3.4 Riders and trips |
-| Last session | 2026-09-28 — tasks 3.1 (pickup routes, QR labels), 3.2 (hub scan-in, shelves) and 3.3 (hub shuttle) done and tested (uncommitted). Week 2 is committed on `day2` (pushed to `origin/day2`); `main` stops at 2.8 |
+| Current week | **Week 3 — Operations and money** (4 of 9) |
+| Next task | 3.5 Delivery screen and attempts |
+| Last session | 2026-09-28 — task 3.4 (riders, trips, the plan-trips job, the hub Trips page and the rider's Today screen) done and tested (uncommitted). Tasks 3.1–3.3 are committed as `894777d` on `day2` |
 | Blockers | None. The link to ras-x2 was intermittently slow on 2026-09-28 (a sqlpackage stall, one login timeout); a rerun passed |
 
 ---
@@ -46,10 +46,10 @@ A task is **not done** until all of these pass. Record the result in the daily l
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
-| 3 | Operations and money | Group delivered, merchants settled | 🔄 3 of 9 |
+| 3 | Operations and money | Group delivered, merchants settled | 🔄 4 of 9 |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
-Tests today: **241 passing** (154 domain, 6 architecture, 81 integration).
+Tests today: **262 passing** (170 domain, 6 architecture, 86 integration).
 
 ---
 
@@ -259,8 +259,33 @@ next morning each merchant is settled.
       printable `/Hub/Shuttle?hub=MIR` (nav "Shuttle"). No 19:00 job and no shuttle time setting: staff load when
       the shuttle leaves, from the manifest. *Left:* a parcel whose order is cancelled while it is on the shuttle
       cannot be scanned in at the other end; sending parcels back to the shop comes with returns (3.5).
-- [ ] **3.4 Riders and trips.** `Delivery.Rider`, `Delivery.Trip`; the plan-trips job assigns Day 3 groups to
+- [x] **3.4 Riders and trips.** `Delivery.Rider`, `Delivery.Trip`; the plan-trips job assigns Day 3 groups to
       riders; per-bike limit. Rider PWA screen: today's stops.
+      *Done 2026-09-28:* schema `Delivery`: `Rider` (hub, login `UserId`, name, phone, and the bike's limit
+      `MaxParcels` and `MaxWeightGrams`, set per rider with no default), `Trip` (rider, hub, `DeliveryDate` in the
+      tenant's days, `Planned` → `Out`; one per rider a day, `UX_Trip_Rider_DeliveryDate`) and `TripStop` (a delivery
+      on a trip, the trip's date copied so `UX_TripStop_DeliveryGroup_DeliveryDate` keeps a delivery on one trip a
+      day). `Domain/Delivery/TripPlanner` (pure): deliveries already late first, then area by area so a rider's stops
+      are neighbours, each to the first rider (by name) whose bike still has room on parcels and weight; one too big
+      for any bike's room waits. `Application/Delivery/PlanTrips/TripPlanning` plans each hub: due = `Locked` with
+      `LocksAt` passed (delivery day has started) and at least one parcel on its shelf; a rider takes deliveries until
+      they leave, so running again adds only what has become ready; a trip still `Planned` after its day is
+      `Cancelled` and its deliveries go out today; each stop is saved on its own and one taken by a planner running
+      at the same moment is skipped. `PlanTripsJob` (tenant job) runs it every 15 minutes (`Jobs:PlanTrips`), not
+      once at 08:00 (see the decisions log). **Start trip** (`RiderDayHandler.StartAsync`): every order whose parcels
+      are all on the shelf is handed over (`Order.HandToRider`: `OutForDelivery`, packages off the hub), its delivery
+      becomes `Dispatched` and frees its shelf; an order not ready stays at the hub; a delivery with nothing ready
+      comes off the trip and stays `Locked`; nothing ready at all is refused. Pages: hub **Trips**
+      (`/Hub/Trips?hub=MIR`, policy `Operations`): each rider's deliveries against the bike (parcels here while
+      planned, parcels taken once out), the deliveries due today on no trip, and **Plan trips now**; rider **Today**
+      (`/Rider`, policy `Rider`, the landing page for riders): stops by area with recipient, address, landmark, phone,
+      shelf, each shop's labels ("On the shelf" / "Not all here yet"), the fee on what is taken and COD, the total to
+      collect, and Start trip; installs as a phone app (`rider.webmanifest`, `Shared/_RiderApp`). Demo riders (dev
+      only): two Mirpur bikes of different sizes, one Gulshan, one Agrabad. *Left:* no screen yet to add riders or
+      change a bike's limit (SQL only, like zones); a stop added by the planner at the very moment the rider starts
+      could land on the trip that just left (it goes out on the next day's trip); parcels are handed over without a
+      scan per parcel; what happens to an order left behind when its delivery went out (a later delivery at +৳25)
+      is 3.5; no customer SMS for "out for delivery" yet (3.6 sends the receipt).
 - [ ] **3.5 Delivery screen and attempts.** Handover only after the fee is paid ("no fee, no handover"); refuse
       one parcel (fee counts accepted shops only); not home = one free re-attempt, then return.
 - [ ] **3.6 Door payment.** Collect fee + COD, cash or QR (bKash/Nagad adapter, fake in MVP). SMS receipt.
@@ -316,7 +341,7 @@ Payments stay fake in the MVP either way.
 | Every 5 minutes | Lock check (lock due groups) | 2 ✅ |
 | 02:00 | Recalculate trust and reliability scores | 3 |
 | 06:00 | Settle merchants (yesterday's COD) | 3 |
-| 08:00 | Plan delivery trips (Day 3 groups → riders) | 3 |
+| Every 15 minutes (`Jobs:PlanTrips`) | Plan delivery trips (deliveries due today → riders), instead of once at 08:00 (3.4) | 3 ✅ |
 | 13:00 | Build pickup routes per zone — not needed: the route sheet is worked out when opened (3.1) | 3 ✅ |
 | 14:00 | Pickup route runs (merchants → hub) | 3 |
 | 19:00 | Hub shuttle (zone → customer's hub) — no job: staff load it from the manifest (3.3) | 3 ✅ |
@@ -380,6 +405,12 @@ Payments stay fake in the MVP either way.
 | 2026-09-28 | The hub shuttle is a scan at each end (load, then receive), not the cut "transfer" button; a package on the shuttle has no `HubId` and a `ShuttleToHubId` | "Scan at every handover"; the manifest shows what is still to load and what is on its way, and a package is never at two hubs |
 | 2026-09-28 | No shuttle job and no shuttle time setting: the manifest is worked out when opened and staff load when the shuttle leaves | Same reasoning as the pickup sheet; a time would be a tenant setting with nothing yet reading it |
 | 2026-09-28 | An order stays `AtHub` while a package is on the shuttle; "every package in" means every package has been received at a hub (`ReceivedOn`) | The order status says the parcels are in the hub network; where each one is is on the package |
+| 2026-09-28 | A bike's limit is two numbers on the rider, `MaxParcels` and `MaxWeightGrams`, with no default | Bikes differ; parcels and weight are both what a bike cannot exceed, and both are already on every package |
+| 2026-09-28 | Trips are planned every 15 minutes from the start of delivery day, not once at 08:00; planning is repeatable and changes nothing already planned | Parcels still arrive on delivery day (next-day orders are collected at 2 PM that day); tenants live in different time zones, so a fixed hour would be one tenant's hour |
+| 2026-09-28 | A delivery is planned once at least one of its parcels is on its shelf; at Start trip only orders with every parcel here go out, and a delivery with nothing ready comes off the trip | "Merchant not ready → the group leaves without it"; a delivery must not wait all day for one late shop |
+| 2026-09-28 | One trip per rider a day; the planner fills riders in name order, late deliveries first, then area by area | One evening run (5–9 PM); area order keeps a rider's stops together without maps or geocoding |
+| 2026-09-28 | `TripStop.DeliveryDate` copies the trip's date so a unique index keeps a delivery on one trip a day; a failed attempt gets a new stop another day | The database settles two planners at once (job and button), as the shelf index does for scans |
+| 2026-09-28 | Riders sign in as staff on their tenant's subdomain; the rider row points at the login (`Rider.UserId`), not the login at the rider | Identity stays unchanged; a rider can exist before they have a login |
 
 ## Quick reference
 
@@ -629,6 +660,44 @@ Newest first. One entry per working day: what was done, how it was tested, what 
   manifest and "not found" for a Dhaka label; anonymous → login. OD-100047 left on the shuttle to GUL. Screenshots
   at 390 px fine. No errors in the app log.
 - **Next:** task 3.4, riders and trips (the plan-trips job assigns Day 3 groups to riders; rider PWA screen).
+- **Done (task 3.4):** `Domain/Delivery` (`Rider`, `Trip`, `TripStop`, `TripStatus`, `TripLoad`, `TripPlanner`);
+  `Order.IsReadyAt`, `Order.HandToRider`; SQL schema `Delivery` with `Rider`, `Trip`, `TripStop`; EF mapping;
+  `Application/Delivery` (`DeliveryParcels`, `PlanTrips/TripPlanning` + `PlanTripsJob`, `HubTrips/HubTripsHandler`,
+  `RiderDay/RiderDayHandler`); recurring `plan-trips` (`Jobs:PlanTrips`, every 15 minutes); policy `Rider`; pages
+  `/Hub/Trips` and `/Rider` (landing page for riders), nav "Trips" and "Today", `rider.webmanifest` and
+  `Shared/_RiderApp`; demo riders in `DemoDataSeeder`; README logins.
+- **Tested:** build 0 errors, no new warnings; 16 new domain tests (bike limits on parcels and weight at the
+  boundary; the planner fills the first bike then the next, sends a heavy delivery to a bike with weight to spare,
+  counts what a bike already carries, lets a too-big delivery wait while smaller ones go, takes late deliveries first
+  and neighbours together, plans nothing without bikes; a trip takes only a closed delivery of its hub, starts once,
+  is cancelled only when still planned after its day; hand-over only when every parcel is at the hub, packages leave
+  it) and 5 new integration tests, each on a hub, zone and area of its own (two riders' bikes filled in order with
+  one delivery left for lack of room, one with no parcel here left waiting, a not-due delivery not listed, and a second
+  run changing nothing — shown to fail with the "parcel on its shelf" rule removed; the rider's stops with fee, COD,
+  labels and readiness, Start trip taking out 2 deliveries and 2 orders and leaving one with nothing ready on its
+  shelf, a second start refused, the hub page counting what was taken; a trip left planned yesterday cancelled and its
+  delivery planned today; Chattogram finds neither the hub's trips nor the rider; the pages for hub staff and rider,
+  with access denied the other way round and the login page for anonymous), plus the Hangfire round-trip test now
+  covers every recurring job. The integration run caught a race that has been latent since 3.2: the pickup route test
+  compares the route list with the sheet while the hub scan tests open an Uttara shop; the two classes now share an
+  xUnit collection. 170 + 6 + 86 = 262 pass, none skipped (integration twice in a row). The publish script was
+  reviewed first: the new schema, three tables and their indexes only (plus the usual `chk_Tenant_GroupJoinDays`
+  re-create); both databases published. Live on dev (plan-trips every minute): Farhana Akter (01893456120,
+  Mirpur 10) with Fashion House OD-100049 (2 parcels, COD ৳1,500) and Gadget BD OD-100050 (COD ৳800), and Nasir
+  Uddin (01893456121, Pallabi) with Beauty Shop OD-100051 (fast, COD ৳650); OD-100049 and OD-100051 scanned in at
+  MIR (MIR-02, MIR-03), OD-100050 left at the shop; DG-100027 and DG-100028 made due today by hand. The job logged
+  "dhaka Planned 2", Chattogram 0. Trips page: Rafiq Hasan 4 of 30 parcels, DG-100027 2 of 3 here, DG-100028 1 of 1;
+  Sumon Ali no trip; DG-100012 and DG-100020 (earlier hand-moved deliveries) waiting with no parcel here. Rafiq's
+  Today: two stops with landmark and phone, ৳85 + ৳2,300 and ৳60 + ৳650, ৳3,095 in all, Gadget BD "Not at the hub yet" (now "Not all here yet").
+  Start trip → "2 deliveries and 2 orders"; OD-100049 and OD-100051 `OutForDelivery` with packages off the hub and
+  history "Out with the rider" by the rider's login, both deliveries `Dispatched` with shelves freed, OD-100050 still
+  `Created`; the page then listed Fashion House only at ৳60 + ৳1,500; a second start "This trip has already left".
+  A new delivery DG-100029 (OD-100052, 1 of 2 parcels on the reused shelf MIR-02) went to Sumon Ali, as Rafiq was
+  out; the hub page showed Rafiq "Out, parcels taken 2 of 3". Chattogram hub staff 404 on MIR's trips; the rider is
+  refused the hub pages and hub staff and a merchant the rider page; anonymous → login; Chattogram's rider sees no
+  deliveries. Screenshots at 390 px (DevTools mobile emulation): no sideways scroll on either page; the live check
+  led to the out-trip counts, the amber "Not all here yet" and the button spacing. No errors in the app log.
+- **Next:** task 3.5, delivery screen and attempts.
 
 ### 2026-09-27
 - **Done:** Week 1 complete (tasks 1.1–1.6).

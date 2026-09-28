@@ -1,0 +1,17 @@
+{
+    "name": "OneDrop rider",
+    "short_name": "Rider",
+    "description": "Today's stops and what to collect at each door.",
+    "id": "/Rider",
+    "start_url": "/Rider",
+    "scope": "/",
+    "display": "standalone",
+    "background_color": "#f4f4f8",
+    "theme_color": "#26215c",
+    "icons": [
+        { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml" },
+        { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+        { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+        { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    ]
+}

@@ -4,6 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Application.Abstractions;
 using Application.Common;
+using Domain.Customers;
+using Domain.Delivery;
 using Domain.Merchants;
 using Infrastructure.Identity;
 using Infrastructure.MultiTenancy;
@@ -31,6 +33,19 @@ public class DemoDataSeeder(IServiceScopeFactory scopeFactory, ITenantCatalog ca
         new("fashion", "Fashion House", "Agrabad", "01811000001", "od_ctgfashion01_DevOnlyKeyDoNotUseInProduction04"),
         new("gadget", "Gadget BD", "GEC Circle", "01811000002", "od_ctggadget001_DevOnlyKeyDoNotUseInProduction05"),
         new("beauty", "Beauty Shop", "Chawkbazar", "01811000003", "od_ctgbeauty001_DevOnlyKeyDoNotUseInProduction06")
+    ];
+
+    // Two Mirpur bikes of different sizes and one in Gulshan; one rider in Chattogram
+    private static readonly DemoRider[] DhakaRiders =
+    [
+        new("rider", "Rafiq Hasan", "MIR", "01722000001", new TripLoad(30, 25_000)),
+        new("rider2", "Sumon Ali", "MIR", "01722000002", new TripLoad(12, 15_000)),
+        new("rider3", "Kamal Uddin", "GUL", "01722000003", new TripLoad(30, 25_000))
+    ];
+
+    private static readonly DemoRider[] ChattogramRiders =
+    [
+        new("rider", "Jamal Chowdhury", "AGR", "01822000001", new TripLoad(30, 25_000))
     ];
 
     public async Task SeedAsync(string password, CancellationToken cancellationToken = default)
@@ -62,6 +77,12 @@ public class DemoDataSeeder(IServiceScopeFactory scopeFactory, ITenantCatalog ca
                 {
                     await EnsureUserAsync(scope, $"{demo.Key}@{slug}.onedrop.test", demo.Name, Roles.Merchant, password, tenant.Id, merchantId);
                 }
+            }
+
+            foreach (var demo in slug == "dhaka" ? DhakaRiders : ChattogramRiders)
+            {
+                var userId = await EnsureUserAsync(scope, $"{demo.Key}@{slug}.onedrop.test", demo.Name, Roles.Rider, password, tenant.Id, null);
+                await EnsureRiderAsync(scope, userId, demo, cancellationToken);
             }
         }
 
@@ -95,7 +116,8 @@ public class DemoDataSeeder(IServiceScopeFactory scopeFactory, ITenantCatalog ca
         return merchant.Id;
     }
 
-    private async Task EnsureUserAsync(
+    /// <summary>Creates the login when missing. Returns its id either way.</summary>
+    private async Task<long> EnsureUserAsync(
         AsyncServiceScope scope,
         string email,
         string displayName,
@@ -105,9 +127,9 @@ public class DemoDataSeeder(IServiceScopeFactory scopeFactory, ITenantCatalog ca
         long? merchantId)
     {
         var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
-        if (await users.FindByNameAsync(email) is not null)
+        if (await users.FindByNameAsync(email) is { } existing)
         {
-            return;
+            return existing.Id;
         }
 
         var user = new AppUser
@@ -131,7 +153,30 @@ public class DemoDataSeeder(IServiceScopeFactory scopeFactory, ITenantCatalog ca
             throw new InvalidOperationException(
                 $"Could not seed {email}: {string.Join("; ", created.Errors.Select(e => e.Description))}");
         }
+
+        return user.Id;
+    }
+
+    private async Task EnsureRiderAsync(AsyncServiceScope scope, long userId, DemoRider demo, CancellationToken cancellationToken)
+    {
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        if (await db.Riders.AnyAsync(rider => rider.UserId == userId, cancellationToken))
+        {
+            return;
+        }
+
+        var hub = await db.Hubs.FirstOrDefaultAsync(h => h.Code == demo.Hub, cancellationToken);
+        if (hub is null)
+        {
+            logger.LogWarning("Demo rider {Rider} skipped: hub {Hub} does not exist", demo.Name, demo.Hub);
+            return;
+        }
+
+        db.Riders.Add(new Rider(hub.Id, demo.Name, PhoneNumber.Parse(demo.Phone).Value, demo.Limit, userId));
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     private sealed record DemoMerchant(string Key, string Name, string Area, string Phone, string ApiKey);
+
+    private sealed record DemoRider(string Key, string Name, string Hub, string Phone, TripLoad Limit);
 }
