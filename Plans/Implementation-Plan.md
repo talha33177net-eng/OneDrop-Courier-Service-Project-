@@ -13,9 +13,9 @@ The one place to see where we are and what comes next. Built from the two projec
 
 | | |
 |---|---|
-| Current week | **Week 2 — Grouping core** (in progress, 5 of 9) |
-| Next task | 2.6 Ship now |
-| Last session | 2026-09-28 — tasks 2.1–2.5 committed on `day2` (not pushed): delivery groups, pricing, checkout quote, Hangfire and the lock job |
+| Current week | **Week 2 — Grouping core** (in progress, 6 of 9) |
+| Next task | 2.7 Outbox and domain events |
+| Last session | 2026-09-28 — tasks 2.1–2.5 committed on `day2` (not pushed); task 2.6 Ship now done, uncommitted for review |
 | Blockers | None |
 
 ---
@@ -45,11 +45,11 @@ A task is **not done** until all of these pass. Record the result in the daily l
 | Week | Theme | Done when | Status |
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
-| 2 | Grouping core | 3 shops' orders form 1 group | 🟡 In progress (2.1–2.5 done) |
+| 2 | Grouping core | 3 shops' orders form 1 group | 🟡 In progress (2.1–2.6 done) |
 | 3 | Operations and money | Group delivered, merchants settled | ⬜ |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
-Tests today: **144 passing** (87 domain, 6 architecture, 51 integration).
+Tests today: **155 passing** (93 domain, 6 architecture, 56 integration).
 
 ---
 
@@ -152,8 +152,18 @@ Tasks:
       Jobs are stored by **name** (`TenantJobRegistry`), not as a generic method: Hangfire cannot load a generic
       method back from storage (found by the live check). `Jobs:Server` switches the server off (the test host).
       Dashboard at `/jobs`, platform admins only.
-- [ ] **2.6 Ship now.** Customer page button and API; locks the group immediately. *Tests:* only the owning
+- [x] **2.6 Ship now.** Customer page button and API; locks the group immediately. *Tests:* only the owning
       customer can do it; a locked group rejects it.
+      *Done 2026-09-28:* `DeliveryGroup.ShipNow(now, timeZone)` locks an open group at `now` and moves `LocksAt`
+      to the next midnight in the tenant's time zone, so it is **delivered the next day** instead of on Day 3; a
+      group already past its deadline is locked as due; any other status is a 409
+      (`deliveryGroup.shipNow.notOpen`). `Application/Grouping/ShipNow/ShipNowHandler` finds the group by number
+      **and** the signed-in customer (anyone else's is a 404) and treats a concurrent lock as the same 409.
+      `POST /api/v1/deliveries/{number}/ship-now` (customer sign-in cookie on the tenant subdomain, policy
+      `CustomerPortal`) returns `{ number, deliveryDate }`. "My deliveries" lists each open delivery (shops, last
+      day to join, delivery day) with a **Ship now** button. The sign-in cookie now answers `/api` requests with
+      401/403 instead of a redirect to the login page. *Left:* SMS "reply 1" needs an inbound SMS gateway (it will
+      call `ShipNowHandler`); the SMS confirming the new delivery day is 2.7.
 - [ ] **2.7 Outbox and domain events.** `Notifications.OutboxMessage` saved in the same transaction; sender job
       every few seconds; SMS "joined your delivery", "group locked, arriving Day 3". *Tests:* event saved with the
       order; sender marks it sent; failure retries.
@@ -277,6 +287,9 @@ Payments stay fake in the MVP either way.
 | 2026-09-28 | Tenant jobs: one recurring entry per job queues one run per active tenant, stored as (job name, tenant id); the runner sets the tenant on the job's scope | Tenants fail and retry independently; new tenants need no new schedule; Hangfire cannot load generic methods |
 | 2026-09-28 | The lock job saves group by group and skips a group changed meanwhile | An order past the deadline may lock the same group; one conflict must not stop the rest |
 | 2026-09-28 | Job dashboard `/jobs` for platform admins only | It lists every tenant's jobs |
+| 2026-09-28 | Ship now locks the group and delivers it the next day (tenant midnight after the press); `LocksAt` moves earlier, never later | Keeping Day 3 would only stop other shops joining and give the customer nothing; next day matches Deliver fast and the lock job and trip planning keep reading `LocksAt` |
+| 2026-09-28 | The customer API (`/api/v1/deliveries`) uses the customer's sign-in cookie on the tenant subdomain, not an API key; cookie challenges on `/api` are 401/403, not redirects | Merchants' keys must never reach a delivery; the cookie is host-only, so the tenant comes from the subdomain as for the pages |
+| 2026-09-28 | The frontend stays Razor Pages (PWA for the customer and rider screens, SignalR for live dashboards); no React or Angular in the MVP. React may be reconsidered for the rider app only, at tasks 3.4–3.5 | Owner's choice. Host-only cookies per tenant subdomain keep tenants apart; the screens are mostly forms and lists; a separate SPA would cost about a week of the remaining plan |
 
 ## Quick reference
 
@@ -371,6 +384,23 @@ Newest first. One entry per working day: what was done, how it was tested, what 
   `lock-due-groups`), anonymous → login, Dhaka tenant admin → access denied.
 - **Committed:** tasks 2.4–2.5 on `day2` (not pushed).
 - **Next:** task 2.6, Ship now.
+- **Done (task 2.6):** `DeliveryGroup.ShipNow` and `NotOpenForShipNow`; `Application/Grouping/ShipNow/ShipNowHandler`;
+  `Web/Api/V1/DeliveriesController` (`POST /api/v1/deliveries/{number}/ship-now`); "My deliveries" lists open
+  deliveries with a Ship now button; the sign-in cookie answers `/api` with 401/403.
+- **Tested:** build 0 errors, no new warnings; 6 new domain tests (Day 1 → next day, including 23:59 and the UTC
+  date change; Day 2 → the same Wednesday; past the deadline → locked as due; locked, cancelled and travel-alone
+  groups refused) and 5 new integration tests with a real SMS-code sign-in (the owner ships now → 200 with
+  tomorrow's date, the group locked with an earlier `LocksAt`, a second press 409, the next shop's order opens a
+  new delivery at the base fee; another customer → 404 from the API and "not found" from the page, group still
+  open; the same phone signed in on Chattogram → 404; the page lists the delivery with its shops and the button
+  closes it; anonymous and a merchant API key → 401). The ownership test was shown to fail with the customer check
+  removed. 93 + 6 + 56 = 155 pass, none skipped. No schema change, no publish. Live on dev, new phone 01736878920:
+  Fashion House + Gadget BD → DG-100014 (delivery Wed 30 Sep) listed on the page; another signed-in customer 404,
+  anonymous 401, merchant key 401, the owner's cookie on the Chattogram host 401; the owner's Ship now → 200
+  `2026-09-29`, `LocksAt` Tue 00:00 Dhaka, a second press 409; Beauty Shop then ৳60 in a new DG-100015; the page
+  button closed DG-100015 ("We deliver it on Tuesday 29 September"); a page POST without the anti-forgery token
+  400. No errors in the app log.
+- **Next:** task 2.7, outbox and domain events.
 
 ### 2026-09-27
 - **Done:** Week 1 complete (tasks 1.1–1.6).

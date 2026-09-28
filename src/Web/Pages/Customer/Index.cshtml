@@ -7,6 +7,28 @@
 <h1>My deliveries</h1>
 <p class="lead">Orders from every shop that chose OneDrop for you. Orders to the same address will travel together.</p>
 
+@if (Model.Message is not null)
+{
+    <p class="notice">@Model.Message</p>
+}
+
+@foreach (var delivery in Model.Waiting)
+{
+    <div class="card">
+        <h2>Waiting for more shops · @delivery.Number</h2>
+        <p>
+            To @delivery.Address, from @string.Join(", ", delivery.Shops).<br />
+            Other shops can still join until the end of @delivery.LastDayToJoin.ToString("dddd d MMMM").
+            We deliver everything together on @delivery.DeliveryDay.ToString("dddd d MMMM").
+        </p>
+        <form method="post" asp-page-handler="ShipNow">
+            <input type="hidden" name="number" value="@delivery.Number" />
+            <button class="button" type="submit">Ship now</button>
+            <span class="muted">Don't wait for more shops: we deliver tomorrow.</span>
+        </form>
+    </div>
+}
+
 <div class="card">
     @if (Model.Orders.Count == 0)
     {

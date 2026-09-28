@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Application;
 using Hangfire;
 using Infrastructure;
@@ -38,6 +39,10 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.AccessDeniedPath = "/Account/AccessDenied";
     options.SlidingExpiration = true;
     options.ExpireTimeSpan = TimeSpan.FromDays(14);
+
+    // An API caller gets a status code, not the login page
+    options.Events.OnRedirectToLogin = context => ApiAwareRedirect(context, StatusCodes.Status401Unauthorized);
+    options.Events.OnRedirectToAccessDenied = context => ApiAwareRedirect(context, StatusCodes.Status403Forbidden);
 });
 builder.Services
     .AddAuthentication()
@@ -105,6 +110,20 @@ app.MapHangfireDashboardWithAuthorizationPolicy(
     new DashboardOptions { Authorization = [], DisplayStorageConnectionString = false, DashboardTitle = "Jobs" });
 
 app.Run();
+
+static Task ApiAwareRedirect(RedirectContext<CookieAuthenticationOptions> context, int apiStatus)
+{
+    if (context.Request.Path.StartsWithSegments("/api"))
+    {
+        context.Response.StatusCode = apiStatus;
+    }
+    else
+    {
+        context.Response.Redirect(context.RedirectUri);
+    }
+
+    return Task.CompletedTask;
+}
 
 /// <summary>Visible to the integration tests' WebApplicationFactory.</summary>
 public partial class Program;

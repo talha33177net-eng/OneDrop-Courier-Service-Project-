@@ -65,7 +65,7 @@ The user supplied two PDFs (not stored in the repo): *OneDrop Implementation Pla
 | Week | Theme | Done when | Status |
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
-| 2 | Grouping core | 3 shops' orders form 1 group | 🟡 In progress — 2.1–2.5 done, next 2.6 |
+| 2 | Grouping core | 3 shops' orders form 1 group | 🟡 In progress — 2.1–2.6 done, next 2.7 |
 | 3 | Operations and money | Group delivered, merchants settled | ⬜ |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
@@ -74,18 +74,18 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 
 ---
 
-## 3. What exists today (Week 1, plus Week 2 tasks 2.1–2.5)
+## 3. What exists today (Week 1, plus Week 2 tasks 2.1–2.6)
 
 ### Solution layout (`Courier.sln`)
 | Project | Path | Contents |
 |---|---|---|
 | Domain | `src/Domain` | Entities and rules, no packages. `Common` (Entity, TenantEntity, Result/Error), `Platform/Tenant`, `Network` (Hub, Zone, Area), `Customers` (Customer, CustomerAddress, PhoneNumber, PhoneOtp), `Merchants` (Merchant, MerchantApiKey, PickupPoint), `Orders` (Order + state machine, Package, OrderStatusHistory), `Grouping` (DeliveryGroup + state machine and lock time), `Pricing` (DeliveryFeeCalculator, FeeSchedule) |
-| Application | `src/Application` | Use cases as vertical slices: `Orders/CreateOrder`, `Orders/GetOrder`, `Network/ListAreas`, `Auth/PhoneLogin`, `Customers/CustomerDirectory` (find-or-create by phone/address), `Grouping/DeliveryGrouping` (join or open the order's group; quote), `Grouping/LockDueGroups` (the lock job), `Pricing/GetQuote`. Interfaces: `IAppDbContext`, `ITenantJob`, `ITenantContext` (`TenantInfo.Fees`), `ITenantCatalog`, `ICurrentUser`, `ISmsSender`; `QueryFilters` (filter names) |
+| Application | `src/Application` | Use cases as vertical slices: `Orders/CreateOrder`, `Orders/GetOrder`, `Network/ListAreas`, `Auth/PhoneLogin`, `Customers/CustomerDirectory` (find-or-create by phone/address), `Grouping/DeliveryGrouping` (join or open the order's group; quote), `Grouping/LockDueGroups` (the lock job), `Grouping/ShipNow`, `Pricing/GetQuote`. Interfaces: `IAppDbContext`, `ITenantJob`, `ITenantContext` (`TenantInfo.Fees`), `ITenantCatalog`, `ICurrentUser`, `ISmsSender`; `QueryFilters` (filter names) |
 | Infrastructure | `src/Infrastructure` | `Persistence/AppDbContext` (EF Core, query filters), `Configurations/*` (mapping), `TenantSaveInterceptor`, `MultiTenancy` (TenantContext, TenantCatalog), `Identity` (AppUser, AppRole, claims), `Sms/FakeSmsSender`, `Seeding/DemoDataSeeder`, `Jobs` (Hangfire setup, TenantJobRunner, TenantJobRegistry) |
-| Web | `src/Web` | Razor Pages portals, `Api/V1` (orders, quote, areas), `Authentication/ApiKeyAuthenticationHandler`, `MultiTenancy` middleware, `Program.cs` |
+| Web | `src/Web` | Razor Pages portals, `Api/V1` (orders, quote, areas by API key; deliveries by customer cookie), `Authentication/ApiKeyAuthenticationHandler`, `MultiTenancy` middleware, `Program.cs` |
 | Database | `src/Database` | SQL project (Microsoft.Build.Sql 2.1.0) → `Database.dacpac`. Owns the schema |
 | Database Update | `src/Database Update` | DbUp console (`dbup.exe`): data migrations in `Scripts/<Year>/`, data-loss scripts in `Scripts/Pre/` |
-| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 87 + 6 + 51 = **144 tests, all passing** |
+| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 93 + 6 + 56 = **155 tests, all passing** |
 | Tools | `tools/db/publish.ps1` | Deploys a database: `dbup pre` → dacpac publish → `dbup` |
 
 ### Features that work
@@ -115,7 +115,12 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   job's parameter. Open groups past their deadline become `Locked` with `LockedOn` = the deadline. A new tenant job
   implements `ITenantJob`, is added to `TenantJobRegistry` and gets a recurring entry in `JobsSetup.ScheduleJobs`.
   Dashboard: http://localhost:5080/jobs (platform admin). `Jobs:Server` = false runs no server (integration tests).
-- **Not yet:** Ship now (2.6), SMS on join/lock (2.7), merchant screens to create API keys or enter orders
+- **Ship now** (`Application/Grouping/ShipNow`, `DeliveryGroup.ShipNow`): the signed-in customer closes an open
+  delivery; it locks at once and is delivered the **next day** (`LocksAt` = the next tenant midnight). From the
+  "My deliveries" page (each open delivery with its shops, last day to join, delivery day and a button) or
+  `POST /api/v1/deliveries/{number}/ship-now` with the customer's sign-in cookie → `{ number, deliveryDate }`;
+  a closed delivery is 409, anyone else's is 404. The sign-in cookie answers `/api` with 401/403, not a redirect.
+- **Not yet:** Ship now by SMS "reply 1" (needs an inbound SMS gateway), SMS on join/lock (2.7), merchant screens to create API keys or enter orders
   manually, tenant admin screens.
 
 ### Database
@@ -139,7 +144,9 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   one Chattogram order). OD-100017 to OD-100023 are the 2.3 live check (phone 01966225784: DG-100008 holds three
   shops for ৳110). OD-100024 to OD-100026 are the 2.4 live check (phone 01950973272, three shops, quoted and
   charged 60 / 25 / 25); for the 2.5 live check their group DG-100012 was given a deadline in the past by hand
-  and locked by the job, and OD-100027 then opened DG-100013. DG-100003 also totals ৳110. The Hangfire tables
+  and locked by the job, and OD-100027 then opened DG-100013. OD-100028 to OD-100030 are the 2.6 live check
+  (phone 01736878920, signed in as a customer): DG-100014 and DG-100015 were closed by Ship now for Tuesday
+  29 September; 01991998650 is a second signed-in Dhaka customer. DG-100003 also totals ৳110. The Hangfire tables
   are installed at app start in both databases (mapping the dashboard opens the storage); only `OneDrop` runs jobs,
   as the integration tests start no job server. Group numbers have gaps: a sequence value used in a rolled-back
   dry run is not reused.
@@ -173,6 +180,9 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 | The quote is read only, answers with the same fee Create Order would give, and says only `joinsDelivery` about the group | A checkout can call it for every visitor without creating customers; the "+৳25" is the product's promise and tells no more than the fee |
 | Don't hold costs the base fee; Deliver fast costs the tenant's `FastDeliveryFee` | Owner's choice: Don't hold is the merchant's decision, not the customer's |
 | A shop is charged only while it has an order not cancelled, refused or returned | "Fee is calculated on what is actually delivered" |
+| **Frontend is Razor Pages** (PWA for customer and rider screens, SignalR for live dashboards); no React or Angular in the MVP | Owner's choice (2026-09-28). Keeps the host-only tenant cookies and one deployment; the screens are mostly forms and lists. React may be reconsidered for the rider app only (tasks 3.4–3.5) |
+| Ship now delivers the next day (`LocksAt` moves to the next tenant midnight, never later) | Keeping Day 3 would only stop other shops joining; next day matches Deliver fast, and the lock job and trip planning keep reading `LocksAt` |
+| The customer API (`/api/v1/deliveries`) uses the customer's sign-in cookie on the tenant subdomain, never an API key | A merchant key must never reach a delivery; the host-only cookie gives the tenant as for the pages |
 
 ---
 

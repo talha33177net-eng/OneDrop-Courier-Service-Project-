@@ -17,8 +17,9 @@ public sealed record NewDeliveryGroup(
 /// <summary>
 /// All of one customer's orders to one address that travel together. The group opens with the first order;
 /// orders placed before <see cref="LocksAt"/> join it, and it is delivered on the day that starts at
-/// <see cref="LocksAt"/>. The deadline is fixed when the group opens and never moves. Only one group per
-/// customer and address can be <see cref="DeliveryGroupStatus.Open"/> (unique index in the database).
+/// <see cref="LocksAt"/>. The deadline is fixed when the group opens and never moves later; only Ship now brings
+/// it forward. Only one group per customer and address can be <see cref="DeliveryGroupStatus.Open"/> (unique
+/// index in the database).
 /// Merchants never see a group: it would tell them where else the customer shopped.
 /// </summary>
 public class DeliveryGroup : TenantEntity
@@ -59,7 +60,7 @@ public class DeliveryGroup : TenantEntity
 
     /// <summary>
     /// Midnight at the start of delivery day in the tenant's time zone, stored as UTC. An order before this
-    /// moment joins the group; an order at or after it starts a new one.
+    /// moment joins the group; an order at or after it starts a new one. Ship now moves it to the next day.
     /// </summary>
     public DateTime LocksAt { get; private set; }
 
@@ -87,6 +88,37 @@ public class DeliveryGroup : TenantEntity
         group.LockedOn = spec.OpenedOn;
 
         return group;
+    }
+
+    /// <summary>Ship now on a group that is locked, on its way, delivered or cancelled.</summary>
+    public static Error NotOpenForShipNow => Error.Conflict(
+        "deliveryGroup.shipNow.notOpen",
+        "This delivery has already closed, so it cannot be sent early.");
+
+    /// <summary>
+    /// Ship now: the customer stops waiting for more shops. The group locks at <paramref name="now"/> and is
+    /// delivered the next day in the tenant's time zone instead of on Day 3. A group already past its deadline
+    /// is locked as due and keeps its delivery day. A group that is no longer open cannot be sent early.
+    /// </summary>
+    public Result ShipNow(DateTime now, TimeZoneInfo timeZone)
+    {
+        if (Status != DeliveryGroupStatus.Open)
+        {
+            return NotOpenForShipNow;
+        }
+
+        if (LockIfDue(now))
+        {
+            return Result.Success();
+        }
+
+        Status = DeliveryGroupStatus.Locked;
+        LockedOn = now;
+
+        // The next midnight after now; never later than the deadline, which is itself a midnight after now
+        LocksAt = StartOfDay(now, timeZone, daysAhead: 1);
+
+        return Result.Success();
     }
 
     /// <summary>True while an order placed at <paramref name="now"/> (UTC) may join this group.</summary>
@@ -118,8 +150,9 @@ public class DeliveryGroup : TenantEntity
     }
 
     /// <summary>
-    /// Moves the group on. Locking an open group (at the deadline or by Ship now) records
-    /// <see cref="LockedOn"/>; returning to Locked for a re-attempt keeps the first lock time.
+    /// Moves the group on. Locking records <see cref="LockedOn"/>; returning to Locked for a re-attempt keeps the
+    /// first lock time. An open group is closed with <see cref="ShipNow"/> or <see cref="LockIfDue"/>, which also
+    /// set the delivery day.
     /// </summary>
     public Result MoveTo(DeliveryGroupStatus status, DateTime now)
     {
@@ -147,9 +180,6 @@ public class DeliveryGroup : TenantEntity
             throw new ArgumentException("OpenedOn must be UTC.", nameof(spec));
         }
 
-        var firstDay = TimeZoneInfo.ConvertTimeFromUtc(spec.OpenedOn, spec.TimeZone).Date;
-        var deliveryDay = DateTime.SpecifyKind(firstDay.AddDays(daysBeforeDelivery), DateTimeKind.Unspecified);
-
         return new DeliveryGroup
         {
             CustomerId = spec.CustomerId,
@@ -157,9 +187,17 @@ public class DeliveryGroup : TenantEntity
             HubId = spec.HubId,
             Status = status,
             OpenedOn = spec.OpenedOn,
-
-            // GetUtcOffset never throws, even where a daylight-saving change skips midnight
-            LocksAt = new DateTimeOffset(deliveryDay, spec.TimeZone.GetUtcOffset(deliveryDay)).UtcDateTime
+            LocksAt = StartOfDay(spec.OpenedOn, spec.TimeZone, daysBeforeDelivery)
         };
+    }
+
+    /// <summary>Midnight <paramref name="daysAhead"/> days after the date of <paramref name="utc"/> in the time zone, as UTC.</summary>
+    private static DateTime StartOfDay(DateTime utc, TimeZoneInfo timeZone, int daysAhead)
+    {
+        var today = TimeZoneInfo.ConvertTimeFromUtc(utc, timeZone).Date;
+        var day = DateTime.SpecifyKind(today.AddDays(daysAhead), DateTimeKind.Unspecified);
+
+        // GetUtcOffset never throws, even where a daylight-saving change skips midnight
+        return new DateTimeOffset(day, timeZone.GetUtcOffset(day)).UtcDateTime;
     }
 }

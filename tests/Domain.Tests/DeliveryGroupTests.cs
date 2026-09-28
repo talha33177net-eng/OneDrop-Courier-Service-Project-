@@ -64,15 +64,56 @@ public class DeliveryGroupTests
         Assert.Equal(Utc("2026-09-29 18:00"), group.LocksAt);
     }
 
-    [Fact]
-    public void A_group_locked_early_by_Ship_now_takes_no_more_orders()
+    // Opened Mon 10:00 Dhaka, deadline Wed 00:00 Dhaka (Tue 18:00 UTC)
+    [Theory]
+    [InlineData("2026-09-28 06:00", "2026-09-28 18:00")] // Day 1, Mon 12:00 Dhaka -> delivered Tuesday
+    [InlineData("2026-09-28 17:59", "2026-09-28 18:00")] // Day 1, Mon 23:59 Dhaka -> delivered Tuesday
+    [InlineData("2026-09-28 18:30", "2026-09-29 18:00")] // Day 2, Tue 00:30 Dhaka -> Wednesday, as planned
+    public void Ship_now_locks_the_group_and_delivers_it_the_next_day(string shippedOn, string deliveryDayStarts)
     {
         var group = OpenAt("2026-09-28 04:00");
 
-        Assert.True(group.MoveTo(DeliveryGroupStatus.Locked, Utc("2026-09-28 06:00")).IsSuccess);
+        Assert.True(group.ShipNow(Utc(shippedOn), Dhaka).IsSuccess);
 
-        Assert.Equal(Utc("2026-09-28 06:00"), group.LockedOn);
-        Assert.False(group.CanJoin(Utc("2026-09-28 07:00")));
+        Assert.Equal(DeliveryGroupStatus.Locked, group.Status);
+        Assert.Equal(Utc(shippedOn), group.LockedOn);
+        Assert.Equal(Utc(deliveryDayStarts), group.LocksAt);
+        Assert.False(group.CanJoin(Utc(shippedOn)));
+    }
+
+    [Fact]
+    public void Ship_now_after_the_deadline_locks_the_group_as_due()
+    {
+        var group = OpenAt("2026-09-28 04:00");
+
+        Assert.True(group.ShipNow(Utc("2026-09-30 09:00"), Dhaka).IsSuccess);
+
+        Assert.Equal(DeliveryGroupStatus.Locked, group.Status);
+        Assert.Equal(Utc("2026-09-29 18:00"), group.LockedOn);
+        Assert.Equal(Utc("2026-09-29 18:00"), group.LocksAt);
+    }
+
+    [Theory]
+    [InlineData(DeliveryGroupStatus.Locked)]
+    [InlineData(DeliveryGroupStatus.Cancelled)]
+    public void Ship_now_is_refused_once_the_group_has_closed(DeliveryGroupStatus closed)
+    {
+        var group = OpenAt("2026-09-28 04:00");
+        group.MoveTo(closed, Utc("2026-09-28 05:00"));
+
+        var shipped = group.ShipNow(Utc("2026-09-28 06:00"), Dhaka);
+
+        Assert.Equal(DeliveryGroup.NotOpenForShipNow, shipped.Error);
+        Assert.Equal(closed, group.Status);
+        Assert.Equal(Utc("2026-09-29 18:00"), group.LocksAt);
+    }
+
+    [Fact]
+    public void Ship_now_is_refused_for_an_order_that_already_travels_alone()
+    {
+        var group = DeliveryGroup.OpenAlone(new NewDeliveryGroup(1, 1, 1, Utc("2026-09-28 04:00"), Dhaka, JoinDays: 2));
+
+        Assert.Equal(ErrorType.Conflict, group.ShipNow(Utc("2026-09-28 05:00"), Dhaka).Error!.Type);
     }
 
     [Fact]

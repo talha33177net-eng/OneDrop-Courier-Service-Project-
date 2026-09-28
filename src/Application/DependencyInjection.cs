@@ -4,6 +4,7 @@ using Application.Auth.PhoneLogin;
 using Application.Customers;
 using Application.Grouping;
 using Application.Grouping.LockDueGroups;
+using Application.Grouping.ShipNow;
 using Application.Network.ListAreas;
 using Application.Orders.CreateOrder;
 using Application.Orders.GetOrder;
@@ -24,6 +25,7 @@ public static class DependencyInjection
         services.AddScoped<GetOrderHandler>();
         services.AddScoped<GetQuoteHandler>();
         services.AddScoped<ListAreasHandler>();
+        services.AddScoped<ShipNowHandler>();
         services.AddScoped<PhoneLoginService>();
 
         return services;
