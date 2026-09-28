@@ -65,8 +65,8 @@ The user supplied two PDFs (not stored in the repo): *OneDrop Implementation Pla
 | Week | Theme | Done when | Status |
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
-| 2 | Grouping core | 3 shops' orders form 1 group | 🟡 In progress — 2.1–2.8 done, next 2.9 |
-| 3 | Operations and money | Group delivered, merchants settled | ⬜ |
+| 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
+| 3 | Operations and money | Group delivered, merchants settled | ⬜ Next: 3.1 |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
 Task-level detail, the cut list, the job schedule, must-pass tests and the daily log are in
@@ -74,7 +74,7 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 
 ---
 
-## 3. What exists today (Week 1, plus Week 2 tasks 2.1–2.8)
+## 3. What exists today (Weeks 1 and 2)
 
 ### Solution layout (`Courier.sln`)
 | Project | Path | Contents |
@@ -163,7 +163,9 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   29 September; 01991998650 is a second signed-in Dhaka customer. OD-100031 to OD-100034 are the 2.7 live check
   (phone 01764090796; outbox rows 1–5, all sent; DG-100016 closed by Ship now). Orders before OD-100031 have no
   outbox rows. OD-100035 to OD-100037 are the 2.8 live check (phone 01845127390, three shops with COD, DG-100019
-  closed by Ship now from the page). DG-100003 also totals ৳110. The Hangfire tables
+  closed by Ship now from the page). OD-100038 to OD-100040 are the Week 2 demo run (phone 01912734580, the
+  three Dhaka shops in DG-100020 for ৳110, locked by the job after its deadline was moved into the past by hand).
+  DG-100003 also totals ৳110. The Hangfire tables
   are installed at app start in both databases (mapping the dashboard opens the storage); only `OneDrop` runs jobs,
   as the integration tests start no job server. Group numbers have gaps: a sequence value used in a rolled-back
   dry run is not reused.

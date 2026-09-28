@@ -13,9 +13,9 @@ The one place to see where we are and what comes next. Built from the two projec
 
 | | |
 |---|---|
-| Current week | **Week 2 — Grouping core** (in progress, 8 of 9) |
-| Next task | 2.9 Week 2 demo run |
-| Last session | 2026-09-28 — tasks 2.1–2.7 committed on `day2` (not pushed); task 2.8 customer deliveries page (PWA) done, uncommitted for review |
+| Current week | **Week 3 — Operations and money** (not started, 0 of 9) |
+| Next task | 3.1 Pickup routes and QR labels |
+| Last session | 2026-09-28 — tasks 2.1–2.8 committed on `day2` and pushed to `main`; 2.9 demo run passed (uncommitted), Week 2 done |
 | Blockers | None |
 
 ---
@@ -45,7 +45,7 @@ A task is **not done** until all of these pass. Record the result in the daily l
 | Week | Theme | Done when | Status |
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
-| 2 | Grouping core | 3 shops' orders form 1 group | 🟡 In progress (2.1–2.8 done) |
+| 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
 | 3 | Operations and money | Group delivered, merchants settled | ⬜ |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
@@ -81,7 +81,7 @@ another tenant, one customer for two phone spellings, same phone = different cus
 
 ---
 
-## Week 2 — Grouping core ⬜
+## Week 2 — Grouping core ✅
 
 **Done when:** Fashion House, Gadget BD and Beauty Shop send orders for the same phone and address, and they
 land in **one** delivery group that locks and shows ৳110.
@@ -196,7 +196,11 @@ Tasks:
       table is gone (every order is in a delivery). PWA: `wwwroot/manifest.webmanifest` (start `/Customer`,
       standalone), SVG and 192/512 PNG icons, `sw.js` (never caches pages; shows `offline.html` without a signal),
       linked from the customer pages by `Shared/_CustomerApp` through a new layout `Head` section.
-- [ ] **2.9 Week 2 demo run.** The three Dhaka demo shops → one group → lock → ৳110. Update this file.
+- [x] **2.9 Week 2 demo run.** The three Dhaka demo shops → one group → lock → ৳110. Update this file.
+      *Done 2026-09-28:* quotes ৳60 / +৳25 / +৳25 equal the orders' fees; one group DG-100020 locked by the job at
+      its deadline; the customer page shows ৳110 and "You save ৳70"; merchants and Chattogram see nothing of it
+      (details in the daily log). *Carried to Week 3:* Ship now by SMS "reply 1", a screen for failed outbox
+      messages, and the Week 1 portal gaps above.
 
 ---
 
@@ -479,6 +483,19 @@ Newest first. One entry per working day: what was done, how it was tested, what 
   and the same cookie on the Chattogram host → login; Ship now from the page → "Closed, arriving Tuesday 29
   September", no button. No errors in the app log.
 - **Next:** task 2.9, Week 2 demo run.
+- **Done (task 2.9):** Week 2 demo run on dev; Week 2 complete. No code change.
+- **Tested:** build 0 errors, 0 warnings; 115 + 6 + 67 = 188 pass, none skipped. Live (app started with the lock
+  job every minute), new phone 01912734580, one address in Mirpur 10: Fashion House quoted ৳60 and OD-100038
+  charged ৳60; Gadget BD quoted +৳25 (phone spelt `+880 1912 734580`) and OD-100039 charged ৳25; Beauty Shop
+  quoted +৳25 and OD-100040 charged ৳25; all three in one open group DG-100020 locking at Wed 00:00 Dhaka, three
+  "joined" texts sent. The deadline was then moved into the past by hand; the job logged "dhaka Locked 1 of 1"
+  (Chattogram 0 of 0), `LockedOn` = the deadline, and the "closed" text listed the three shops. Signed in by SMS
+  code, "My deliveries" showed DG-100020 with the three shops, 0 of 3 collected, fee ৳110, COD ৳4,450, ৳4,560 at
+  the door and "You save ৳70 against 3 separate deliveries" (its day reads Mon 28 Sep because of the moved
+  deadline). Gadget BD's GET shows its order and ৳25 only, no group data; Fashion House's and Chattogram's keys get
+  404; the same phone is quoted ৳70 at Chattogram; a Dhaka quote after the lock is ৳60, a new delivery; the customer
+  cookie on the Chattogram host goes to the login page. No errors in the app log.
+- **Next:** Week 3, task 3.1 pickup routes and QR labels.
 
 ### 2026-09-27
 - **Done:** Week 1 complete (tasks 1.1–1.6).
