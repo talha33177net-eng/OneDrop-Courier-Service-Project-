@@ -4,6 +4,10 @@
     ViewData["Title"] = "Customer sign in";
 }
 
+@section Head {
+    <partial name="_CustomerApp" />
+}
+
 <div class="card narrow">
     <h1>Follow your deliveries</h1>
     @if (!Model.CodeSent)

@@ -1,60 +1,157 @@
 @page
 @model Web.Pages.Customer.IndexModel
+@using Application.Grouping.CustomerDeliveries
+@using Domain.Grouping
+@using Domain.Orders
 @{
     ViewData["Title"] = "My deliveries";
+    var deliveries = Model.Deliveries;
+}
+
+@section Head {
+    <partial name="_CustomerApp" />
 }
 
 <h1>My deliveries</h1>
-<p class="lead">Orders from every shop that chose OneDrop for you. Orders to the same address will travel together.</p>
+<p class="lead">Orders from every shop that chose OneDrop for you. Orders to the same address travel together.</p>
 
 @if (Model.Message is not null)
 {
     <p class="notice">@Model.Message</p>
 }
 
-@foreach (var delivery in Model.Waiting)
+@if (deliveries.OnTheWay.Count == 0)
 {
     <div class="card">
-        <h2>Waiting for more shops · @delivery.Number</h2>
-        <p>
-            To @delivery.Address, from @string.Join(", ", delivery.Shops).<br />
-            Other shops can still join until the end of @delivery.LastDayToJoin.ToString("dddd d MMMM").
-            We deliver everything together on @delivery.DeliveryDay.ToString("dddd d MMMM").
-        </p>
-        <form method="post" asp-page-handler="ShipNow">
-            <input type="hidden" name="number" value="@delivery.Number" />
-            <button class="button" type="submit">Ship now</button>
-            <span class="muted">Don't wait for more shops: we deliver tomorrow.</span>
-        </form>
+        <p class="muted">Nothing on its way yet. Choose OneDrop at checkout and your orders appear here.</p>
     </div>
 }
 
-<div class="card">
-    @if (Model.Orders.Count == 0)
-    {
-        <p class="muted">Nothing on its way yet. Choose OneDrop at checkout and your orders appear here.</p>
-    }
-    else
-    {
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr><th>Order</th><th>Shop</th><th>Address</th><th>Status</th><th class="num">Packages</th><th class="num">To pay (COD)</th></tr>
-                </thead>
-                <tbody>
-                    @foreach (var order in Model.Orders)
-                    {
-                        <tr>
-                            <td><strong>@order.Number</strong></td>
-                            <td>@order.Shop</td>
-                            <td>@order.Address</td>
-                            <td><span class="status">@order.Status</span></td>
-                            <td class="num">@order.Packages</td>
-                            <td class="num">৳@order.Cod.ToString("N0")</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+@foreach (var delivery in deliveries.OnTheWay)
+{
+    var open = delivery.Status == DeliveryGroupStatus.Open;
+    <article class="card delivery">
+        <div class="delivery-head">
+            <span class="pill @(open ? "pill-open" : null)">@StatusText(delivery.Status)</span>
+            <span class="muted">@delivery.Number</span>
         </div>
+        <h2>@Arrival(delivery)</h2>
+        <p class="muted">
+            To @delivery.Address.
+            @if (open)
+            {
+                <br />
+                @:Other shops can join until the end of @delivery.LastDayToJoin.ToString("dddd d MMMM").
+            }
+        </p>
+
+        <ul class="lines">
+            @foreach (var order in delivery.Orders)
+            {
+                <li class="@(Order.IsForDelivery(order.Status) ? null : "dropped")">
+                    <div>
+                        <strong>@order.Shop</strong>
+                        <span class="muted">@order.Number · @(order.Packages == 1 ? "1 package" : $"{order.Packages} packages")</span>
+                    </div>
+                    <span class="status">@OrderText(order.Status)</span>
+                </li>
+            }
+        </ul>
+
+        <div class="collected">
+            <span>Packages collected</span>
+            <strong>@delivery.PackagesCollected of @delivery.Packages</strong>
+        </div>
+        <progress max="@Math.Max(delivery.Packages, 1)" value="@delivery.PackagesCollected">@delivery.PackagesCollected of @delivery.Packages</progress>
+
+        <dl class="money">
+            <div>
+                <dt>@(open ? "Delivery fee so far" : "Delivery fee")</dt>
+                <dd>৳@delivery.Fee.ToString("N0")</dd>
+            </div>
+            @if (delivery.Cod > 0)
+            {
+                <div>
+                    <dt>Cash on delivery for the shops</dt>
+                    <dd>৳@delivery.Cod.ToString("N0")</dd>
+                </div>
+                <div class="total">
+                    <dt>To pay at the door</dt>
+                    <dd>৳@((delivery.Fee + delivery.Cod).ToString("N0"))</dd>
+                </div>
+            }
+        </dl>
+        @if (delivery.Savings > 0)
+        {
+            <p class="saving">You save ৳@delivery.Savings.ToString("N0") against @delivery.Shops.Count separate deliveries.</p>
+        }
+
+        @if (open)
+        {
+            <p class="muted">
+                Buying from another shop before then? Choose OneDrop at checkout: it adds only
+                ৳@deliveries.ExtraShopFee.ToString("N0") to this delivery.
+            </p>
+            <form method="post" asp-page-handler="ShipNow">
+                <input type="hidden" name="number" value="@delivery.Number" />
+                <button class="button" type="submit">Ship now</button>
+                <span class="muted">Don't wait for more shops: we deliver tomorrow.</span>
+            </form>
+        }
+    </article>
+}
+
+@if (deliveries.Earlier.Count > 0)
+{
+    <h2 class="section-title">Earlier deliveries</h2>
+    <div class="card">
+        <ul class="lines">
+            @foreach (var delivery in deliveries.Earlier)
+            {
+                <li>
+                    <div>
+                        <strong>@delivery.DeliveryDay.ToString("d MMMM")</strong>
+                        <span class="muted">@delivery.Number · @string.Join(", ", delivery.Shops.DefaultIfEmpty("no shops"))</span>
+                    </div>
+                    <span class="status">@StatusText(delivery.Status)@(delivery.Fee > 0 ? $" · ৳{delivery.Fee:N0}" : null)</span>
+                </li>
+            }
+        </ul>
+    </div>
+}
+
+@functions {
+    private static string StatusText(DeliveryGroupStatus status)
+    {
+        return status switch
+        {
+            DeliveryGroupStatus.Open => "Waiting for more shops",
+            DeliveryGroupStatus.Locked => "Closed",
+            DeliveryGroupStatus.Dispatched => "Out for delivery",
+            DeliveryGroupStatus.Delivered => "Delivered",
+            _ => "Cancelled"
+        };
     }
-</div>
+
+    private static string Arrival(CustomerDelivery delivery)
+    {
+        return delivery.Status == DeliveryGroupStatus.Dispatched
+            ? "Out for delivery today"
+            : $"Arriving {delivery.DeliveryDay:dddd d MMMM}";
+    }
+
+    private static string OrderText(OrderStatus status)
+    {
+        return status switch
+        {
+            OrderStatus.Created => "Waiting for pickup",
+            OrderStatus.PickedUp => "Picked up",
+            OrderStatus.AtHub => "At the hub",
+            OrderStatus.OutForDelivery => "Out for delivery",
+            OrderStatus.Delivered => "Delivered",
+            OrderStatus.Refused => "Refused",
+            OrderStatus.ReturnedToMerchant => "Returned to the shop",
+            _ => "Cancelled"
+        };
+    }
+}

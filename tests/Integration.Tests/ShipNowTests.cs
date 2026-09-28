@@ -96,9 +96,10 @@ public partial class ShipNowTests(WebAppFactory factory)
     }
 
     [Fact]
-    public async Task The_page_lists_the_waiting_delivery_with_its_shops_and_Ship_now_closes_it()
+    public async Task The_page_shows_the_waiting_delivery_as_an_installable_app_and_Ship_now_closes_it()
     {
         WebAppFactory.RequireDatabase();
+        var dhaka = await TenantAsync("dhaka");
         var phone = NewPhone();
         await CreateAsync(WebAppFactory.DhakaFashion, phone);
         await CreateAsync(WebAppFactory.DhakaBeauty, phone);
@@ -108,10 +109,21 @@ public partial class ShipNowTests(WebAppFactory factory)
         var before = await client.GetStringAsync("/Customer", Cancel);
         var after = await PostShipNowPageAsync(client, group.Number);
 
-        Assert.Contains($"Waiting for more shops · {group.Number}", before);
-        Assert.Contains($"To {Home}, {Area}, from Beauty Shop, Fashion House.", before);
+        // Two shops' orders, each with COD 500, at the tenant's prices
+        var fee = dhaka.BaseDeliveryFee + dhaka.ExtraShopFee;
+        Assert.Contains("Waiting for more shops", before);
+        Assert.Contains(group.Number, before);
+        Assert.Contains($"To {Home}, {Area}.", before);
+        Assert.Contains("<strong>Beauty Shop</strong>", before);
+        Assert.Contains("<strong>Fashion House</strong>", before);
+        Assert.Contains("<strong>0 of 2</strong>", before);
+        Assert.Contains($"৳{fee:N0}", before);
+        Assert.Contains($"৳{fee + 1000:N0}", before);
+        Assert.Contains($"You save ৳{2 * dhaka.BaseDeliveryFee - fee:N0} against 2 separate deliveries.", before);
+        Assert.Contains("""<link rel="manifest" href="/manifest.webmanifest" />""", before);
         Assert.Contains($"Delivery {group.Number} is closed.", after);
         Assert.DoesNotContain("Waiting for more shops", after);
+        Assert.DoesNotContain("Ship now</button>", after);
         Assert.Equal(DeliveryGroupStatus.Locked, (await GroupAsync("dhaka", group.Id)).Status);
     }
 

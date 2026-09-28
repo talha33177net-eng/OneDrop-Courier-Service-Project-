@@ -65,7 +65,7 @@ The user supplied two PDFs (not stored in the repo): *OneDrop Implementation Pla
 | Week | Theme | Done when | Status |
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
-| 2 | Grouping core | 3 shops' orders form 1 group | 🟡 In progress — 2.1–2.7 done, next 2.8 |
+| 2 | Grouping core | 3 shops' orders form 1 group | 🟡 In progress — 2.1–2.8 done, next 2.9 |
 | 3 | Operations and money | Group delivered, merchants settled | ⬜ |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
@@ -74,18 +74,18 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 
 ---
 
-## 3. What exists today (Week 1, plus Week 2 tasks 2.1–2.7)
+## 3. What exists today (Week 1, plus Week 2 tasks 2.1–2.8)
 
 ### Solution layout (`Courier.sln`)
 | Project | Path | Contents |
 |---|---|---|
 | Domain | `src/Domain` | Entities and rules, no packages. `Common` (Entity with domain events, TenantEntity, Result/Error), `Platform/Tenant`, `Network` (Hub, Zone, Area), `Customers` (Customer, CustomerAddress, PhoneNumber, PhoneOtp), `Merchants` (Merchant, MerchantApiKey, PickupPoint), `Orders` (Order + state machine, Package, OrderStatusHistory), `Grouping` (DeliveryGroup + state machine and lock time, events), `Pricing` (DeliveryFeeCalculator, FeeSchedule), `Notifications` (OutboxMessage + retry rule) |
-| Application | `src/Application` | Use cases as vertical slices: `Orders/CreateOrder`, `Orders/GetOrder`, `Network/ListAreas`, `Auth/PhoneLogin`, `Customers/CustomerDirectory` (find-or-create by phone/address), `Grouping/DeliveryGrouping` (join or open the order's group; quote), `Grouping/LockDueGroups` (the lock job), `Grouping/ShipNow`, `Pricing/GetQuote`, `Notifications` (outbox contracts, `SendOutbox` job and SMS texts). Interfaces: `IAppDbContext`, `ITenantJob`, `ITenantContext` (`TenantInfo.Fees`), `ITenantCatalog`, `ICurrentUser`, `ISmsSender`; `QueryFilters` (filter names) |
+| Application | `src/Application` | Use cases as vertical slices: `Orders/CreateOrder`, `Orders/GetOrder`, `Network/ListAreas`, `Auth/PhoneLogin`, `Customers/CustomerDirectory` (find-or-create by phone/address), `Grouping/DeliveryGrouping` (join or open the order's group; quote), `Grouping/LockDueGroups` (the lock job), `Grouping/ShipNow`, `Grouping/CustomerDeliveries` ("My deliveries"), `Pricing/GetQuote`, `Notifications` (outbox contracts, `SendOutbox` job and SMS texts). Interfaces: `IAppDbContext`, `ITenantJob`, `ITenantContext` (`TenantInfo.Fees`), `ITenantCatalog`, `ICurrentUser`, `ISmsSender`; `QueryFilters` (filter names) |
 | Infrastructure | `src/Infrastructure` | `Persistence/AppDbContext` (EF Core, query filters), `Configurations/*` (mapping), `TenantSaveInterceptor`, `MultiTenancy` (TenantContext, TenantCatalog), `Identity` (AppUser, AppRole, claims), `Sms/FakeSmsSender`, `Seeding/DemoDataSeeder`, `Jobs` (Hangfire setup, TenantJobRunner, TenantJobRegistry, OutboxDispatcher); `AppDbContext.SaveChangesAsync` writes the outbox |
 | Web | `src/Web` | Razor Pages portals, `Api/V1` (orders, quote, areas by API key; deliveries by customer cookie), `Authentication/ApiKeyAuthenticationHandler`, `MultiTenancy` middleware, `Program.cs` |
 | Database | `src/Database` | SQL project (Microsoft.Build.Sql 2.1.0) → `Database.dacpac`. Owns the schema |
 | Database Update | `src/Database Update` | DbUp console (`dbup.exe`): data migrations in `Scripts/<Year>/`, data-loss scripts in `Scripts/Pre/` |
-| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 101 + 6 + 61 = **168 tests, all passing** |
+| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 115 + 6 + 67 = **188 tests, all passing** |
 | Tools | `tools/db/publish.ps1` | Deploys a database: `dbup pre` → dacpac publish → `dbup` |
 
 ### Features that work
@@ -128,6 +128,12 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   after 1, 2, 4, 8 minutes, then `Failed`. The in-process `OutboxDispatcher` runs it for every tenant every
   `Jobs:OutboxInterval` (5 s) when `Jobs:Server` is on. A new message: a contract record and a case in
   `OutboxContracts.ToOutbox`, and its text in `CustomerTexts`.
+- **Customer app** (`Application/Grouping/CustomerDeliveries`, `Pages/Customer/Index`): "My deliveries" shows one
+  card per delivery on its way (and the 10 latest finished): status, delivery day, last day to join, each shop's
+  order with packages and status, packages collected, fee so far (recalculated on what is still for delivery),
+  COD, the total at the door and "You save ৳70 against 3 separate deliveries" (tenant base fee × shops − group
+  fee), with Ship now on open ones. It installs on a phone: `wwwroot/manifest.webmanifest`, icons, `sw.js`
+  (no page caching, `offline.html` without a signal), linked by `Shared/_CustomerApp` in the layout's `Head` section.
 - **Not yet:** Ship now by SMS "reply 1" (needs an inbound SMS gateway), a screen for failed outbox messages,
   merchant screens to create API keys or enter orders manually, tenant admin screens.
 
@@ -156,7 +162,8 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   (phone 01736878920, signed in as a customer): DG-100014 and DG-100015 were closed by Ship now for Tuesday
   29 September; 01991998650 is a second signed-in Dhaka customer. OD-100031 to OD-100034 are the 2.7 live check
   (phone 01764090796; outbox rows 1–5, all sent; DG-100016 closed by Ship now). Orders before OD-100031 have no
-  outbox rows. DG-100003 also totals ৳110. The Hangfire tables
+  outbox rows. OD-100035 to OD-100037 are the 2.8 live check (phone 01845127390, three shops with COD, DG-100019
+  closed by Ship now from the page). DG-100003 also totals ৳110. The Hangfire tables
   are installed at app start in both databases (mapping the dashboard opens the storage); only `OneDrop` runs jobs,
   as the integration tests start no job server. Group numbers have gaps: a sequence value used in a rolled-back
   dry run is not reused.
@@ -196,6 +203,9 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 | **Customers need no sign-up**: created automatically from the phone number on the first order; the SMS-code login is optional and opens the same record | Owner's choice (2026-09-28). Customers buy at the shop and may never visit OneDrop; grouping must work from their first order |
 | Domain events go to the outbox in the same transaction as the change; rows hold ids only and the SMS is written when sent | A change never saves without its message, nor a message without its change; a retried text is never stale |
 | The outbox sender runs every 5 seconds in process (`OutboxDispatcher`), not as a Hangfire recurring job | Hangfire recurring jobs run at most once a minute; "your order joined" should arrive during checkout |
+| "You save" = the tenant's base fee × distinct shops − the group fee; nothing for one shop | The documentation compares with ৳60 per separate courier, the one-shop price; no second price setting to keep in step |
+| `Order.IsForDelivery` (not cancelled, refused or returned) drives the fee, the COD due and the package count | One rule, so the customer page, the door and the fee never disagree |
+| The customer app's service worker caches no pages, only the offline page; the manifest is linked by a plain path | Delivery data changes all day; `~/` would fingerprint the manifest URL per build |
 
 ---
 
@@ -270,6 +280,8 @@ git push                                          # main tracks origin/main
 | MARS is on in the connection string, so EF cannot use savepoints inside the outbox transaction and warns on every save | The warning `SavepointsDisabledBecauseOfMARS` is ignored in `AddInfrastructure`: a failed save rolls the outbox transaction back whole |
 | The fake SMS log keeps only the last 50 messages, and a test run drains every pending outbox row | Outbox tests record texts with their own `ISmsSender` and run the sender until their own message is handled |
 | Save entities that raise events with `SaveChangesAsync` | The sync `SaveChanges` refuses them: only the async path writes the outbox |
+| EF cannot filter or sort after a projection into a constructor (`select new Row(a, b)` then `.Where`) | Project with member initialisers (`new Row { A = a }`) when the query is composed further; a constructor is fine in the final `Select` |
+| `~/` links are rewritten by `MapStaticAssets().WithStaticAssets()` to a fingerprinted URL | Use a plain path for anything that needs a stable address (the web manifest, the service worker) |
 
 ---
 

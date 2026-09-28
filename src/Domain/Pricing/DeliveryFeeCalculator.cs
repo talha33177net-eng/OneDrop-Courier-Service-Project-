@@ -17,13 +17,10 @@ public sealed record FeeLine(long MerchantId, DeliverySpeed Speed, OrderStatus S
 /// </summary>
 public class DeliveryFeeCalculator(FeeSchedule schedule)
 {
-    private static readonly OrderStatus[] NotCharged =
-        [OrderStatus.Cancelled, OrderStatus.Refused, OrderStatus.ReturnedToMerchant];
-
     /// <summary>What the customer pays at the door for the group's <paramref name="orders"/>.</summary>
     public decimal GroupFee(IEnumerable<FeeLine> orders)
     {
-        var charged = orders.Where(order => !NotCharged.Contains(order.Status)).ToList();
+        var charged = orders.Where(order => Order.IsForDelivery(order.Status)).ToList();
         var shops = charged.Select(order => order.MerchantId).Distinct().Count();
         if (shops == 0)
         {
@@ -36,6 +33,25 @@ public class DeliveryFeeCalculator(FeeSchedule schedule)
         }
 
         return schedule.BaseDeliveryFee + schedule.ExtraShopFee * (shops - 1);
+    }
+
+    /// <summary>
+    /// What the customer saves against each shop sending its orders separately, each at the tenant's base fee
+    /// (a one-shop delivery). Nothing for a single shop, whatever its speed.
+    /// </summary>
+    public decimal Savings(IReadOnlyCollection<FeeLine> orders)
+    {
+        var shops = orders
+            .Where(order => Order.IsForDelivery(order.Status))
+            .Select(order => order.MerchantId)
+            .Distinct()
+            .Count();
+        if (shops < 2)
+        {
+            return 0;
+        }
+
+        return Math.Max(0, schedule.BaseDeliveryFee * shops - GroupFee(orders));
     }
 
     /// <summary>

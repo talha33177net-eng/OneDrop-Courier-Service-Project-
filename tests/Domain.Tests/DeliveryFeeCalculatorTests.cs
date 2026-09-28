@@ -109,6 +109,44 @@ public class DeliveryFeeCalculatorTests
         Assert.Equal(70, calculator.AddedFee([], Waiting(1)));
     }
 
+    [Theory]
+    [InlineData(2, 35)]
+    [InlineData(3, 70)]
+    [InlineData(4, 105)]
+    public void Several_shops_save_what_separate_one_shop_deliveries_would_cost_more(int shops, decimal savings)
+    {
+        var orders = Enumerable.Range(1, shops).Select(merchant => Waiting(merchant)).ToList();
+
+        Assert.Equal(savings, new DeliveryFeeCalculator(Dhaka).Savings(orders));
+    }
+
+    [Fact]
+    public void Savings_use_the_tenants_own_prices()
+    {
+        FeeLine[] orders = [Waiting(1), Waiting(2), Waiting(3)];
+
+        // Three separate ৳70 deliveries against ৳70 + 2 × ৳30
+        Assert.Equal(80, new DeliveryFeeCalculator(Chattogram).Savings(orders));
+    }
+
+    [Fact]
+    public void One_shop_saves_nothing_even_when_its_fast_fee_is_below_the_base_fee()
+    {
+        var calculator = new DeliveryFeeCalculator(new FeeSchedule(60, 25, 50));
+
+        Assert.Equal(0, calculator.Savings([Waiting(1), Waiting(1)]));
+        Assert.Equal(0, calculator.Savings([Waiting(1) with { Speed = DeliverySpeed.Fast }]));
+        Assert.Equal(0, calculator.Savings([]));
+    }
+
+    [Fact]
+    public void A_shop_whose_order_is_not_delivered_saves_nothing()
+    {
+        FeeLine[] orders = [Waiting(1), Waiting(2), Waiting(3) with { Status = OrderStatus.Refused }];
+
+        Assert.Equal(35, new DeliveryFeeCalculator(Dhaka).Savings(orders));
+    }
+
     private static FeeLine Waiting(long merchantId)
     {
         return new FeeLine(merchantId, DeliverySpeed.Combine, OrderStatus.Created);

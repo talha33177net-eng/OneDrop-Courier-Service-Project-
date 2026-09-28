@@ -110,6 +110,20 @@ public class OrderTests
         Assert.Equal(waits, order.WaitsForGroup);
     }
 
+    [Theory]
+    [InlineData(OrderStatus.Created, true)]
+    [InlineData(OrderStatus.PickedUp, true)]
+    [InlineData(OrderStatus.AtHub, true)]
+    [InlineData(OrderStatus.OutForDelivery, true)]
+    [InlineData(OrderStatus.Delivered, true)]
+    [InlineData(OrderStatus.Refused, false)]
+    [InlineData(OrderStatus.ReturnedToMerchant, false)]
+    [InlineData(OrderStatus.Cancelled, false)]
+    public void An_order_is_for_delivery_until_it_is_cancelled_refused_or_returned(OrderStatus status, bool forDelivery)
+    {
+        Assert.Equal(forDelivery, Order.IsForDelivery(status));
+    }
+
     [Fact]
     public void An_order_is_placed_only_in_its_own_customer_and_addresss_group()
     {

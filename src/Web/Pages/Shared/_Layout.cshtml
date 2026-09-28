@@ -13,7 +13,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#26215c" />
     <title>@ViewData["Title"] · @(tenant?.Name ?? "OneDrop")</title>
+    <link rel="icon" href="~/icons/icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    @await RenderSectionAsync("Head", required: false)
 </head>
 <body>
     <header class="topbar">

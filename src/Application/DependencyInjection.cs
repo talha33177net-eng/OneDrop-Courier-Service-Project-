@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Application.Auth.PhoneLogin;
 using Application.Customers;
 using Application.Grouping;
+using Application.Grouping.CustomerDeliveries;
 using Application.Grouping.LockDueGroups;
 using Application.Grouping.ShipNow;
 using Application.Network.ListAreas;
@@ -29,6 +30,7 @@ public static class DependencyInjection
         services.AddScoped<GetQuoteHandler>();
         services.AddScoped<ListAreasHandler>();
         services.AddScoped<ShipNowHandler>();
+        services.AddScoped<CustomerDeliveriesHandler>();
         services.AddScoped<PhoneLoginService>();
 
         return services;

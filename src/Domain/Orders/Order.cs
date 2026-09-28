@@ -123,6 +123,15 @@ public class Order : TenantEntity, IMerchantOwned
     /// </summary>
     public bool WaitsForGroup => Speed == DeliverySpeed.Combine && !DoNotHold;
 
+    /// <summary>
+    /// False once the order will not reach the customer: cancelled, refused at the door or returned to the shop.
+    /// Only orders for delivery are charged a fee, collect COD and count as the delivery's packages.
+    /// </summary>
+    public static bool IsForDelivery(OrderStatus status)
+    {
+        return status is not (OrderStatus.Cancelled or OrderStatus.Refused or OrderStatus.ReturnedToMerchant);
+    }
+
     public static Result<Order> Create(NewOrder spec)
     {
         if (spec.Packages.Count == 0)

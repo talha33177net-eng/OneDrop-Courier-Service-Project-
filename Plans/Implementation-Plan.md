@@ -13,9 +13,9 @@ The one place to see where we are and what comes next. Built from the two projec
 
 | | |
 |---|---|
-| Current week | **Week 2 — Grouping core** (in progress, 7 of 9) |
-| Next task | 2.8 Customer group page (PWA) |
-| Last session | 2026-09-28 — tasks 2.1–2.6 committed on `day2` (not pushed); task 2.7 outbox and SMS done, uncommitted for review |
+| Current week | **Week 2 — Grouping core** (in progress, 8 of 9) |
+| Next task | 2.9 Week 2 demo run |
+| Last session | 2026-09-28 — tasks 2.1–2.7 committed on `day2` (not pushed); task 2.8 customer deliveries page (PWA) done, uncommitted for review |
 | Blockers | None |
 
 ---
@@ -45,11 +45,11 @@ A task is **not done** until all of these pass. Record the result in the daily l
 | Week | Theme | Done when | Status |
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
-| 2 | Grouping core | 3 shops' orders form 1 group | 🟡 In progress (2.1–2.7 done) |
+| 2 | Grouping core | 3 shops' orders form 1 group | 🟡 In progress (2.1–2.8 done) |
 | 3 | Operations and money | Group delivered, merchants settled | ⬜ |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
-Tests today: **168 passing** (101 domain, 6 architecture, 61 integration).
+Tests today: **188 passing** (115 domain, 6 architecture, 67 integration).
 
 ---
 
@@ -181,9 +181,21 @@ Tasks:
       tenant through `TenantJobRunner` (Hangfire's recurring jobs run at most once a minute); it runs only with
       `Jobs:Server`. *Left:* a second app instance could send a message twice (no claim on a row yet; one instance
       in the MVP); failed messages have no screen yet.
-- [ ] **2.8 Customer group page (PWA).** "My deliveries" shows the group: shops, packages collected, lock time,
+- [x] **2.8 Customer group page (PWA).** "My deliveries" shows the group: shops, packages collected, lock time,
       delivery day, fee so far, "You save ৳70" versus separate couriers. Web manifest so it installs on a phone.
       *Tests:* integration test for the page model; live check on a phone-width window.
+      *Done 2026-09-28:* `Application/Grouping/CustomerDeliveries/CustomerDeliveriesHandler` returns the customer's
+      deliveries on their way (open, locked, out with a rider; soonest first) and the 10 latest finished ones, each
+      with its orders (shop, number, packages, status, COD), packages collected (orders past `Created`), the fee
+      recalculated now with `DeliveryFeeCalculator`, the COD and `Savings`. `Order.IsForDelivery` (not cancelled,
+      refused or returned) is now the one rule behind the fee, the COD due and the package count.
+      `DeliveryFeeCalculator.Savings` = the tenant's base fee × distinct shops − the group fee, nothing for one shop
+      (a separate courier is taken to charge the one-shop price). "My deliveries" is one card per delivery, built
+      for a phone: status, delivery day, last day to join, orders, collected bar, fee so far, COD, total at the
+      door, "You save ৳70 against 3 separate deliveries", what one more shop adds, Ship now. The old flat order
+      table is gone (every order is in a delivery). PWA: `wwwroot/manifest.webmanifest` (start `/Customer`,
+      standalone), SVG and 192/512 PNG icons, `sw.js` (never caches pages; shows `offline.html` without a signal),
+      linked from the customer pages by `Shared/_CustomerApp` through a new layout `Head` section.
 - [ ] **2.9 Week 2 demo run.** The three Dhaka demo shops → one group → lock → ৳110. Update this file.
 
 ---
@@ -308,6 +320,9 @@ Payments stay fake in the MVP either way.
 | 2026-09-28 | A failed message is retried after 1, 2, 4 and 8 minutes and marked `Failed` after 5 attempts | Rides out a short gateway outage without flooding it; a failed message stays for someone to look at |
 | 2026-09-28 | The customer API (`/api/v1/deliveries`) uses the customer's sign-in cookie on the tenant subdomain, not an API key; cookie challenges on `/api` are 401/403, not redirects | Merchants' keys must never reach a delivery; the cookie is host-only, so the tenant comes from the subdomain as for the pages |
 | 2026-09-28 | The frontend stays Razor Pages (PWA for the customer and rider screens, SignalR for live dashboards); no React or Angular in the MVP. React may be reconsidered for the rider app only, at tasks 3.4–3.5 | Owner's choice. Host-only cookies per tenant subdomain keep tenants apart; the screens are mostly forms and lists; a separate SPA would cost about a week of the remaining plan |
+| 2026-09-28 | "You save" compares the group fee with each shop sent separately at the tenant's own base fee; nothing is shown for one shop | The documentation's comparison (৳60 per courier) is the one-shop price; a separate "courier price" setting would be a second number to keep in step |
+| 2026-09-28 | An order is "for delivery" unless cancelled, refused or returned (`Order.IsForDelivery`); the fee, the COD due and the package count all use it | One rule, so the page, the door and the fee can never disagree about what is being delivered |
+| 2026-09-28 | The customer app's service worker never caches pages, only the offline page and its style; the manifest is linked by a plain path, not `~/` | Deliveries change all day and a stale page would show the wrong fee or day; `~/` fingerprints the URL per build, and a manifest should keep one address |
 
 ## Quick reference
 
@@ -441,6 +456,29 @@ Newest first. One entry per working day: what was done, how it was tested, what 
   Gadget BD arrive together on Tue 29 Sep"; OD-100034 in Chattogram saved under tenant 2 and texted from
   `OneDropCTG`; all five outbox rows `Sent` after one attempt; no errors in the app log.
 - **Next:** task 2.8, customer group page (PWA).
+- **Committed:** task 2.7 as `45c2a97` on `day2` (not pushed).
+- **Done (task 2.8):** `Order.IsForDelivery`; `DeliveryFeeCalculator.Savings`;
+  `Application/Grouping/CustomerDeliveries/CustomerDeliveriesHandler`; "My deliveries" rebuilt as delivery cards for
+  a phone; layout `Head` section and favicon; `Shared/_CustomerApp` (manifest, touch icon, service worker) on the
+  customer page and the customer sign-in page; `wwwroot/manifest.webmanifest`, `sw.js`, `offline.html`, `icons/`.
+- **Tested:** build 0 errors, no new warnings; 14 new domain tests (savings for 2–4 shops, Chattogram's prices, one
+  shop or a fast order saves nothing even with a fast fee below the base fee, a refused shop saves nothing; which
+  statuses are for delivery) and 6 new integration tests through the query (three shops: one delivery, shops,
+  4 packages 0 collected, fee and saving from the tenant, COD, days; a picked-up and a cancelled order change the
+  collected count, the fee, the saving and the COD, the cancelled order stays listed; a fast order is its own locked
+  delivery arriving tomorrow, listed first, fast fee, no saving; out with a rider stays on the way, delivered moves to
+  earlier; another customer, and the same phone at Chattogram, are not listed, Chattogram at its own prices; the
+  manifest, its icons, the service worker and the offline page are served). The signed-in page test now checks the
+  shops, "0 of 2", the fee, the total at the door, the saving and the manifest link. The first run caught a
+  constructor projection EF cannot filter and a `~/` manifest link rewritten to a fingerprinted URL; both fixed.
+  115 + 6 + 67 = 188 pass, none skipped. No schema change, no publish. Live on dev, phone 01845127390: Fashion
+  House (2 packages, COD 1500), Gadget BD (COD 2400), Beauty Shop (COD 650) → DG-100019; signed in by SMS code,
+  headless Chrome at 390 px: no horizontal scroll, "Arriving Wednesday 30 September", join until Tuesday, 0 of 4
+  collected, fee ৳110, COD ৳4,550, ৳4,660 at the door, "You save ৳70 against 3 separate deliveries", +৳25 for
+  another shop; the manifest parses with no errors and the service worker registers for the subdomain. Anonymous
+  and the same cookie on the Chattogram host → login; Ship now from the page → "Closed, arriving Tuesday 29
+  September", no button. No errors in the app log.
+- **Next:** task 2.9, Week 2 demo run.
 
 ### 2026-09-27
 - **Done:** Week 1 complete (tasks 1.1–1.6).
