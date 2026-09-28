@@ -5,8 +5,8 @@ namespace Domain.Tests;
 
 public class DeliveryFeeCalculatorTests
 {
-    // The launch tenants' prices (seed 001). The calculator holds none of its own.
-    private static readonly FeeSchedule Dhaka = new(60, 25, 60);
+    // The launch tenants' prices (seed 001, Dhaka's fast fee from 003). The calculator holds none of its own.
+    private static readonly FeeSchedule Dhaka = new(60, 25, 70);
     private static readonly FeeSchedule Chattogram = new(70, 30, 80);
 
     [Theory]
@@ -77,7 +77,7 @@ public class DeliveryFeeCalculatorTests
     {
         FeeLine[] fast = [Waiting(1) with { Speed = DeliverySpeed.Fast }];
 
-        Assert.Equal(60, new DeliveryFeeCalculator(Dhaka).GroupFee(fast));
+        Assert.Equal(70, new DeliveryFeeCalculator(Dhaka).GroupFee(fast));
         Assert.Equal(80, new DeliveryFeeCalculator(Chattogram).GroupFee(fast));
     }
 

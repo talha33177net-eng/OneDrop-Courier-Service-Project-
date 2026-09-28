@@ -34,8 +34,9 @@ to the same customer into **one delivery**.
   **locks at the end of Day 2** (11:59 PM, tenant time zone) and is delivered on **Day 3** (5–9 PM). The deadline is
   counted from the first order and **never moves**. An order on Day 3 starts a **new** group.
 - **Ship now:** the customer can close the group early (app, or SMS "reply 1").
-- **Deliver fast:** next-day delivery for ৳60, no waiting. **Don't hold:** merchants flag food, medicine or dated
-  gifts to skip waiting.
+- **Deliver fast:** next-day delivery, no waiting, at the tenant's fast fee (the documentation said ৳60; Dhaka
+  charges ৳70 since the market review below). **Don't hold:** merchants flag food, medicine or dated gifts to skip
+  waiting.
 - Fee is always calculated on what is **actually delivered** and counts **distinct accepted shops** only.
 - Only **one open group per customer + address**, even when two orders arrive at the same moment.
 
@@ -54,6 +55,38 @@ A **tenant is an operator** (OneDrop Dhaka, OneDrop Chattogram, a partner courie
 hubs, riders, merchants and prices, and never sees another tenant's data. **Inside** a tenant, the system sees all
 merchants (grouping needs it) but **each merchant sees only its own orders**. That is why a merchant is not a tenant.
 
+### The Bangladesh market
+Reviewed 2026-09-28 from the couriers' own pages and 2026 comparison articles (list prices; big merchants get
+negotiated rates). What Dhaka couriers charge the **merchant** inside Dhaka city:
+
+| Courier | Up to 1 kg | Heavier | COD fee in Dhaka | Failed delivery in Dhaka | Speed |
+|---|---|---|---|---|---|
+| Steadfast | ৳55 | by weight | 1% | a return cost is added | 1–2 days; same day ৳105 |
+| Pathao | ৳60 (500 g), ৳70 (1 kg) | ৳90 at 2 kg, +৳15 per kg | 0.5% | normally free | 24 h from pickup; 4–6 h express |
+| RedX | ৳60 | ৳75 at 2 kg, ৳90 at 3 kg | 0% | not published | next day |
+| Paperfly | ৳70 (VAT included) | +৳20 per kg | 0% | one delivery charge | next day |
+
+- Suburbs (Savar, Gazipur, Narayanganj) ৳80–110; outside Dhaka ৳110–135. Pathao pays merchants daily.
+- The merchant pays the courier and usually charges the customer ৳60–80 inside Dhaka, inside the COD amount.
+  Three shops sent separately therefore cost the customer ৳180–240; OneDrop charges ৳110.
+- Courier times count from pickup: a Facebook order (ordered at night, confirmed next day, picked up) usually
+  reaches the door on Day 3 anyway, so OneDrop's Day 3 at ৳60 is the market's price and speed.
+- 20–30% of COD parcels come back; a failed COD delivery costs ৳100–200 in two-way fees. Asking for the delivery
+  charge in advance by bKash is common with Facebook sellers and cuts fake orders. Websites that look up a phone's
+  history across couriers exist, so merchants value shared refusal data.
+
+What the review changed is in the plan's decisions log (2026-09-28, "Market review") and in tasks 3.4a–3.8, 4.1,
+4.7 and 4.8.
+
+Sources: [Steadfast pricing](https://www.steadfast.com.bd/pricing),
+[Steadfast charges 2026](https://banikh.com/en/blog/steadfast-courier-charge),
+[courier comparison 2026](https://banikh.com/en/blog/best-courier-for-online-business-bangladesh),
+[Pathao help](https://help.pathao.com/what-is-the-delivery-charge-inside-or-outside-the-city/),
+[Pathao rates 2026](https://bizmend.com/blog/pathao-courier-service-ecommerce-bangladesh/),
+[RedX rates](https://couriertrace.com/blog/redx-courier-service-delivery-charge-cost-and-price-list/),
+[Paperfly charges](https://paperfly.com.bd/charges/),
+[COD return rates](https://easysellapp.com/blogs/wiki/cod-ecommerce-pakistan-bangladesh-cash-collection-delivery-2026).
+
 ### Source documents
 The user supplied two PDFs (not stored in the repo): *OneDrop Implementation Plan* (4-week technical plan) and
 *OneDrop Project Documentation* (product, pricing, rules). Their content is captured here and in the plan.
@@ -66,7 +99,7 @@ The user supplied two PDFs (not stored in the repo): *OneDrop Implementation Pla
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
-| 3 | Operations and money | Group delivered, merchants settled | 🔄 3.1–3.4 done, next 3.5 |
+| 3 | Operations and money | Group delivered, merchants settled | 🔄 3.1–3.4 done, next 3.4a (market pricing) |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
 Task-level detail, the cut list, the job schedule, must-pass tests and the daily log are in
@@ -185,38 +218,17 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   SQL or C#: every tenant states its own. No business value is hard-coded anywhere.
 - Every tenant table: `TenantId` + FK + index; housekeeping columns `Archived`, `UpdatedId`, `UpdatedOn`, `Created`.
 - Seeded by DbUp `2026/001_SeedLaunchTenants.sql`: **OneDrop Dhaka** (id 1, slug `dhaka`, 7 zones on 5 hubs,
-  32 areas, ৳60 + ৳25) and **OneDrop Chattogram** (id 2, slug `chattogram`, 5 zones on 2 hubs, 14 areas,
-  ৳70 + ৳30). `2026/002_SeedPickupRoutes.sql` gives every launch zone a 2 PM pickup route. Roles are seeded by
-  `Script.PostDeployment.sql`.
-- Dev data in `OneDrop` right now: merchants 1–3 (Dhaka: Fashion House, Gadget BD, Beauty Shop) and 4–6
-  (Chattogram, same names); orders OD-100001, OD-100002, OD-100004 (the three Dhaka shops, **same customer 1 and
-  address 1, one group DG-100003**) and OD-100003 (Chattogram, same phone, different customer 2, DG-100004).
-  OD-100005 onwards are the 2.2 live check (phone 01563583024: one Dhaka group of 10 orders, one fast order,
-  one Chattogram order). OD-100017 to OD-100023 are the 2.3 live check (phone 01966225784: DG-100008 holds three
-  shops for ৳110). OD-100024 to OD-100026 are the 2.4 live check (phone 01950973272, three shops, quoted and
-  charged 60 / 25 / 25); for the 2.5 live check their group DG-100012 was given a deadline in the past by hand
-  and locked by the job, and OD-100027 then opened DG-100013. OD-100028 to OD-100030 are the 2.6 live check
-  (phone 01736878920, signed in as a customer): DG-100014 and DG-100015 were closed by Ship now for Tuesday
-  29 September; 01991998650 is a second signed-in Dhaka customer. OD-100031 to OD-100034 are the 2.7 live check
-  (phone 01764090796; outbox rows 1–5, all sent; DG-100016 closed by Ship now). Orders before OD-100031 have no
-  outbox rows. OD-100035 to OD-100037 are the 2.8 live check (phone 01845127390, three shops with COD, DG-100019
-  closed by Ship now from the page). OD-100038 to OD-100040 are the Week 2 demo run (phone 01912734580, the
-  three Dhaka shops in DG-100020 for ৳110, locked by the job after its deadline was moved into the past by hand).
-  OD-100041 (Fashion House, 2 packages) and OD-100042 (Gadget BD, fast) are the 3.1 live check (phone 01957461664).
-  OD-100043 to OD-100046 are the 3.2 live check (phone 01834561290): OD-100043–45 collected/received at MIR, their
-  DG-100023 on shelf MIR-01; OD-100046 (Gulshan 1) scanned at MIR then GUL, its DG-100024 on GUL-01.
-  OD-100047 and OD-100048 are the 3.3 live check (phone 01745219083, Banani): OD-100048 (fast) went MIR → shuttle →
-  GUL, shelf GUL-02; OD-100047 is still on the shuttle to GUL.
-  Demo riders (dev only): Rafiq Hasan (`rider@dhaka`, MIR, 30 parcels / 25 kg), Sumon Ali (`rider2@dhaka`, MIR,
-  12 / 15 kg), Kamal Uddin (`rider3@dhaka`, GUL), Jamal Chowdhury (`rider@chattogram`, AGR). OD-100049 to OD-100052
-  are the 3.4 live check: DG-100027 (Farhana Akter, 01893456120; Fashion House OD-100049 out with Rafiq, Gadget BD
-  OD-100050 never collected) and DG-100028 (OD-100051, fast) are out on Rafiq's trip of 28 September; DG-100029
-  (OD-100052, 1 of 2 parcels on MIR-02) is planned on Sumon's trip. Their delivery days were moved to 28 September
-  by hand, as were DG-100012 and DG-100020's earlier, which therefore show as due with no parcel at the hub.
-  DG-100003 also totals ৳110. The Hangfire tables
-  are installed at app start in both databases (mapping the dashboard opens the storage); only `OneDrop` runs jobs,
-  as the integration tests start no job server. Group numbers have gaps: a sequence value used in a rolled-back
-  dry run is not reused.
+  32 areas, ৳60 + ৳25, fast ৳70 since `2026/003_DhakaFastDeliveryFee.sql`) and **OneDrop Chattogram** (id 2, slug
+  `chattogram`, 5 zones on 2 hubs, 14 areas, ৳70 + ৳30, fast ৳80). `2026/002_SeedPickupRoutes.sql` gives every
+  launch zone a 2 PM pickup route. Roles are seeded by `Script.PostDeployment.sql`.
+- Dev data in `OneDrop`: merchants 1–3 (Dhaka: Fashion House, Gadget BD, Beauty Shop) and 4–6 (Chattogram, same
+  names); demo riders Rafiq Hasan (`rider@dhaka`, MIR, 30 parcels / 25 kg), Sumon Ali (`rider2@dhaka`, MIR, 12 /
+  15 kg), Kamal Uddin (`rider3@dhaka`, GUL), Jamal Chowdhury (`rider@chattogram`, AGR). Orders OD-100001 onwards
+  come from the live checks; each task's entry in the plan's daily log says which orders, phones and deliveries it
+  made. Some delivery deadlines were moved into the past by hand for live checks (DG-100012, DG-100020,
+  DG-100027–29), so those show as due today with no parcel at the hub. Orders before OD-100031 have no outbox rows.
+  The Hangfire tables are installed at app start in both databases; only `OneDrop` runs jobs, as the integration
+  tests start no job server. Group numbers have gaps: a sequence value used in a rolled-back dry run is not reused.
 
 ---
 
@@ -270,6 +282,9 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 | One trip per rider a day; riders filled in name order, late deliveries first, then area by area | One evening run; area order keeps stops together without geocoding |
 | `TripStop.DeliveryDate` copies the trip's date for `UX_TripStop_DeliveryGroup_DeliveryDate` | The database settles the job and the button planning at once |
 | `Rider.UserId` points at the login (riders sign in as staff on their subdomain) | Identity unchanged; a rider can exist before a login |
+| **Market review (2026-09-28):** Dhaka's fast fee ৳70; standard stays ৳60 + ৳25 | Couriers charge ৳55–70 for delivery within 24 h of pickup, which for a Facebook order is usually Day 3 anyway; fast is same day from pickup (about ৳105 at couriers). At ৳60 fast undercut waiting |
+| Planned from the review (3.4a): fast and Don't hold deliveries can be joined until the new order's pickup route leaves on the delivery day; Ship now adds the fast difference when it brings the day forward; a weight allowance per shop; pickups 11:00–13:30, shuttle about 14:30, riders 17:00 | Density; a free Ship now would undo the fast price; every courier prices by weight; a 19:00 shuttle missed the Day 3 trip |
+| Planned from the review (3.5–3.8): shops pay a return charge per refused parcel and a late-handover fee per order left behind; the order left behind goes out next day at the extra-shop fee; advance payment only by risk (refusal, no-show, merchant's request), after a one-tap confirmation for new COD customers; one stop and one fee for the same phone and area on a trip | 20–30% of COD parcels come back and OneDrop earns only at the door; every customer is new at launch; a missed address match must never cost ৳60 + ৳60 |
 
 ---
 

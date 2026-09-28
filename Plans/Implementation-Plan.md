@@ -13,9 +13,9 @@ The one place to see where we are and what comes next. Built from the two projec
 
 | | |
 |---|---|
-| Current week | **Week 3 — Operations and money** (4 of 9) |
-| Next task | 3.5 Delivery screen and attempts |
-| Last session | 2026-09-28 — task 3.4 (riders, trips, the plan-trips job, the hub Trips page and the rider's Today screen) done and tested (uncommitted). Tasks 3.1–3.3 are committed as `894777d` on `day2` |
+| Current week | **Week 3 — Operations and money** (4 of 10) |
+| Next task | 3.4a Market pricing (fast deliveries can be joined, Ship now as an upgrade, weight allowance, daily timetable), then 3.5 |
+| Last session | 2026-09-28 — Bangladesh market review ([Project-Context §1](../Documentation/Project-Context.md#the-bangladesh-market)): Dhaka's fast fee raised to ৳70 (DbUp 003); the other changes it led to are written into 3.4a–3.8 and Week 4 below. Task 3.4 committed as `cbd47c1`; 3.1–3.3 merged into `main` by pull request #1; 3.4 not yet in `main` |
 | Blockers | None. The link to ras-x2 was intermittently slow on 2026-09-28 (a sqlpackage stall, one login timeout); a rerun passed |
 
 ---
@@ -46,7 +46,7 @@ A task is **not done** until all of these pass. Record the result in the daily l
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
-| 3 | Operations and money | Group delivered, merchants settled | 🔄 4 of 9 |
+| 3 | Operations and money | Group delivered, merchants settled | 🔄 4 of 10 |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
 Tests today: **262 passing** (170 domain, 6 architecture, 86 integration).
@@ -92,7 +92,8 @@ Rules from the documentation this week must implement:
   tenant's time zone) join it; it **locks at the end of Day 2** and is delivered on **Day 3**. The deadline is
   counted from the first order and **never moves**. An order on Day 3 starts a **new** group.
 - **Ship now:** the customer can close the group early (app or SMS "reply 1").
-- **Deliver fast** (next day, ৳60, no waiting) and **Don't hold** items skip the group.
+- **Deliver fast** (next day at the tenant's fast fee, no waiting; the documentation said ৳60, Dhaka charges ৳70
+  since the market review) and **Don't hold** items skip the group.
 - Fee = `BaseDeliveryFee` + `ExtraShopFee` × (distinct **accepted** shops − 1); always calculated on what is
   actually delivered.
 - Only **one open group per customer + address**, even with two orders at the same moment.
@@ -286,15 +287,55 @@ next morning each merchant is settled.
       could land on the trip that just left (it goes out on the next day's trip); parcels are handed over without a
       scan per parcel; what happens to an order left behind when its delivery went out (a later delivery at +৳25)
       is 3.5; no customer SMS for "out for delivery" yet (3.6 sends the receipt).
+- [ ] **3.4a Market pricing** (added by the market review of 2026-09-28, see the decisions log).
+      - **Fast and Don't hold deliveries can be joined.** A delivery leaving tomorrow takes the customer's other
+        orders to the same address while the new order's pickup route still runs before that day's trips (its next
+        run falls on the delivery day, `PickupRoute.NextPickup`). A new order joins the delivery that leaves soonest
+        and can still take it, at the extra-shop fee. The one-open-group rule for Day 3 deliveries is unchanged.
+      - **Ship now is an upgrade to fast.** When it brings the delivery day forward it adds the tenant's fast fee
+        minus its base fee (Dhaka +৳10), shown on the button ("Deliver tomorrow for +৳10") and counted in the fee
+        at the door; on Day 2 it moves nothing and stays free.
+      - **Weight allowance per shop.** New tenant settings: the weight included per shop in a delivery (Dhaka 2 kg)
+        and a fee per started kg above it (Dhaka ৳15–20, to confirm). One calculator for Create Order, the quote
+        (optional weight) and the door. New NOT NULL tenant columns go through `Scripts/Pre`.
+      - **Daily timetable.** Pickup routes staggered 11:00–13:30 (farthest zones first), the shuttle right after
+        scan-in (about 14:30), riders out at 17:00, so every order placed by the end of Day 2 reaches its hub by
+        16:00. Route times are data (a DbUp script; times to confirm with the owner); the shuttle manifest lists
+        parcels for today's trips first.
+      *Tests:* a second shop joins a fast delivery before its pickup route leaves on the delivery day and opens a
+      new one after; the quote says the same; Ship now on Day 1 adds the difference and on Day 2 nothing; a 3 kg
+      shop pays one extra kg in Dhaka and Chattogram uses its own settings.
 - [ ] **3.5 Delivery screen and attempts.** Handover only after the fee is paid ("no fee, no handover"); refuse
       one parcel (fee counts accepted shops only); not home = one free re-attempt, then return.
+      *Added by the market review:*
+      - **One stop, one fee.** Deliveries for the same phone in the same area on one trip are one stop for the
+        rider and one fee over every shop handed over, so a missed address match never costs ৳60 + ৳60.
+      - **An order left behind** (shop not ready, or not all its parcels at the hub at Start trip) goes on a
+        follow-up delivery the next day, or joins the customer's open delivery at that address. The customer pays
+        only the extra-shop fee for it (the Day 3 fee already counted only what was delivered); the shop is
+        charged the late-handover fee (3.7).
+      - **A refused parcel** goes back to its shop, which is charged the return charge (3.7).
 - [ ] **3.6 Door payment.** Collect fee + COD, cash or QR (bKash/Nagad adapter, fake in MVP). SMS receipt.
-      New and low-trust customers pay the fee in advance by payment link.
+      Advance payment, narrowed by the market review from the documentation's "new and low-trust customers pay the
+      fee in advance by payment link":
+      - **A new COD customer confirms with one tap** on an SMS link (opens "My deliveries"); the merchant is warned
+        when an order is still unconfirmed before its pickup.
+      - **The fee is paid in advance** (bKash payment link) only after a refusal or no-show (3.8), or when the
+        merchant asks for it on the order; never for a product already paid online; never for a customer with
+        enough accepted deliveries (tenant setting). The advance is the first shop's fee; extra shops are paid at
+        the door; it is kept when everything is refused.
 - [ ] **3.7 Ledger and next-day settlement.** Split every payment per merchant; the settle job pays yesterday's
       COD to each merchant (fake bKash/bank). Rider end-of-day cash deposit and check. *Tests:* ledger balances;
       each merchant gets exactly its COD.
+      *Added by the market review:* the payout deducts the **return charge** per refused parcel and the
+      **late-handover fee** per order left behind (tenant settings; Dhaka ৳30–40 return charge, to confirm).
+      Merchants pay nothing for a delivered order, and COD handling stays free (Dhaka couriers charge 0–1%).
+      Next-day payout must not slip: Pathao pays daily.
 - [ ] **3.8 Trust score (simple).** Refusals and no-shows lower it; merchants' late handovers lower theirs.
       *Cut option:* a simple refusal counter.
+      *Added by the market review:* a customer's refusal or no-show switches on advance payment (3.6) at every shop
+      of the operator; a shop learns only "pays the fee in advance", never why or where. A shop late again and
+      again must bring its parcels to the hub.
 - [ ] **3.9 Week 3 demo run.** Group delivered, merchants settled.
 
 ---
@@ -304,6 +345,8 @@ next morning each merchant is settled.
 **Done when:** the final demo script below runs end to end.
 
 - [ ] **4.1 Dashboards (SignalR).** Live counts for admin and hub: open groups, parcels at hub, riders out.
+      *Added by the market review:* **packages per delivery per area, week by week** (the number the business
+      lives on), and a hub warning before the riders leave: "3 parcels for today's deliveries not scanned in yet".
 - [ ] **4.2 Merchant webhooks.** Order status changes posted to the merchant's URL through the outbox, signed.
 - [ ] **4.3 Tenant isolation test sweep.** Every endpoint and page: tenant A gets 404 for tenant B; merchant sees
       only its parcels.
@@ -312,7 +355,15 @@ next morning each merchant is settled.
 - [ ] **4.5 Docker and CI.** `docker-compose.yml` (app + SQL Server); GitHub Actions: build, publish the dacpac
       to a throwaway database, run all tests.
 - [ ] **4.6 Simulator.** `tools/Simulator` fills both tenants with fake merchants and orders for demos.
-- [ ] **4.7 README, diagrams, demo.** Final documentation and a recorded demo run.
+- [ ] **4.7 Combine deliveries and learn addresses** (market review). An order with the same phone and area as an
+      open delivery but another address match key asks the customer by SMS and on "My deliveries": "Same address as
+      your delivery DG-…? Combine / Keep separate". Combining merges the deliveries and recalculates the fee; the
+      other spelling is saved as an alias of the address, so the next order matches by itself. Deliveries in
+      different areas are never combined (home and office stay apart).
+- [ ] **4.8 The open delivery as a shopping window** (market review). The "joined" SMS and "My deliveries" say
+      "Your delivery is open until Tuesday: add from any OneDrop shop for +৳25" with the operator's partner shops.
+      The list shows every shop, never the ones this customer bought from.
+- [ ] **4.9 README, diagrams, demo.** Final documentation and a recorded demo run.
 
 ### Final demo script
 1. Log in to OneDrop Dhaka.
@@ -343,8 +394,9 @@ Payments stay fake in the MVP either way.
 | 06:00 | Settle merchants (yesterday's COD) | 3 |
 | Every 15 minutes (`Jobs:PlanTrips`) | Plan delivery trips (deliveries due today → riders), instead of once at 08:00 (3.4) | 3 ✅ |
 | 13:00 | Build pickup routes per zone — not needed: the route sheet is worked out when opened (3.1) | 3 ✅ |
-| 14:00 | Pickup route runs (merchants → hub) | 3 |
-| 19:00 | Hub shuttle (zone → customer's hub) — no job: staff load it from the manifest (3.3) | 3 ✅ |
+| 11:00–13:30 | Pickup route runs (merchants → hub), staggered by zone, farthest first; 14:00 until 3.4a moves them | 3 |
+| About 14:30 | Hub shuttle (zone → customer's hub), right after scan-in, not 19:00 (market review) — no job: staff load it from the manifest (3.3) | 3 ✅ |
+| 17:00 | Riders leave; delivery 5–9 PM | 3 |
 | 23:59 | Groups lock (Day 2 deadline) | 2 |
 
 ## Must-pass tests (from the plan)
@@ -411,6 +463,15 @@ Payments stay fake in the MVP either way.
 | 2026-09-28 | One trip per rider a day; the planner fills riders in name order, late deliveries first, then area by area | One evening run (5–9 PM); area order keeps a rider's stops together without maps or geocoding |
 | 2026-09-28 | `TripStop.DeliveryDate` copies the trip's date so a unique index keeps a delivery on one trip a day; a failed attempt gets a new stop another day | The database settles two planners at once (job and button), as the shelf index does for scans |
 | 2026-09-28 | Riders sign in as staff on their tenant's subdomain; the rider row points at the login (`Rider.UserId`), not the login at the rider | Identity stays unchanged; a rider can exist before they have a login |
+| 2026-09-28 | **Market review:** OneDrop Dhaka's fast fee is ৳70 (DbUp 003); standard stays ৳60 + ৳25 | Dhaka couriers charge merchants ৳55–70 for delivery within 24 h of pickup, so a Facebook order usually reaches the door on Day 3 anyway: ৳60 for Day 3 is the market price. Fast is at the door the day after the order (same day from pickup), which couriers sell for about ৳105. At ৳60 fast cost the same as waiting, so nobody waited for other shops |
+| 2026-09-28 | Fast and Don't hold deliveries can be joined until the new order's pickup route has left on the delivery day; a new order joins the delivery that leaves soonest (3.4a) | A delivery travelling alone was lost density; a shop ordering the next morning still makes the evening trip |
+| 2026-09-28 | Ship now brings the day forward only as an upgrade: it adds the fast fee minus the base fee, and is free on Day 2 (3.4a) | A free Ship now would undo the fast price; on Day 2 it moves nothing |
+| 2026-09-28 | The fee includes a weight allowance per shop, with a fee per kg above it (tenant settings, 3.4a) | Every Dhaka courier prices by weight (Pathao ৳60 up to 500 g, ৳90 at 2 kg, +৳15 per kg); a flat fee would carry a 6 kg parcel at the price of a lipstick |
+| 2026-09-28 | Daily timetable: pickups 11:00–13:30 staggered by zone, shuttle about 14:30, riders out at 17:00 (3.4a) | With a 19:00 shuttle an order from another zone placed late on Day 2, or any fast order from another zone, missed its trip |
+| 2026-09-28 | A shop pays nothing for a delivered order, but pays a return charge for a refused parcel and a late-handover fee for an order left behind (3.7) | 20–30% of COD parcels come back in Bangladesh; the customer pays OneDrop only at the door, so a refusal earned nothing. Couriers charge merchants for failed deliveries too (Paperfly: one delivery charge) |
+| 2026-09-28 | An order left behind goes out the next day, or joins the customer's open delivery, at the extra-shop fee only (3.5) | The customer pays what was promised; the shop that was not ready pays for the second trip |
+| 2026-09-28 | Advance payment by risk, not for every new customer: one-tap SMS confirmation for a new COD customer; the first shop's fee in advance after a refusal or no-show, or when the merchant asks; never for a product paid online (3.6, 3.8) | Every customer is new at launch. Paying the delivery charge in advance by bKash is already normal with Facebook sellers and cuts fake orders, so it is acceptable when it targets risk; a refusal at one shop protects the others |
+| 2026-09-28 | Deliveries for the same phone in the same area on one trip are one stop and one fee (3.5); the customer is asked to combine deliveries whose addresses almost match, and the spelling is learnt (4.7) | A missed address match must never cost the customer ৳60 + ৳60 for one visit |
 
 ## Quick reference
 
@@ -698,6 +759,17 @@ Newest first. One entry per working day: what was done, how it was tested, what 
   deliveries. Screenshots at 390 px (DevTools mobile emulation): no sideways scroll on either page; the live check
   led to the out-trip counts, the amber "Not all here yet" and the button spacing. No errors in the app log.
 - **Next:** task 3.5, delivery screen and attempts.
+- **Committed:** task 3.4 as `cbd47c1` on `day2`, pushed; pull request #1 merged 3.1–3.3 into `main`.
+- **Done (market review):** Dhaka couriers' prices compared (Pathao, Steadfast, RedX, Paperfly; see Project-Context
+  §1); DbUp `2026/003_DhakaFastDeliveryFee` raises OneDrop Dhaka's fast fee from ৳60 to ৳70; the unit test's copy of
+  the Dhaka prices follows it. The review's other changes are planned: new task 3.4a (fast deliveries can be joined,
+  Ship now as an upgrade, weight allowance, daily timetable), additions to 3.5–3.8, 4.1, new 4.7 and 4.8 (README
+  and demo move to 4.9). The list of dev test orders in Project-Context is shortened (the log keeps the detail).
+- **Tested:** build 0 errors, no new warnings; 170 + 6 + 86 = 262 pass, none skipped. Both databases published: the
+  one DbUp script only (plus the usual `chk_Tenant_GroupJoinDays` re-create). Live (app restarted; a running app
+  picks up new prices within 5 minutes, the tenant catalog's cache): Dhaka quotes fast ৳70, standard ৳60, Don't hold ৳60; Chattogram fast ৳80; a fast order
+  OD-100053 (Fashion House, Banani) was charged ৳70. No errors in the app log.
+- **Next:** task 3.4a, market pricing.
 
 ### 2026-09-27
 - **Done:** Week 1 complete (tasks 1.1–1.6).

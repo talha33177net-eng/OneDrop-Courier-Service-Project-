@@ -53,8 +53,8 @@ Tenants are subdomains. Browsers resolve `*.localhost` to your machine, so no ho
 | Address | What |
 |---|---|
 | http://localhost:5080 | Platform (OneDrop company) |
-| http://dhaka.localhost:5080 | OneDrop Dhaka — 7 zones, 5 hubs, ৳60 + ৳25 |
-| http://chattogram.localhost:5080 | OneDrop Chattogram — 5 zones, 2 hubs, ৳70 + ৳30 |
+| http://dhaka.localhost:5080 | OneDrop Dhaka — 7 zones, 5 hubs, ৳60 + ৳25, fast ৳70 |
+| http://chattogram.localhost:5080 | OneDrop Chattogram — 5 zones, 2 hubs, ৳70 + ৳30, fast ৳80 |
 
 ### Demo logins (Development only, password `OneDrop#2026`)
 
