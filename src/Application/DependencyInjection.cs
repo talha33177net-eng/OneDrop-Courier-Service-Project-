@@ -6,6 +6,7 @@ using Application.Grouping;
 using Application.Grouping.LockDueGroups;
 using Application.Grouping.ShipNow;
 using Application.Network.ListAreas;
+using Application.Notifications.SendOutbox;
 using Application.Orders.CreateOrder;
 using Application.Orders.GetOrder;
 using Application.Pricing.GetQuote;
@@ -21,6 +22,8 @@ public static class DependencyInjection
         services.AddScoped<CustomerDirectory>();
         services.AddScoped<DeliveryGrouping>();
         services.AddScoped<LockDueGroupsJob>();
+        services.AddScoped<SendOutboxJob>();
+        services.AddScoped<CustomerTexts>();
         services.AddScoped<CreateOrderHandler>();
         services.AddScoped<GetOrderHandler>();
         services.AddScoped<GetQuoteHandler>();

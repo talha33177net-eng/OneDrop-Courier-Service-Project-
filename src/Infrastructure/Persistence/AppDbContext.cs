@@ -2,11 +2,13 @@ using System.Linq.Expressions;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
+using Application.Notifications;
 using Domain.Common;
 using Domain.Customers;
 using Domain.Grouping;
 using Domain.Merchants;
 using Domain.Network;
+using Domain.Notifications;
 using Domain.Orders;
 using Domain.Platform;
 using Infrastructure.Identity;
@@ -61,11 +63,68 @@ public class AppDbContext(
 
     public DbSet<DeliveryGroup> DeliveryGroups => Set<DeliveryGroup>();
 
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+
     /// <summary>Read by the tenant filter at query time. Null means "no tenant", which matches no row.</summary>
     public long? CurrentTenantId => tenantContext.TenantId;
 
     /// <summary>Read by the merchant filter at query time. Null means the caller is not a merchant.</summary>
     public long? CurrentMerchantId => currentUser.MerchantId;
+
+    /// <summary>
+    /// Saves, and writes every domain event raised by the saved entities to the outbox in the same transaction:
+    /// first the changes (so the new rows have their ids), then the outbox rows, then commit. A caller's own
+    /// transaction is joined instead. Events are cleared only once committed, so a failed save can be retried.
+    /// </summary>
+    public override async Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+    {
+        var raisers = ChangeTracker.Entries<Entity>()
+            .Select(entry => entry.Entity)
+            .Where(entity => entity.GetDomainEvents().Count > 0)
+            .ToList();
+        if (raisers.Count == 0)
+        {
+            return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+
+        var transaction = Database.CurrentTransaction is null
+            ? await Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        try
+        {
+            var saved = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+            OutboxMessages.AddRange(raisers.SelectMany(entity => entity.GetDomainEvents()).Select(OutboxContracts.ToOutbox));
+            saved += await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
+
+            raisers.ForEach(entity => entity.ClearDomainEvents());
+
+            return saved;
+        }
+        finally
+        {
+            if (transaction is not null)
+            {
+                await transaction.DisposeAsync();
+            }
+        }
+    }
+
+    /// <summary>Every save goes through <see cref="SaveChangesAsync(bool, CancellationToken)"/>, which writes the outbox.</summary>
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        if (ChangeTracker.Entries<Entity>().Any(entry => entry.Entity.GetDomainEvents().Count > 0))
+        {
+            throw new InvalidOperationException("Entities with domain events must be saved with SaveChangesAsync.");
+        }
+
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

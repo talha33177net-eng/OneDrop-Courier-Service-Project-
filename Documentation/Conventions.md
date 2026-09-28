@@ -46,6 +46,9 @@ dotnet test --project tests/Integration.Tests
   errors to problem details in `Web/Api/ResultMapping.cs`.
 - Aggregates guard their own rules: `Order.Create` validates, `Order.MoveTo` enforces the status state machine.
   Methods with five or more parameters take a record (`NewOrder`).
+- Side effects of a change (SMS, later webhooks) never run inside the use case: the entity raises a domain event
+  (`Raise`), the save writes it to the outbox in the same transaction, and `SendOutboxJob` acts on it later. A new
+  event needs a contract and a case in `Application/Notifications/OutboxContracts`.
 
 ## Tenancy (read before touching data access)
 

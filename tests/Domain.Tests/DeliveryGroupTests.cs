@@ -207,6 +207,25 @@ public class DeliveryGroupTests
     }
 
     [Fact]
+    public void Locking_raises_an_event_at_the_deadline_and_by_Ship_now_but_not_before_or_twice()
+    {
+        var atDeadline = OpenAt("2026-09-28 04:00");
+        var shipped = OpenAt("2026-09-28 04:00");
+        var alone = DeliveryGroup.OpenAlone(new NewDeliveryGroup(1, 1, 1, Utc("2026-09-28 04:00"), Dhaka, JoinDays: 2));
+
+        atDeadline.LockIfDue(Utc("2026-09-29 17:59"));
+        Assert.Empty(atDeadline.GetDomainEvents());
+        atDeadline.LockIfDue(Utc("2026-09-29 18:00"));
+        atDeadline.LockIfDue(Utc("2026-09-29 18:05"));
+        shipped.ShipNow(Utc("2026-09-28 06:00"), Dhaka);
+        shipped.ShipNow(Utc("2026-09-28 06:05"), Dhaka);
+
+        Assert.Equal([new DeliveryGroupLocked(atDeadline)], atDeadline.GetDomainEvents());
+        Assert.Equal([new DeliveryGroupLocked(shipped)], shipped.GetDomainEvents());
+        Assert.Empty(alone.GetDomainEvents());
+    }
+
+    [Fact]
     public void The_opening_time_must_be_UTC()
     {
         var spec = new NewDeliveryGroup(1, 1, 1, new DateTime(2026, 9, 28, 10, 0, 0, DateTimeKind.Local), Dhaka, 2);

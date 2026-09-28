@@ -136,5 +136,20 @@ public class OrderTests
 
         Assert.Throws<ArgumentOutOfRangeException>(() => order.PlaceIn(group, -1));
         Assert.Null(order.DeliveryGroup);
+        Assert.Empty(order.GetDomainEvents());
+    }
+
+    [Fact]
+    public void Placing_an_order_raises_one_event_even_when_it_is_placed_again_before_saving()
+    {
+        var order = Order.Create(Spec(new NewPackage("Box", 500))).Value;
+        var opened = new DateTime(2026, 9, 28, 4, 0, 0, DateTimeKind.Utc);
+        var lost = DeliveryGroup.Open(new NewDeliveryGroup(1, 1, 1, opened, TimeZoneInfo.Utc, 2));
+        var winner = DeliveryGroup.Open(new NewDeliveryGroup(1, 1, 1, opened, TimeZoneInfo.Utc, 2));
+
+        order.PlaceIn(lost, 60);
+        order.PlaceIn(winner, 25);
+
+        Assert.Equal([new OrderPlacedInDelivery(order)], order.GetDomainEvents());
     }
 }

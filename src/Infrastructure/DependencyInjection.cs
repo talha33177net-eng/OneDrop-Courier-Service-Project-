@@ -35,7 +35,10 @@ public static class DependencyInjection
             .AddInterceptors(provider.GetRequiredService<TenantSaveInterceptor>())
             .ConfigureWarnings(warnings => warnings.Ignore(
                 // Identity's claim/role/login rows hang off the filtered user; they are only ever read through it
-                CoreEventId.PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning)));
+                CoreEventId.PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning,
+                // The outbox save runs in a transaction that is rolled back whole when a save fails, so it never
+                // needs the savepoints MARS turns off
+                SqlServerEventId.SavepointsDisabledBecauseOfMARS)));
         services.AddScoped<IAppDbContext>(provider => provider.GetRequiredService<AppDbContext>());
 
         services.AddSingleton<SmsLog>();

@@ -117,6 +117,7 @@ public class DeliveryGroup : TenantEntity
 
         // The next midnight after now; never later than the deadline, which is itself a midnight after now
         LocksAt = StartOfDay(now, timeZone, daysAhead: 1);
+        Raise(new DeliveryGroupLocked(this));
 
         return Result.Success();
     }
@@ -140,6 +141,7 @@ public class DeliveryGroup : TenantEntity
 
         Status = DeliveryGroupStatus.Locked;
         LockedOn = LocksAt;
+        Raise(new DeliveryGroupLocked(this));
 
         return true;
     }

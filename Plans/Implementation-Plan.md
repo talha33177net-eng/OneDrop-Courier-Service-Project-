@@ -13,9 +13,9 @@ The one place to see where we are and what comes next. Built from the two projec
 
 | | |
 |---|---|
-| Current week | **Week 2 — Grouping core** (in progress, 6 of 9) |
-| Next task | 2.7 Outbox and domain events |
-| Last session | 2026-09-28 — tasks 2.1–2.5 committed on `day2` (not pushed); task 2.6 Ship now done, uncommitted for review |
+| Current week | **Week 2 — Grouping core** (in progress, 7 of 9) |
+| Next task | 2.8 Customer group page (PWA) |
+| Last session | 2026-09-28 — tasks 2.1–2.6 committed on `day2` (not pushed); task 2.7 outbox and SMS done, uncommitted for review |
 | Blockers | None |
 
 ---
@@ -45,11 +45,11 @@ A task is **not done** until all of these pass. Record the result in the daily l
 | Week | Theme | Done when | Status |
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
-| 2 | Grouping core | 3 shops' orders form 1 group | 🟡 In progress (2.1–2.6 done) |
+| 2 | Grouping core | 3 shops' orders form 1 group | 🟡 In progress (2.1–2.7 done) |
 | 3 | Operations and money | Group delivered, merchants settled | ⬜ |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
-Tests today: **155 passing** (93 domain, 6 architecture, 56 integration).
+Tests today: **168 passing** (101 domain, 6 architecture, 61 integration).
 
 ---
 
@@ -164,9 +164,23 @@ Tasks:
       day to join, delivery day) with a **Ship now** button. The sign-in cookie now answers `/api` requests with
       401/403 instead of a redirect to the login page. *Left:* SMS "reply 1" needs an inbound SMS gateway (it will
       call `ShipNowHandler`); the SMS confirming the new delivery day is 2.7.
-- [ ] **2.7 Outbox and domain events.** `Notifications.OutboxMessage` saved in the same transaction; sender job
+- [x] **2.7 Outbox and domain events.** `Notifications.OutboxMessage` saved in the same transaction; sender job
       every few seconds; SMS "joined your delivery", "group locked, arriving Day 3". *Tests:* event saved with the
       order; sender marks it sent; failure retries.
+      *Done 2026-09-28:* entities raise `IDomainEvent`s (`Entity.Raise`); `Order.PlaceIn` raises
+      `OrderPlacedInDelivery` (once, even when the open-group race places it twice) and `DeliveryGroup.LockIfDue` /
+      `ShipNow` raise `DeliveryGroupLocked`. `AppDbContext.SaveChangesAsync` writes them to
+      `Notifications.OutboxMessage` **in the same transaction**: save the changes (for the ids), add the outbox rows
+      (`Application/Notifications/OutboxContracts`: `OrderPlacedMessage`, `DeliveryLockedMessage`, ids only),
+      save, commit; a caller's transaction is joined; events are cleared only after commit. `SendOutboxJob` (a
+      tenant job) sends up to 50 due messages oldest first, saving each as sent or failed; a failure waits 1, 2, 4,
+      8 minutes and is `Failed` after 5 attempts. `CustomerTexts` writes the SMS from the data as it is when sent:
+      an order in an open delivery ("… is in OneDrop delivery DG-…; other shops can join until the end of Tue 29
+      Sep; we deliver on Wed 30 Sep"), an order travelling alone ("arriving on …"), a closed delivery (its shops
+      and the day). Every 5 seconds (`Jobs:OutboxInterval`) the in-process `OutboxDispatcher` runs it for every
+      tenant through `TenantJobRunner` (Hangfire's recurring jobs run at most once a minute); it runs only with
+      `Jobs:Server`. *Left:* a second app instance could send a message twice (no claim on a row yet; one instance
+      in the MVP); failed messages have no screen yet.
 - [ ] **2.8 Customer group page (PWA).** "My deliveries" shows the group: shops, packages collected, lock time,
       delivery day, fee so far, "You save ৳70" versus separate couriers. Web manifest so it installs on a phone.
       *Tests:* integration test for the page model; live check on a phone-width window.
@@ -239,8 +253,8 @@ Payments stay fake in the MVP either way.
 
 | Time | Job | Week |
 |---|---|---|
-| Every few seconds | Outbox sender | 2 |
-| Every 5 minutes | Lock check (lock due groups) | 2 |
+| Every 5 seconds (`Jobs:OutboxInterval`) | Outbox sender (in-process dispatcher, not Hangfire) | 2 ✅ |
+| Every 5 minutes | Lock check (lock due groups) | 2 ✅ |
 | 02:00 | Recalculate trust and reliability scores | 3 |
 | 06:00 | Settle merchants (yesterday's COD) | 3 |
 | 08:00 | Plan delivery trips (Day 3 groups → riders) | 3 |
@@ -288,6 +302,10 @@ Payments stay fake in the MVP either way.
 | 2026-09-28 | The lock job saves group by group and skips a group changed meanwhile | An order past the deadline may lock the same group; one conflict must not stop the rest |
 | 2026-09-28 | Job dashboard `/jobs` for platform admins only | It lists every tenant's jobs |
 | 2026-09-28 | Ship now locks the group and delivers it the next day (tenant midnight after the press); `LocksAt` moves earlier, never later | Keeping Day 3 would only stop other shops joining and give the customer nothing; next day matches Deliver fast and the lock job and trip planning keep reading `LocksAt` |
+| 2026-09-28 | Customers need no sign-up: a customer is created automatically from the phone number (E.164, per tenant) on their first order, and the SMS-code login is an optional way into the same record | Owner's choice. Customers buy at the shop's checkout and may never visit OneDrop; grouping must work for them from the first order |
+| 2026-09-28 | Domain events go to `Notifications.OutboxMessage` in the change's own transaction (save, add outbox rows with the new ids, save, commit); the rows hold ids only and the SMS is written when sent | A change is never saved without its message nor a message without its change; texts built at send time never repeat stale data after a retry |
+| 2026-09-28 | The outbox sender runs every 5 seconds in process (`OutboxDispatcher`, per tenant through `TenantJobRunner`), not as a Hangfire recurring job | Hangfire's recurring jobs run at most once a minute; "your order joined" should arrive while the customer is still at checkout |
+| 2026-09-28 | A failed message is retried after 1, 2, 4 and 8 minutes and marked `Failed` after 5 attempts | Rides out a short gateway outage without flooding it; a failed message stays for someone to look at |
 | 2026-09-28 | The customer API (`/api/v1/deliveries`) uses the customer's sign-in cookie on the tenant subdomain, not an API key; cookie challenges on `/api` are 401/403, not redirects | Merchants' keys must never reach a delivery; the cookie is host-only, so the tenant comes from the subdomain as for the pages |
 | 2026-09-28 | The frontend stays Razor Pages (PWA for the customer and rider screens, SignalR for live dashboards); no React or Angular in the MVP. React may be reconsidered for the rider app only, at tasks 3.4–3.5 | Owner's choice. Host-only cookies per tenant subdomain keep tenants apart; the screens are mostly forms and lists; a separate SPA would cost about a week of the remaining plan |
 
@@ -401,6 +419,28 @@ Newest first. One entry per working day: what was done, how it was tested, what 
   button closed DG-100015 ("We deliver it on Tuesday 29 September"); a page POST without the anti-forgery token
   400. No errors in the app log.
 - **Next:** task 2.7, outbox and domain events.
+- **Committed:** task 2.6 as `3155a71` on `day2` (not pushed).
+- **Done (task 2.7):** `IDomainEvent` on `Entity`; `OrderPlacedInDelivery`, `DeliveryGroupLocked`;
+  `Domain/Notifications/OutboxMessage` (retry rule); SQL schema `Notifications` and table `OutboxMessage` with
+  `IX_OutboxMessage_Tenant_Status_NextAttemptOn`; `AppDbContext.SaveChangesAsync` writes the outbox in the change's
+  transaction; `Application/Notifications` (`OutboxContracts`, `SendOutbox/CustomerTexts`, `SendOutboxJob`);
+  `Infrastructure/Jobs/OutboxDispatcher` every `Jobs:OutboxInterval` (5 s); the MARS "savepoints disabled" warning
+  is ignored (the outbox transaction is rolled back whole).
+- **Tested:** build 0 errors, no new warnings; 8 new domain tests (placing twice raises one event; a refused
+  placement raises none; lock at the deadline and by Ship now raise one event each, never before or twice, a
+  travel-alone group none; outbox: pending at once, sent, waits 1/2/4/8 minutes then `Failed`, long error cut,
+  type and payload required) and 5 new integration tests (an order is saved with its message; a lock that loses
+  the race leaves exactly one message and keeps its events; the sender texts the joined, joined and travel-alone
+  orders with the right days from the tenant's sender name and marks them sent; Ship now texts the shops and the
+  new day; a failing gateway is retried after 1, 2, 4 and 8 minutes of a fake clock, not before, then `Failed`),
+  plus the test host runs no outbox dispatcher. A mutation (placing twice without withdrawing the first event) was
+  caught. 101 + 6 + 61 = 168 pass, none skipped. Publish: the new schema and table only, both databases. Live on
+  dev, phone 01764090796: OD-100031 Fashion House and OD-100032 Gadget BD ("is in OneDrop delivery DG-100016 …
+  until the end of Tue 29 Sep; we deliver on Wed 30 Sep") and OD-100033 fast ("DG-100017, arriving on Tue 29 Sep")
+  texted about a second after each order; Ship now on DG-100016 texted "is closed. Your orders from Fashion House,
+  Gadget BD arrive together on Tue 29 Sep"; OD-100034 in Chattogram saved under tenant 2 and texted from
+  `OneDropCTG`; all five outbox rows `Sent` after one attempt; no errors in the app log.
+- **Next:** task 2.8, customer group page (PWA).
 
 ### 2026-09-27
 - **Done:** Week 1 complete (tasks 1.1–1.6).

@@ -4,6 +4,7 @@ using Domain.Customers;
 using Domain.Grouping;
 using Domain.Merchants;
 using Domain.Network;
+using Domain.Notifications;
 using Domain.Orders;
 using Domain.Platform;
 
@@ -42,6 +43,8 @@ public interface IAppDbContext
     DbSet<OrderStatusHistory> OrderStatusHistory { get; }
 
     DbSet<DeliveryGroup> DeliveryGroups { get; }
+
+    DbSet<OutboxMessage> OutboxMessages { get; }
 
     EntityEntry<TEntity> Entry<TEntity>(TEntity entity)
         where TEntity : class;

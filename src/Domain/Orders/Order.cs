@@ -179,7 +179,8 @@ public class Order : TenantEntity, IMerchantOwned
     /// <summary>
     /// Puts the order in a delivery group of the same customer and address. The caller decides which group
     /// (<see cref="DeliveryGroup.CanJoin"/>) and prices the move (<see cref="AddedFee"/>); a group for someone
-    /// else is a bug, not a business "no".
+    /// else is a bug, not a business "no". Placing it again before it is saved (the open-group race) replaces the
+    /// first placement, so the customer hears about one delivery only.
     /// </summary>
     public void PlaceIn(DeliveryGroup group, decimal addedFee)
     {
@@ -193,6 +194,8 @@ public class Order : TenantEntity, IMerchantOwned
         DeliveryGroup = group;
         DeliveryGroupId = group.Id;
         AddedFee = addedFee;
+        Withdraw<OrderPlacedInDelivery>();
+        Raise(new OrderPlacedInDelivery(this));
     }
 
     public bool CanMoveTo(OrderStatus status)

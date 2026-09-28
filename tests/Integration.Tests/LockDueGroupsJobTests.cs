@@ -198,13 +198,14 @@ public class LockDueGroupsJobTests(WebAppFactory factory)
     }
 
     [Fact]
-    public void The_test_host_runs_no_job_server()
+    public void The_test_host_runs_no_job_server_and_no_outbox_dispatcher()
     {
         WebAppFactory.RequireDatabase();
 
         var hosted = factory.Services.GetServices<IHostedService>().Select(service => service.GetType().Name);
 
         Assert.DoesNotContain(hosted, name => name.Contains("BackgroundJobServer"));
+        Assert.DoesNotContain(nameof(OutboxDispatcher), hosted);
     }
 
     private static TenantJobRunner ProbeRunner(AsyncServiceScope scope, IBackgroundJobClient client)

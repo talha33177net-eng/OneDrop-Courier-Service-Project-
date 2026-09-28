@@ -36,6 +36,7 @@
     <Build Include="Security/Identity.sql" />
     <Build Include="Security/Merchants.sql" />
     <Build Include="Security/Network.sql" />
+    <Build Include="Security/Notifications.sql" />
     <Build Include="Security/Orders.sql" />
     <Build Include="Security/Platform.sql" />
     <Build Include="Platform/Tables/Tenant.sql" />
@@ -61,6 +62,7 @@
     <Build Include="Orders/Tables/Package.sql" />
     <Build Include="Grouping/Sequences/DeliveryGroupNumber.sql" />
     <Build Include="Grouping/Tables/DeliveryGroup.sql" />
+    <Build Include="Notifications/Tables/OutboxMessage.sql" />
   </ItemGroup>
   <ItemGroup>
     <PostDeploy Include="Script.PostDeployment.sql" />
@@ -86,5 +88,7 @@
     <Folder Include="Grouping\" />
     <Folder Include="Grouping\Sequences\" />
     <Folder Include="Grouping\Tables\" />
+    <Folder Include="Notifications\" />
+    <Folder Include="Notifications\Tables\" />
   </ItemGroup>
 </Project>
