@@ -38,3 +38,17 @@ public class AreaConfiguration : IEntityTypeConfiguration<Area>
         builder.HasIndex(a => new { a.TenantId, a.Name }).IsUnique().HasDatabaseName("UX_Area_Tenant_Name");
     }
 }
+
+public class PickupRouteConfiguration : IEntityTypeConfiguration<PickupRoute>
+{
+    public void Configure(EntityTypeBuilder<PickupRoute> builder)
+    {
+        builder.MapTenantOwned(Schemas.Network);
+        builder.Property(r => r.PickupTime).HasColumnType("time(0)");
+        builder.HasOne(r => r.Zone).WithMany().HasForeignKey(r => r.ZoneId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(r => r.ZoneId)
+            .IsUnique()
+            .HasFilter("[Archived] = 0")
+            .HasDatabaseName("UX_PickupRoute_Zone_Active");
+    }
+}

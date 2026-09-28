@@ -1,0 +1,65 @@
+@page "{id:long}"
+@model Web.Pages.Hub.RouteSheetModel
+@{
+    var sheet = Model.Sheet;
+    ViewData["Title"] = $"{sheet.Zone} pickup";
+}
+
+<div class="sheet-head">
+    <div>
+        <h1>@sheet.Zone pickup</h1>
+        <p class="lead">
+            @sheet.NextPickupDay.ToString("dddd d MMMM") at @sheet.PickupTime.ToString("h:mm tt") ·
+            bring everything to @sheet.Hub, @sheet.HubAddress
+        </p>
+    </div>
+    <button type="button" class="button secondary no-print" onclick="window.print()">Print</button>
+</div>
+
+<p>
+    <strong>@sheet.Stops.Count @(sheet.Stops.Count == 1 ? "stop" : "stops")</strong>,
+    @sheet.Packages @(sheet.Packages == 1 ? "package" : "packages") to collect.
+    Scan or tick every label; a parcel that is not ready stays for the next run.
+</p>
+
+@if (sheet.Stops.Count == 0)
+{
+    <div class="card"><p class="muted">Nothing is waiting in this zone.</p></div>
+}
+
+@foreach (var (stop, index) in sheet.Stops.Select((stop, index) => (stop, index + 1)))
+{
+    <section class="card stop">
+        <div class="stop-head">
+            <span class="stop-number">@index</span>
+            <div>
+                <h2>@stop.Merchant <span class="muted">· @stop.PickupPoint</span></h2>
+                <div>@stop.Address · <a href="tel:@stop.ContactPhone">@stop.ContactPhone</a></div>
+            </div>
+            <span class="pill">@stop.Packages @(stop.Packages == 1 ? "package" : "packages")</span>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr><th>Order</th><th>Labels</th><th class="num">Collected</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var order in stop.Orders)
+                    {
+                        <tr>
+                            <td>
+                                <strong>@order.Number</strong>
+                                @if (order.Urgent)
+                                {
+                                    <span class="pill pill-open">Next day</span>
+                                }
+                            </td>
+                            <td>@string.Join(", ", order.Labels)</td>
+                            <td class="num">@string.Concat(Enumerable.Repeat("☐ ", order.Packages))</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+}

@@ -67,7 +67,23 @@ public class DeliveryGroup : TenantEntity
     /// <summary>When the group actually locked: at <see cref="LocksAt"/>, or earlier when the customer chose Ship now.</summary>
     public DateTime? LockedOn { get; private set; }
 
+    /// <summary>
+    /// The group's shelf at its hub, from the first parcel scanned in there until a rider takes the group out.
+    /// Unique per hub among the groups holding one (<c>UX_DeliveryGroup_Hub_Shelf</c>); printed as
+    /// <see cref="ShelfCode"/>.
+    /// </summary>
+    public int? Shelf { get; private set; }
+
+    /// <summary>True while the group waits at the hub (open or locked) and has no shelf yet.</summary>
+    public bool NeedsShelf => Shelf is null && Status is DeliveryGroupStatus.Open or DeliveryGroupStatus.Locked;
+
     public byte[] RowVersion { get; private set; } = [];
+
+    /// <summary>The shelf's label, hub code and number: <c>MIR-07</c>.</summary>
+    public static string ShelfCode(string hubCode, int shelf)
+    {
+        return $"{hubCode}-{shelf:D2}";
+    }
 
     /// <summary>Opens the group that later orders to the same customer and address join until <see cref="LocksAt"/>.</summary>
     public static DeliveryGroup Open(NewDeliveryGroup spec)
@@ -170,9 +186,27 @@ public class DeliveryGroup : TenantEntity
             LockedOn ??= now;
         }
 
+        // A group leaving the hub frees its shelf; one back for a re-attempt gets a shelf at its next scan-in
+        if (status is DeliveryGroupStatus.Dispatched or DeliveryGroupStatus.Delivered or DeliveryGroupStatus.Cancelled)
+        {
+            Shelf = null;
+        }
+
         Status = status;
 
         return Result.Success();
+    }
+
+    /// <summary>Gives a group waiting at its hub the shelf the hub chose. A group keeps the shelf it has.</summary>
+    public void PutOnShelf(int shelf)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(shelf, 1);
+        if (!NeedsShelf)
+        {
+            throw new InvalidOperationException($"Delivery {Number} is {Status} with shelf {Shelf}; it takes no new shelf.");
+        }
+
+        Shelf = shelf;
     }
 
     private static DeliveryGroup Create(NewDeliveryGroup spec, int daysBeforeDelivery, DeliveryGroupStatus status)

@@ -18,6 +18,7 @@ public class DeliveryGroupConfiguration : IEntityTypeConfiguration<DeliveryGroup
             .ValueGeneratedOnAdd()
             .HasDefaultValueSql("(concat(N'DG-',NEXT VALUE FOR [Grouping].[DeliveryGroupNumber]))");
         builder.Property(g => g.RowVersion).IsRowVersion();
+        builder.Ignore(g => g.NeedsShelf);
 
         builder.HasOne<Customer>().WithMany().HasForeignKey(g => g.CustomerId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<CustomerAddress>().WithMany().HasForeignKey(g => g.AddressId).OnDelete(DeleteBehavior.Restrict);
@@ -28,5 +29,9 @@ public class DeliveryGroupConfiguration : IEntityTypeConfiguration<DeliveryGroup
             .IsUnique()
             .HasFilter("[Status] = 1")
             .HasDatabaseName("UX_DeliveryGroup_Customer_Address_Open");
+        builder.HasIndex(g => new { g.HubId, g.Shelf })
+            .IsUnique()
+            .HasFilter("[Shelf] IS NOT NULL")
+            .HasDatabaseName("UX_DeliveryGroup_Hub_Shelf");
     }
 }

@@ -14,8 +14,8 @@ progress and daily log live in [Plans/Implementation-Plan.md](Plans/Implementati
 | Week | Scope | State |
 |---|---|---|
 | 1 — Foundation | Solution, tenancy (catalog, resolvers, filters, save guard), domain + database, Identity with roles and phone OTP, seeded tenants/zones/hubs, merchant API key + Create Order | **Done** |
-| 2 — Grouping core | Customer matching, delivery groups + 3-day rule, quote (৳60 / +৳25), lock job + Ship now, outbox + fake SMS, customer group page | Next |
-| 3 — Operations & money | Pickup routes + QR labels, hub scan/shelves/shuttle, rider trips, door payment, ledger + settlement | |
+| 2 — Grouping core | Customer matching, delivery groups + 3-day rule, quote (৳60 / +৳25), lock job + Ship now, outbox + fake SMS, customer group page | **Done** |
+| 3 — Operations & money | Pickup routes + QR labels, hub scan/shelves/shuttle, rider trips, door payment, ledger + settlement | In progress (3.1 done) |
 | 4 — Polish & proof | SignalR dashboards, webhooks, Row-Level Security, Docker, CI, simulator | |
 
 ## Run it
@@ -62,8 +62,8 @@ Tenants are subdomains. Browsers resolve `*.localhost` to your machine, so no ho
 |---|---|---|
 | `admin@onedrop.test` | localhost | Platform admin |
 | `admin@dhaka.onedrop.test` / `admin@chattogram.onedrop.test` | tenant | Tenant admin |
-| `hub@dhaka.onedrop.test` / `hub@chattogram.onedrop.test` | tenant | Hub staff |
-| `fashion@`, `gadget@`, `beauty@` + `dhaka.onedrop.test` / `chattogram.onedrop.test` | tenant | Merchant |
+| `hub@dhaka.onedrop.test` / `hub@chattogram.onedrop.test` | tenant | Hub staff (**Pickup routes**: route sheets per zone; **Scan**: collect, receive and load the shuttle; **Shelves**; **Shuttle** manifest) |
+| `fashion@`, `gadget@`, `beauty@` + `dhaka.onedrop.test` / `chattogram.onedrop.test` | tenant | Merchant (orders, printable QR labels) |
 | Any mobile number via **Customer sign in** | tenant | Customer (code appears on **SMS outbox**) |
 
 ### Demo merchant API keys (Development only)

@@ -398,3 +398,259 @@ progress::-moz-progress-bar {
         margin-top: 8px;
     }
 }
+
+/* Pickup route sheet and parcel labels: printed on paper, so both have print rules */
+
+.sheet-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.sheet-head .button {
+    margin-top: 0;
+}
+
+.stop-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.stop-head > div {
+    flex: 1;
+    min-width: 0;
+}
+
+.card.stop h2 {
+    margin: 0 0 2px;
+}
+
+.stop-number {
+    flex: none;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--navy);
+    color: #fff;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.labels {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+}
+
+.label {
+    display: flex;
+    gap: 12px;
+    background: #fff;
+    color: #000;
+    border: 1px dashed #999;
+    border-radius: 6px;
+    padding: 12px;
+    break-inside: avoid;
+}
+
+.label-qr {
+    flex: none;
+    width: 128px;
+}
+
+.label-qr svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.label-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    font-size: 0.9rem;
+}
+
+.label-hub {
+    font-size: 1.8rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0.05em;
+}
+
+.label-code {
+    font-family: Consolas, "Courier New", monospace;
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+
+.label-to {
+    margin: 4px 0;
+}
+
+.label-urgent {
+    align-self: flex-start;
+    border: 2px solid #000;
+    padding: 0 6px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.pill-ready {
+    background: #dff4f2;
+    color: #0f6d68;
+}
+
+.hub-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.hub-list li {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.hub-list li:last-child {
+    border-bottom: 0;
+}
+
+.tabs {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    white-space: nowrap;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+}
+
+.tabs a {
+    padding: 8px 14px;
+    text-decoration: none;
+    color: var(--muted);
+    border-bottom: 3px solid transparent;
+}
+
+.tabs a.active {
+    color: var(--navy);
+    font-weight: 600;
+    border-bottom-color: var(--orange);
+}
+
+.scan-input {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.scan-input input {
+    flex: 1;
+    min-width: 0;
+    font-size: 1.25rem;
+    letter-spacing: 0.04em;
+}
+
+.scan-input .button {
+    margin-top: 0;
+}
+
+#preview {
+    display: block;
+    width: 100%;
+    max-width: 360px;
+    margin-top: 12px;
+    border-radius: 8px;
+}
+
+#preview[hidden] {
+    display: none;
+}
+
+.scan-result {
+    border-left: 6px solid var(--teal);
+}
+
+.scan-result.scan-problem {
+    border-left-color: var(--danger);
+}
+
+.scan-label {
+    color: var(--muted);
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+}
+
+.scan-big {
+    font-size: 2.75rem;
+    font-weight: 700;
+    color: var(--navy);
+    line-height: 1.1;
+}
+
+.scan-problem .scan-big {
+    color: var(--danger);
+}
+
+.scan-facts {
+    margin: 12px 0 0;
+}
+
+.scan-facts div {
+    display: flex;
+    gap: 12px;
+    padding: 4px 0;
+}
+
+.scan-facts dt {
+    width: 80px;
+    flex: none;
+    color: var(--muted);
+}
+
+.scan-facts dd {
+    margin: 0;
+}
+
+@media print {
+    .topbar,
+    .no-print {
+        display: none;
+    }
+
+    body {
+        background: #fff;
+    }
+
+    main {
+        max-width: none;
+        padding: 0;
+    }
+
+    .card {
+        border: 0;
+        padding: 0;
+        break-inside: avoid;
+    }
+
+    .labels {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6mm;
+    }
+
+    .label {
+        border: 1px solid #000;
+    }
+
+    .button {
+        display: none;
+    }
+}

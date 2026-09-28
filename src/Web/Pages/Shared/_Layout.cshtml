@@ -33,6 +33,13 @@
                     {
                         <a asp-page="/Customer/Index">My deliveries</a>
                     }
+                    if (user.IsInRole(Roles.HubStaff) || user.IsInRole(Roles.TenantAdmin))
+                    {
+                        <a asp-page="/Hub/Routes">Pickup routes</a>
+                        <a asp-page="/Hub/Scan">Scan</a>
+                        <a asp-page="/Hub/Shelves">Shelves</a>
+                        <a asp-page="/Hub/Shuttle">Shuttle</a>
+                    }
                     if (user.IsInRole(Roles.PlatformAdmin))
                     {
                         <a asp-page="/Platform/Tenants">Tenants</a>

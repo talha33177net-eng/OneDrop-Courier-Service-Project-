@@ -65,8 +65,8 @@ The user supplied two PDFs (not stored in the repo): *OneDrop Implementation Pla
 | Week | Theme | Done when | Status |
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
-| 2 | Grouping core | 3 shops' orders form 1 group | 🟡 In progress — 2.1–2.8 done, next 2.9 |
-| 3 | Operations and money | Group delivered, merchants settled | ⬜ |
+| 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
+| 3 | Operations and money | Group delivered, merchants settled | 🔄 3.1–3.3 done, next 3.4 |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
 Task-level detail, the cut list, the job schedule, must-pass tests and the daily log are in
@@ -74,18 +74,18 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 
 ---
 
-## 3. What exists today (Week 1, plus Week 2 tasks 2.1–2.8)
+## 3. What exists today (Weeks 1 and 2, tasks 3.1–3.3)
 
 ### Solution layout (`Courier.sln`)
 | Project | Path | Contents |
 |---|---|---|
-| Domain | `src/Domain` | Entities and rules, no packages. `Common` (Entity with domain events, TenantEntity, Result/Error), `Platform/Tenant`, `Network` (Hub, Zone, Area), `Customers` (Customer, CustomerAddress, PhoneNumber, PhoneOtp), `Merchants` (Merchant, MerchantApiKey, PickupPoint), `Orders` (Order + state machine, Package, OrderStatusHistory), `Grouping` (DeliveryGroup + state machine and lock time, events), `Pricing` (DeliveryFeeCalculator, FeeSchedule), `Notifications` (OutboxMessage + retry rule) |
-| Application | `src/Application` | Use cases as vertical slices: `Orders/CreateOrder`, `Orders/GetOrder`, `Network/ListAreas`, `Auth/PhoneLogin`, `Customers/CustomerDirectory` (find-or-create by phone/address), `Grouping/DeliveryGrouping` (join or open the order's group; quote), `Grouping/LockDueGroups` (the lock job), `Grouping/ShipNow`, `Grouping/CustomerDeliveries` ("My deliveries"), `Pricing/GetQuote`, `Notifications` (outbox contracts, `SendOutbox` job and SMS texts). Interfaces: `IAppDbContext`, `ITenantJob`, `ITenantContext` (`TenantInfo.Fees`), `ITenantCatalog`, `ICurrentUser`, `ISmsSender`; `QueryFilters` (filter names) |
+| Domain | `src/Domain` | Entities and rules, no packages. `Common` (Entity with domain events, TenantEntity, Result/Error), `Platform/Tenant`, `Network` (Hub, Zone, Area, PickupRoute), `Customers` (Customer, CustomerAddress, PhoneNumber, PhoneOtp), `Merchants` (Merchant, MerchantApiKey, PickupPoint), `Orders` (Order + state machine and scans, Package with its hub, PackageLabel, OrderStatusHistory), `Grouping` (DeliveryGroup + state machine, lock time and shelf, events), `Pricing` (DeliveryFeeCalculator, FeeSchedule), `Notifications` (OutboxMessage + retry rule) |
+| Application | `src/Application` | Use cases as vertical slices: `Orders/CreateOrder`, `Orders/GetOrder`, `Network/ListAreas`, `Network/PickupRoutes` (route list and sheet), `Network/HubScan` (collect, receive at a hub, shelves, shuttle load and manifest), `Orders/PackageLabels`, `Auth/PhoneLogin`, `Customers/CustomerDirectory` (find-or-create by phone/address), `Grouping/DeliveryGrouping` (join or open the order's group; quote), `Grouping/LockDueGroups` (the lock job), `Grouping/ShipNow`, `Grouping/CustomerDeliveries` ("My deliveries"), `Pricing/GetQuote`, `Notifications` (outbox contracts, `SendOutbox` job and SMS texts). Interfaces: `IAppDbContext`, `ITenantJob`, `ITenantContext` (`TenantInfo.Fees`), `ITenantCatalog`, `ICurrentUser`, `ISmsSender`; `QueryFilters` (filter names) |
 | Infrastructure | `src/Infrastructure` | `Persistence/AppDbContext` (EF Core, query filters), `Configurations/*` (mapping), `TenantSaveInterceptor`, `MultiTenancy` (TenantContext, TenantCatalog), `Identity` (AppUser, AppRole, claims), `Sms/FakeSmsSender`, `Seeding/DemoDataSeeder`, `Jobs` (Hangfire setup, TenantJobRunner, TenantJobRegistry, OutboxDispatcher); `AppDbContext.SaveChangesAsync` writes the outbox |
-| Web | `src/Web` | Razor Pages portals, `Api/V1` (orders, quote, areas by API key; deliveries by customer cookie), `Authentication/ApiKeyAuthenticationHandler`, `MultiTenancy` middleware, `Program.cs` |
+| Web | `src/Web` | Razor Pages portals (merchant, customer, hub, platform), `Labels/LabelQrCode` (QRCoder), `Api/V1` (orders, quote, areas by API key; deliveries by customer cookie), `Authentication/ApiKeyAuthenticationHandler`, `MultiTenancy` middleware, `Program.cs` |
 | Database | `src/Database` | SQL project (Microsoft.Build.Sql 2.1.0) → `Database.dacpac`. Owns the schema |
 | Database Update | `src/Database Update` | DbUp console (`dbup.exe`): data migrations in `Scripts/<Year>/`, data-loss scripts in `Scripts/Pre/` |
-| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 115 + 6 + 67 = **188 tests, all passing** |
+| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 154 + 6 + 81 = **241 tests, all passing** |
 | Tools | `tools/db/publish.ps1` | Deploys a database: `dbup pre` → dacpac publish → `dbup` |
 
 ### Features that work
@@ -134,23 +134,48 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   COD, the total at the door and "You save ৳70 against 3 separate deliveries" (tenant base fee × shops − group
   fee), with Ship now on open ones. It installs on a phone: `wwwroot/manifest.webmanifest`, icons, `sw.js`
   (no page caching, `offline.html` without a signal), linked by `Shared/_CustomerApp` in the layout's `Head` section.
-- **Not yet:** Ship now by SMS "reply 1" (needs an inbound SMS gateway), a screen for failed outbox messages,
+- **Pickup routes and labels** (3.1): `Network.PickupRoute`, one active route per zone leaving at a tenant-set
+  local time (2 PM for the launch zones). Hub staff and tenant admins see **Pickup routes** (`/Hub/Routes`: next
+  run, stops, orders, packages per zone) and a printable sheet per route (`/Hub/RouteSheet/{id}`): each pickup
+  point in the zone with orders still `Created`, their labels, "Next day" on Deliver fast and Don't hold orders.
+  Worked out when opened, no job. Merchants print QR labels (`/Merchant/Labels`, linked from "My orders"): one per
+  parcel, `OD-100001-1` (`PackageLabel`), with the destination hub code, recipient, area, shop and COD, never the
+  delivery group.
+- **Scanning and shelves** (3.2, `Application/Network/HubScan`): hub staff pick their hub (`/Hub/Scan?hub=MIR`)
+  and scan labels (hand scanner into the box, or the phone camera where the browser has `BarcodeDetector`).
+  **Collect at the shop** moves the whole order `Created` → `PickedUp` (it leaves the route sheet). **Receive at the
+  hub** records each package's hub and time (`Package.HubId`, `ReceivedOn`); the order is `AtHub` once every
+  package is in. At the hub its delivery leaves from, the delivery takes the lowest free shelf there
+  (`DeliveryGroup.Shelf`, shown as `MIR-01`) and keeps it until it is dispatched, delivered or cancelled; at another
+  hub the answer is "Send on to GUL" and no shelf. A repeated scan says so and changes nothing; another operator's
+  label is "not found". `/Hub/Shelves?hub=MIR` lists each shelf's delivery, day, orders and parcels here of total,
+  Ready once locked and complete. Two scans at once are settled by the row version and `UX_DeliveryGroup_Hub_Shelf`
+  and retried from fresh rows.
+- **Hub shuttle** (3.3): a parcel scanned in at a hub other than its delivery's is loaded with the scan tab **Load the
+  shuttle** (`Order.LoadForShuttle`: off the hub, `Package.ShuttleToHubId` = the delivery's hub) and received at the
+  other end with the normal scan, which shelves it. `/Hub/Shuttle?hub=MIR` is the printable manifest: parcels to
+  load per destination hub, next-day ones first, and parcels on their way in. No job or time setting: staff load
+  when the shuttle leaves. The order stays `AtHub` in transit (all packages have a `ReceivedOn`).
+- **Not yet:** riders and trips (3.4), a screen to change route times, Ship now by SMS "reply 1" (needs an inbound SMS gateway), a screen for failed outbox messages,
   merchant screens to create API keys or enter orders manually, tenant admin screens.
 
 ### Database
 - Schemas: `Platform` (Tenant), `Identity` (User, Role, UserRole, UserClaim, UserLogin, UserToken, RoleClaim),
-  `Network` (Hub, Zone, Area), `Customers` (Customer, CustomerAddress, PhoneOtp), `Merchants` (Merchant,
+  `Network` (Hub, Zone, Area, PickupRoute), `Customers` (Customer, CustomerAddress, PhoneOtp), `Merchants` (Merchant,
   MerchantApiKey, PickupPoint), `Orders` (Order, Package, OrderStatusHistory, sequence OrderNumber → `OD-100001`),
   `Grouping` (DeliveryGroup, sequence DeliveryGroupNumber → `DG-100001`; one `Open` group per customer + address
   by filtered unique index), `Notifications` (OutboxMessage). `Order.DeliveryGroupId` is NOT NULL: every order travels in a group
   (`Scripts/Pre/001_GroupExistingOrders` grouped the orders saved before 2.2). `Order.AddedFee` is NOT NULL
-  (`Scripts/Pre/002_PriceExistingOrders` priced the orders saved before 2.3).
+  (`Scripts/Pre/002_PriceExistingOrders` priced the orders saved before 2.3). `Package.HubId`/`ReceivedOn` say
+  where a parcel was last scanned in (null on the shuttle, when `ShuttleToHubId` says where it is going);
+  `DeliveryGroup.Shelf` is unique per hub while set (`UX_DeliveryGroup_Hub_Shelf`).
 - `Platform.Tenant` settings (fees, `GroupJoinDays`, time zone, currency, SMS sender) have **no defaults**, in
   SQL or C#: every tenant states its own. No business value is hard-coded anywhere.
 - Every tenant table: `TenantId` + FK + index; housekeeping columns `Archived`, `UpdatedId`, `UpdatedOn`, `Created`.
 - Seeded by DbUp `2026/001_SeedLaunchTenants.sql`: **OneDrop Dhaka** (id 1, slug `dhaka`, 7 zones on 5 hubs,
   32 areas, ৳60 + ৳25) and **OneDrop Chattogram** (id 2, slug `chattogram`, 5 zones on 2 hubs, 14 areas,
-  ৳70 + ৳30). Roles are seeded by `Script.PostDeployment.sql`.
+  ৳70 + ৳30). `2026/002_SeedPickupRoutes.sql` gives every launch zone a 2 PM pickup route. Roles are seeded by
+  `Script.PostDeployment.sql`.
 - Dev data in `OneDrop` right now: merchants 1–3 (Dhaka: Fashion House, Gadget BD, Beauty Shop) and 4–6
   (Chattogram, same names); orders OD-100001, OD-100002, OD-100004 (the three Dhaka shops, **same customer 1 and
   address 1, one group DG-100003**) and OD-100003 (Chattogram, same phone, different customer 2, DG-100004).
@@ -163,7 +188,14 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   29 September; 01991998650 is a second signed-in Dhaka customer. OD-100031 to OD-100034 are the 2.7 live check
   (phone 01764090796; outbox rows 1–5, all sent; DG-100016 closed by Ship now). Orders before OD-100031 have no
   outbox rows. OD-100035 to OD-100037 are the 2.8 live check (phone 01845127390, three shops with COD, DG-100019
-  closed by Ship now from the page). DG-100003 also totals ৳110. The Hangfire tables
+  closed by Ship now from the page). OD-100038 to OD-100040 are the Week 2 demo run (phone 01912734580, the
+  three Dhaka shops in DG-100020 for ৳110, locked by the job after its deadline was moved into the past by hand).
+  OD-100041 (Fashion House, 2 packages) and OD-100042 (Gadget BD, fast) are the 3.1 live check (phone 01957461664).
+  OD-100043 to OD-100046 are the 3.2 live check (phone 01834561290): OD-100043–45 collected/received at MIR, their
+  DG-100023 on shelf MIR-01; OD-100046 (Gulshan 1) scanned at MIR then GUL, its DG-100024 on GUL-01.
+  OD-100047 and OD-100048 are the 3.3 live check (phone 01745219083, Banani): OD-100048 (fast) went MIR → shuttle →
+  GUL, shelf GUL-02; OD-100047 is still on the shuttle to GUL.
+  DG-100003 also totals ৳110. The Hangfire tables
   are installed at app start in both databases (mapping the dashboard opens the storage); only `OneDrop` runs jobs,
   as the integration tests start no job server. Group numbers have gaps: a sequence value used in a rolled-back
   dry run is not reused.
@@ -206,6 +238,14 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 | "You save" = the tenant's base fee × distinct shops − the group fee; nothing for one shop | The documentation compares with ৳60 per separate courier, the one-shop price; no second price setting to keep in step |
 | `Order.IsForDelivery` (not cancelled, refused or returned) drives the fee, the COD due and the package count | One rule, so the customer page, the door and the fee never disagree |
 | The customer app's service worker caches no pages, only the offline page; the manifest is linked by a plain path | Delivery data changes all day; `~/` would fingerprint the manifest URL per build |
+| `Network.PickupRoute` (not `Route`), one active per zone, time set by the tenant; the sheet is worked out when opened | `Route` clashes with ASP.NET's `[Route]`; an order placed just before the run is on the sheet, and no job has to keep a stored list in step |
+| A parcel is collected by the route of its **pickup point's** zone, not `Merchant.ZoneId` | That is where the parcel is; a merchant can have pickup points in several zones |
+| Label = `{order number}-{package}` (`PackageLabel`), QR holds only that code; it shows the destination hub, never the group | The scanner's tenant decides whose parcel it is; a label must not tell a merchant about the customer's other shops |
+| Hub pages use policy `Operations` (hub staff or tenant admin) | The operator's own staff; another operator's route is a 404 |
+| Hub scans are per package (`Package.HubId`); `AtHub` = every package in. Collecting at the shop is per order | A delivery's parcels must all be on its shelf before the rider takes it; the collector takes the whole order |
+| A delivery takes the lowest free shelf at its own hub at its first parcel and frees it when it leaves | Fixed, numbered shelves; the unique index settles two scans taking the same one |
+| Hub staff choose their hub on the page (`?hub=MIR`), not from their login | One hub-staff login per operator in the MVP; a hub on the user can come with the rider app |
+| The hub shuttle is a load scan and a receive scan; on the shuttle a package has no `HubId`, only `ShuttleToHubId` | "Scan at every handover"; a package is never at two hubs, and the manifest shows what is left to load |
 
 ---
 
@@ -282,6 +322,9 @@ git push                                          # main tracks origin/main
 | Save entities that raise events with `SaveChangesAsync` | The sync `SaveChanges` refuses them: only the async path writes the outbox |
 | EF cannot filter or sort after a projection into a constructor (`select new Row(a, b)` then `.Where`) | Project with member initialisers (`new Row { A = a }`) when the query is composed further; a constructor is fine in the final `Select` |
 | `~/` links are rewritten by `MapStaticAssets().WithStaticAssets()` to a fingerprinted URL | Use a plain path for anything that needs a stable address (the web manifest, the service worker) |
+| Razor HTML-encodes `৳` (and other non-Latin text) written inside a C# expression (`@($"৳{x}")` → `&#x9F3;`) | Keep the symbol in the markup: `৳@amount.ToString("N0")` |
+| The integration database holds hundreds of waiting Mirpur orders from earlier runs | Tests that count what is waiting use shops of their own in another zone (Uttara), and lists must not assume a short backlog |
+| The link to ras-x2 is sometimes slow (DNS takes seconds): sqlpackage can stall before connecting, tests can hit a login timeout | Check `sys.dm_exec_sessions` for the process; if it has no session, stop it and run again. Do not pipe `publish.ps1` into `Select-Object -Last`, which hides its progress |
 
 ---
 

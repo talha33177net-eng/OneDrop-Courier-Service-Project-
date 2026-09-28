@@ -30,4 +30,29 @@ public class Package : TenantEntity, IMerchantOwned
     public string Description { get; private set; } = "";
 
     public int WeightGrams { get; private set; }
+
+    /// <summary>
+    /// The hub the parcel is at: where it was last scanned in. Null until it first reaches a hub, and while it is on
+    /// the shuttle to <see cref="ShuttleToHubId"/>.
+    /// </summary>
+    public long? HubId { get; private set; }
+
+    /// <summary>When it was last scanned in at a hub (UTC). Null only until it first reaches one.</summary>
+    public DateTime? ReceivedOn { get; private set; }
+
+    /// <summary>The hub the parcel is travelling to on the hub shuttle. Null when it is not on the shuttle.</summary>
+    public long? ShuttleToHubId { get; private set; }
+
+    internal void ReceiveAt(long hubId, DateTime now)
+    {
+        HubId = hubId;
+        ReceivedOn = now;
+        ShuttleToHubId = null;
+    }
+
+    internal void LoadForShuttle(long toHubId)
+    {
+        HubId = null;
+        ShuttleToHubId = toHubId;
+    }
 }

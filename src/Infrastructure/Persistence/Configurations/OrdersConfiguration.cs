@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Domain.Customers;
 using Domain.Grouping;
 using Domain.Merchants;
+using Domain.Network;
 using Domain.Orders;
 
 namespace Infrastructure.Persistence.Configurations;
@@ -54,7 +55,13 @@ public class PackageConfiguration : IEntityTypeConfiguration<Package>
     {
         builder.MapTenantOwned(Schemas.Orders);
         builder.Property(p => p.Description).HasMaxLength(200);
+        builder.HasOne<Hub>().WithMany().HasForeignKey(p => p.HubId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Hub>().WithMany().HasForeignKey(p => p.ShuttleToHubId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(p => new { p.OrderId, p.Sequence }).IsUnique().HasDatabaseName("UX_Package_Order_Sequence");
+        builder.HasIndex(p => p.HubId).HasFilter("[HubId] IS NOT NULL").HasDatabaseName("IX_Package_Hub");
+        builder.HasIndex(p => p.ShuttleToHubId)
+            .HasFilter("[ShuttleToHubId] IS NOT NULL")
+            .HasDatabaseName("IX_Package_ShuttleToHub");
     }
 }
 

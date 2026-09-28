@@ -10,6 +10,9 @@ public static class Policies
     public const string CustomerPortal = nameof(CustomerPortal);
     public const string PlatformAdmin = nameof(PlatformAdmin);
 
+    /// <summary>The operator's own staff: hub staff and tenant admins.</summary>
+    public const string Operations = nameof(Operations);
+
     public static void Configure(AuthorizationOptions options)
     {
         options.AddPolicy(MerchantApi, policy => policy
@@ -23,5 +26,8 @@ public static class Policies
             .RequireRole(Roles.Customer)
             .RequireClaim(AppClaims.CustomerId));
         options.AddPolicy(PlatformAdmin, policy => policy.RequireRole(Roles.PlatformAdmin));
+        options.AddPolicy(Operations, policy => policy
+            .RequireRole(Roles.HubStaff, Roles.TenantAdmin)
+            .RequireClaim(AppClaims.TenantId));
     }
 }
