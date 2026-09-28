@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Domain.Customers;
+using Domain.Grouping;
 using Domain.Merchants;
 using Domain.Network;
 using Domain.Orders;
@@ -39,6 +40,8 @@ public interface IAppDbContext
     DbSet<Package> Packages { get; }
 
     DbSet<OrderStatusHistory> OrderStatusHistory { get; }
+
+    DbSet<DeliveryGroup> DeliveryGroups { get; }
 
     EntityEntry<TEntity> Entry<TEntity>(TEntity entity)
         where TEntity : class;

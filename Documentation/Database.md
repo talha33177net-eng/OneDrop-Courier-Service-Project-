@@ -11,7 +11,7 @@ migrates. Follow the existing files as the reference.
 | Schema DDL | `src/Database/Security/<Schema>.sql` |
 | Baseline rows every database needs (roles) | `src/Database/Script.PostDeployment.sql` (insert-if-missing, never overwrite) |
 | Seed and data migrations (DbUp) | `src/Database Update/Scripts/<Year>/NNN_PascalCaseName.sql` |
-| Intentional data loss (drop or rename a column) | `src/Database Update/Scripts/Pre/NNN_Name.sql` |
+| Intentional data loss (drop or rename a column), or NULL → NOT NULL on a table with rows (backfill + ALTER, guarded) | `src/Database Update/Scripts/Pre/NNN_Name.sql` |
 | EF mapping | `src/Infrastructure/Persistence/Configurations/<Module>Configuration.cs` |
 | Ad-hoc analysis SQL | `sql/` at the repository root (never deployed) |
 

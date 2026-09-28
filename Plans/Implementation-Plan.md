@@ -13,9 +13,9 @@ The one place to see where we are and what comes next. Built from the two projec
 
 | | |
 |---|---|
-| Current week | **Week 2 — Grouping core** (not started) |
-| Next task | 2.1 Delivery group entity and table |
-| Last session | 2026-09-27 — Week 1 finished, projects renamed, test database restored |
+| Current week | **Week 2 — Grouping core** (in progress, 2 of 9) |
+| Next task | 2.3 Pricing |
+| Last session | 2026-09-28 — tasks 2.1 and 2.2: delivery group table; orders join or open their group on create |
 | Blockers | None |
 
 ---
@@ -45,11 +45,11 @@ A task is **not done** until all of these pass. Record the result in the daily l
 | Week | Theme | Done when | Status |
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
-| 2 | Grouping core | 3 shops' orders form 1 group | ⬜ Next |
+| 2 | Grouping core | 3 shops' orders form 1 group | 🟡 In progress (2.1–2.2 done) |
 | 3 | Operations and money | Group delivered, merchants settled | ⬜ |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
-Tests today: **62 passing** (43 domain, 6 architecture, 13 integration).
+Tests today: **102 passing** (70 domain, 6 architecture, 26 integration).
 
 ---
 
@@ -98,17 +98,30 @@ Rules from the documentation this week must implement:
 - Only **one open group per customer + address**, even with two orders at the same moment.
 
 Tasks:
-- [ ] **2.1 Delivery group entity and table.** `Grouping.DeliveryGroup` (TenantId, CustomerId, AddressId, HubId,
+- [x] **2.1 Delivery group entity and table.** `Grouping.DeliveryGroup` (TenantId, CustomerId, AddressId, HubId,
       Number DG-…, Status Open/Locked/Dispatched/Delivered/Cancelled, OpenedOn, LocksAt, LockedOn, RowVersion).
       Filtered unique index: one `Open` group per (CustomerId, AddressId). `Orders.Order.DeliveryGroupId`.
       *Tests:* state machine unit tests; schema-match test covers the new table.
-- [ ] **2.2 Grouping rule in Create Order.** Find the open group or open a new one, inside the same save as the
+      *Done 2026-09-28:* `DeliveryGroup.Open` fixes `LocksAt` = midnight starting Day 3 in the tenant's time zone
+      (UTC); `CanJoin(now)`; `MoveTo(status, now)` records `LockedOn`. `Order.DeliveryGroupId` is nullable for
+      now: the four existing orders have no group. *Left for 2.2:* backfill them and consider making it NOT NULL;
+      decide how Deliver fast groups carry their next-day date (they must not stay `Open`).
+- [x] **2.2 Grouping rule in Create Order.** Find the open group or open a new one, inside the same save as the
       order. Deliver fast / Don't hold get their own single-order group. Concurrency: the unique index + retry.
       *Tests:* Day 1 and Day 2 join, Day 3 starts a new group (FakeTimeProvider); home vs office = 2 groups;
       parallel orders for a new customer = 1 group (integration).
+      *Done 2026-09-28:* `Application/Grouping/DeliveryGrouping` saves the order and its group in one save. A
+      waiting order joins the open group or opens one; an open group past `LocksAt` is locked on the spot
+      (`LockIfDue`, `LockedOn` = `LocksAt`) so a new one can open before the lock job exists. Deliver fast and
+      Don't hold get `DeliveryGroup.OpenAlone`: locked at once, delivered the next day. Losing the insert race
+      to the unique index → join the winner's group. `Order.DeliveryGroupId` is NOT NULL; the orders saved
+      before grouping were grouped by `Pre/001_GroupExistingOrders`. The API response does not mention the group
+      (merchant privacy). Tenant setting defaults (৳60, ৳25, 2 days, time zone) removed from C# and SQL.
 - [ ] **2.3 Pricing.** One `DeliveryFeeCalculator` used everywhere (strategy per tenant settings). Create Order
-      returns `fee` and `groupFee`. *Tests:* ৳60 / ৳85 / ৳110 / ৳135 for 1–4 shops; two orders from the same shop
-      count once; Chattogram prices differ.
+      returns `fee` and `groupFee`. Every amount comes from the tenant's settings, never a constant in code.
+      *Tests:* 1–4 shops give base, base + extra, base + 2 × extra, base + 3 × extra (Dhaka ৳60 / ৳85 / ৳110 /
+      ৳135, read from the tenant); two orders from the same shop count once; Chattogram prices differ.
+      Decide the fee for Deliver fast (`FastDeliveryFee`) and Don't hold orders.
 - [ ] **2.4 Quote endpoint.** `GET /api/v1/quote?phone=&area=&line1=` → "৳60" or "+৳25" for the checkout, without
       revealing which other shops are in the group (merchant privacy). *Tests:* quote matches the fee on create.
 - [ ] **2.5 Hangfire and the lock job.** Hangfire on SQL Server; jobs take the tenant as a parameter.
@@ -205,9 +218,9 @@ Payments stay fake in the MVP either way.
 
 | Test | Status |
 |---|---|
-| An order on Day 3 starts a new group | ⬜ Week 2 |
-| Fee = ৳60 + ৳25 per distinct accepted shop | ⬜ Week 2 |
-| Only one open group per customer + address, even with two orders at the same moment | ⬜ Week 2 (one customer: ✅) |
+| An order on Day 3 starts a new group | ✅ `DeliveryGroupingTests` |
+| Fee = base + extra per distinct accepted shop (tenant settings; Dhaka ৳60 + ৳25) | ⬜ Week 2 |
+| Only one open group per customer + address, even with two orders at the same moment | ✅ `DeliveryGroupingTests` (race forced and recovered) |
 | Tenant A gets 404 for tenant B's order | ✅ `OrderApiTests` |
 | A merchant sees only its own parcels | ✅ `OrderApiTests` |
 | Every entity (except Platform) has a TenantId — build fails otherwise | ✅ `TenantOwnershipTests` |
@@ -223,6 +236,14 @@ Payments stay fake in the MVP either way.
 | 2026-09-27 | Tenant from subdomain (portals) or API key (API); tenant staff sign in on their own subdomain | Host-only cookies keep tenants apart; login-based tenant only needed for a future rider app |
 | 2026-09-27 | No product-name prefix in code (`src/Web`, `AppDbContext`, `Courier.sln`) | User preference, DCN style. The brand stays in UI text and data |
 | 2026-09-27 | Integration tests use `OneDrop-Test` on ras-x2 (`testsettings.json`) | Must-pass tests need real SQL Server; test data stays out of `OneDrop` |
+| 2026-09-28 | A group's `LocksAt` is the first moment of delivery day (tenant midnight, stored UTC), fixed at opening; an order joins when `now < LocksAt` | One exclusive boundary instead of "11:59 PM": no gap second, and the lock job and the join rule use the same value |
+| 2026-09-28 | Group status Dispatched → Locked is allowed (customer not home, back to the hub for the re-attempt); `LockedOn` keeps the first lock time | The documented one free re-attempt, without a separate status |
+| 2026-09-28 | "One open group per customer + address" is enforced by the filtered unique index `UX_DeliveryGroup_Customer_Address_Open` | The database settles simultaneous orders; the code retries on the violation (2.2) |
+| 2026-09-28 | No hard-coded business values: tenant settings (fees, join days, time zone, currency, SMS sender) have no defaults in C# or SQL; every tenant states its own | Owner rule. A silent default would give a new operator Dhaka's prices |
+| 2026-09-28 | Deliver fast and Don't hold orders get their own group, created `Locked` with `LocksAt` = the next midnight (tenant zone) | They never wait, so they must not hold the customer's one `Open` slot; the lock job and trip planning read the same `LocksAt` |
+| 2026-09-28 | Create Order locks an open group whose `LocksAt` has passed before opening the next one | Correct before the lock job (2.5) exists and whenever the job runs late; `LockedOn` records the deadline, not the late moment |
+| 2026-09-28 | `Order.DeliveryGroupId` NOT NULL; the change and the backfill of older orders run in `Scripts/Pre` | SqlPackage refuses NULL → NOT NULL on a table with rows; DCN makes deliberate schema changes in the pre phase |
+| 2026-09-28 | The merchant API never returns group data (number, delivery day, size) | A merchant must not learn that the customer also bought elsewhere |
 
 ## Quick reference
 
@@ -239,6 +260,40 @@ Payments stay fake in the MVP either way.
 ## Daily log
 
 Newest first. One entry per working day: what was done, how it was tested, what is next.
+
+### 2026-09-28
+- **Done:** connection strings moved out of the repository into git-ignored `appsettings.Local.json` /
+  `testsettings.Local.json`; private repository https://github.com/talha33177net-eng/OneDrop created and `main`
+  pushed (single commit, owner as the only author and contributor); conventions moved to `Documentation/`;
+  `Documentation/Project-Context.md` written as the handover document for any new session.
+- **Tested:** build clean; 43 domain + 6 architecture + 13 integration tests pass; integration run added orders
+  only to `OneDrop-Test` (dev `OneDrop` unchanged at 4); `publish.ps1` and the app work from the local files;
+  pushed tree scanned for secrets and local files (none); every relative link in the docs resolves.
+- **Done (task 2.1):** `Domain/Grouping/DeliveryGroup` + `DeliveryGroupStatus`; SQL project: schema `Grouping`,
+  sequence `DeliveryGroupNumber` (`DG-100001`), table `DeliveryGroup` with `UX_DeliveryGroup_Customer_Address_Open`
+  (`WHERE Status = 1`) and `IX_DeliveryGroup_Tenant_Status_LocksAt` for the lock job; `Orders.Order.DeliveryGroupId`
+  (nullable, FK, index); EF mapping and `IAppDbContext.DeliveryGroups`.
+- **Tested:** build 0 errors, no new warnings; 18 new domain tests (lock time in the Dhaka zone around UTC
+  midnight, Day 1/Day 2 join and Day 3 does not, Ship now, state machine, re-attempt keeps `LockedOn`) and 3 new
+  integration tests (number and tenant stamped, a second open group for the same customer + address is refused
+  by the index, a new one opens once the first is locked); 61 + 6 + 16 = 83 pass, none skipped, schema-match
+  green. Publish script reviewed first: the new column rebuilds `Orders.Order` with its rows copied; both
+  databases published. Live: dev `OneDrop` still has its 4 orders and packages after the rebuild; the running app
+  returned OD-100001/OD-100002 to their merchants and 404 for another merchant's and another tenant's order.
+- **Done (task 2.2):** `DeliveryGrouping` service in Create Order (join / open / race recovery / lock a group
+  past its deadline); `DeliveryGroup.OpenAlone` and `LockIfDue`; `Order.WaitsForGroup`, `Order.PlaceIn`;
+  `Order.DeliveryGroupId` NOT NULL with `Pre/001_GroupExistingOrders` (backfill + ALTER, guarded); tenant setting
+  defaults removed from `Tenant` (C#) and `Platform.Tenant` (SQL), unused `Tenant(name, slug)` constructor removed.
+- **Tested:** build 0 errors, no new warnings; 9 new domain tests (next-day solo group, lock at the deadline and
+  not before, which orders wait, placing in another address's group is refused) and 10 new integration tests
+  (3 shops → 1 group, home and office → 2, 9 parallel orders → 1, fast and Don't hold alone beside the open
+  group, response has no group data, Day 1 / Day 2 join and Day 3 opens a new group with the old one locked at
+  its deadline (fake clock), join days from the tenant, and the race forced with an interceptor — shown to fail
+  with the recovery disabled). 70 + 6 + 26 = 102 pass, none skipped. Backfill dry-run in a rolled-back
+  transaction on both databases, then published: dev OD-100001/002/004 share one group, OD-100003 has its own.
+  Live: 9 parallel orders from the 3 Dhaka shops for a new phone → 201s, one open group locking at Wednesday
+  00:00 Dhaka; a fast order → its own locked next-day group; the same phone in Chattogram → a separate group.
+- **Next:** task 2.3, pricing from the tenant's settings.
 
 ### 2026-09-27
 - **Done:** Week 1 complete (tasks 1.1–1.6).

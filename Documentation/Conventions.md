@@ -4,6 +4,7 @@ Delivery-grouping platform: orders from different shops to the same customer tra
 modular monolith on .NET 10, SQL Server. The product is described in `README.md`, the 4-week plan and progress in
 `Plans/Implementation-Plan.md`.
 
+[Project-Context.md](Project-Context.md) explains the product, the decisions and the environment.
 [Database.md](Database.md) is the authority for SQL, the SQL project and DbUp. It is not repeated here.
 
 ## Working rhythm

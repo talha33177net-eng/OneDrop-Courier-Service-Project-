@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
 using Application.Common;
 using Application.Customers;
+using Application.Grouping;
 using Domain.Common;
 using Domain.Customers;
 using Domain.Orders;
@@ -13,14 +14,16 @@ namespace Application.Orders.CreateOrder;
 
 /// <summary>
 /// Accepts an order from a merchant: validate, recognise the customer by phone, resolve the address to an
-/// area, zone and hub, and save the order with its packages and first status in one SaveChanges.
-/// Grouping (Week 2) hooks in between resolving the address and saving.
+/// area, zone and hub, and save the order with its packages and first status in one SaveChanges, together
+/// with the delivery group it joins or opens. The response never mentions the group: it would tell the merchant
+/// whether the customer also bought elsewhere.
 /// </summary>
 public class CreateOrderHandler(
     IAppDbContext db,
     ITenantContext tenantContext,
     ICurrentUser currentUser,
     CustomerDirectory customers,
+    DeliveryGrouping grouping,
     IValidator<CreateOrderCommand> validator)
 {
     private static readonly JsonSerializerOptions HashOptions = new(JsonSerializerDefaults.Web);
@@ -107,10 +110,9 @@ public class CreateOrderHandler(
         }
 
         var order = created.Value;
-        db.Orders.Add(order);
         try
         {
-            await db.SaveChangesAsync(cancellationToken);
+            await grouping.SaveInGroupAsync(order, area.Zone!.HubId, cancellationToken);
         }
         catch (DbUpdateException) when (command.IdempotencyKey is not null)
         {

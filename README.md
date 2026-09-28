@@ -8,7 +8,8 @@ hubs, merchants and prices.
 
 ## Status
 
-The detailed task list, progress and daily log live in [Plans/Implementation-Plan.md](Plans/Implementation-Plan.md).
+New here? Start with [Documentation/Project-Context.md](Documentation/Project-Context.md). The detailed task list,
+progress and daily log live in [Plans/Implementation-Plan.md](Plans/Implementation-Plan.md).
 
 | Week | Scope | State |
 |---|---|---|

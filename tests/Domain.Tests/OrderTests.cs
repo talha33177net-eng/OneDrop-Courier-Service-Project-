@@ -1,4 +1,5 @@
 using Domain.Common;
+using Domain.Grouping;
 using Domain.Orders;
 
 namespace Domain.Tests;
@@ -96,5 +97,32 @@ public class OrderTests
         order.MoveTo(OrderStatus.Delivered);
 
         Assert.All(Enum.GetValues<OrderStatus>(), status => Assert.False(order.CanMoveTo(status)));
+    }
+
+    [Theory]
+    [InlineData(DeliverySpeed.Combine, false, true)]
+    [InlineData(DeliverySpeed.Combine, true, false)] // Don't hold
+    [InlineData(DeliverySpeed.Fast, false, false)] // Deliver fast
+    public void Only_a_combine_order_that_may_be_held_waits_for_the_group(DeliverySpeed speed, bool doNotHold, bool waits)
+    {
+        var order = Order.Create(Spec(new NewPackage("Box", 500)) with { Speed = speed, DoNotHold = doNotHold }).Value;
+
+        Assert.Equal(waits, order.WaitsForGroup);
+    }
+
+    [Fact]
+    public void An_order_is_placed_only_in_its_own_customer_and_addresss_group()
+    {
+        var order = Order.Create(Spec(new NewPackage("Box", 500))).Value;
+        var opened = new DateTime(2026, 9, 28, 4, 0, 0, DateTimeKind.Utc);
+        var dhaka = TimeZoneInfo.FindSystemTimeZoneById("Asia/Dhaka");
+        var own = DeliveryGroup.Open(new NewDeliveryGroup(1, 1, 1, opened, dhaka, 2));
+        var otherAddress = DeliveryGroup.Open(new NewDeliveryGroup(1, 2, 1, opened, dhaka, 2));
+
+        order.PlaceIn(own);
+
+        Assert.Same(own, order.DeliveryGroup);
+        Assert.Throws<InvalidOperationException>(() => order.PlaceIn(otherAddress));
+        Assert.Same(own, order.DeliveryGroup);
     }
 }

@@ -1,4 +1,5 @@
 using Domain.Common;
+using Domain.Grouping;
 
 namespace Domain.Orders;
 
@@ -60,6 +61,12 @@ public class Order : TenantEntity, IMerchantOwned
 
     public long AddressId { get; private set; }
 
+    /// <summary>The delivery group this order travels in, set by <see cref="PlaceIn"/> before the first save.</summary>
+    public long DeliveryGroupId { get; private set; }
+
+    /// <summary>Set with <see cref="PlaceIn"/> so a group opened for this order is saved with it.</summary>
+    public DeliveryGroup? DeliveryGroup { get; private set; }
+
     public long PickupPointId { get; private set; }
 
     /// <summary>
@@ -101,6 +108,12 @@ public class Order : TenantEntity, IMerchantOwned
     public IReadOnlyList<OrderStatusHistory> History => history;
 
     public int TotalWeightGrams => packages.Sum(package => package.WeightGrams);
+
+    /// <summary>
+    /// True when the order joins the customer's open group and waits for it. Deliver fast and Don't hold orders
+    /// travel alone, the next day.
+    /// </summary>
+    public bool WaitsForGroup => Speed == DeliverySpeed.Combine && !DoNotHold;
 
     public static Result<Order> Create(NewOrder spec)
     {
@@ -153,6 +166,21 @@ public class Order : TenantEntity, IMerchantOwned
         order.history.Add(new OrderStatusHistory(order, OrderStatus.Created, "Order received"));
 
         return order;
+    }
+
+    /// <summary>
+    /// Puts the order in a delivery group of the same customer and address. The caller decides which group
+    /// (<see cref="DeliveryGroup.CanJoin"/>); a group for someone else is a bug, not a business "no".
+    /// </summary>
+    public void PlaceIn(DeliveryGroup group)
+    {
+        if (group.CustomerId != CustomerId || group.AddressId != AddressId)
+        {
+            throw new InvalidOperationException("An order can only travel in its own customer and address's group.");
+        }
+
+        DeliveryGroup = group;
+        DeliveryGroupId = group.Id;
     }
 
     public bool CanMoveTo(OrderStatus status)

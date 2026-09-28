@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
 using Domain.Common;
 using Domain.Customers;
+using Domain.Grouping;
 using Domain.Merchants;
 using Domain.Network;
 using Domain.Orders;
@@ -57,6 +58,8 @@ public class AppDbContext(
     public DbSet<Package> Packages => Set<Package>();
 
     public DbSet<OrderStatusHistory> OrderStatusHistory => Set<OrderStatusHistory>();
+
+    public DbSet<DeliveryGroup> DeliveryGroups => Set<DeliveryGroup>();
 
     /// <summary>Read by the tenant filter at query time. Null means "no tenant", which matches no row.</summary>
     public long? CurrentTenantId => tenantContext.TenantId;

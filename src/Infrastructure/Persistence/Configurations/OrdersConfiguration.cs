@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Domain.Customers;
+using Domain.Grouping;
 using Domain.Merchants;
 using Domain.Orders;
 
@@ -31,6 +32,7 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasOne<Customer>().WithMany().HasForeignKey(o => o.CustomerId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<CustomerAddress>().WithMany().HasForeignKey(o => o.AddressId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<PickupPoint>().WithMany().HasForeignKey(o => o.PickupPointId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(o => o.DeliveryGroup).WithMany().HasForeignKey(o => o.DeliveryGroupId).OnDelete(DeleteBehavior.Restrict);
 
         builder.HasMany(o => o.Packages).WithOne(p => p.Order).HasForeignKey(p => p.OrderId).OnDelete(DeleteBehavior.Restrict);
         builder.Navigation(o => o.Packages).HasField("packages");

@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Application.Auth.PhoneLogin;
 using Application.Customers;
+using Application.Grouping;
 using Application.Network.ListAreas;
 using Application.Orders.CreateOrder;
 using Application.Orders.GetOrder;
@@ -15,6 +16,7 @@ public static class DependencyInjection
     {
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly, ServiceLifetime.Singleton);
         services.AddScoped<CustomerDirectory>();
+        services.AddScoped<DeliveryGrouping>();
         services.AddScoped<CreateOrderHandler>();
         services.AddScoped<GetOrderHandler>();
         services.AddScoped<ListAreasHandler>();

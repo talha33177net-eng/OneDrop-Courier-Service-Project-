@@ -6,6 +6,8 @@
 --          RowVersion guards concurrent status changes (hub scan versus rider app).
 -- Author: Courier team
 -- Date: 2026-09-27
+-- Updated: 2026-09-28 - Added DeliveryGroupId (Grouping.DeliveryGroup), NOT NULL: every order travels in a group
+--          (Pre/001_GroupExistingOrders put the orders saved before grouping into groups)
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Orders].[Order] (
     [Id]                BIGINT          IDENTITY (1, 1) NOT NULL,
@@ -13,6 +15,7 @@ CREATE TABLE [Orders].[Order] (
     [MerchantId]        BIGINT          NOT NULL,
     [CustomerId]        BIGINT          NOT NULL,
     [AddressId]         BIGINT          NOT NULL,
+    [DeliveryGroupId]   BIGINT          NOT NULL,
     [PickupPointId]     BIGINT          NOT NULL,
     [Number]            NVARCHAR (20)   CONSTRAINT [DF_Order_Number] DEFAULT (concat(N'OD-', NEXT VALUE FOR [Orders].[OrderNumber])) NOT NULL,
     [ExternalReference] NVARCHAR (100)  NULL,
@@ -34,6 +37,7 @@ CREATE TABLE [Orders].[Order] (
     CONSTRAINT [FK_Order_Merchant] FOREIGN KEY ([MerchantId]) REFERENCES [Merchants].[Merchant] ([Id]),
     CONSTRAINT [FK_Order_Customer] FOREIGN KEY ([CustomerId]) REFERENCES [Customers].[Customer] ([Id]),
     CONSTRAINT [FK_Order_CustomerAddress] FOREIGN KEY ([AddressId]) REFERENCES [Customers].[CustomerAddress] ([Id]),
+    CONSTRAINT [FK_Order_DeliveryGroup] FOREIGN KEY ([DeliveryGroupId]) REFERENCES [Grouping].[DeliveryGroup] ([Id]),
     CONSTRAINT [FK_Order_PickupPoint] FOREIGN KEY ([PickupPointId]) REFERENCES [Merchants].[PickupPoint] ([Id]),
     CONSTRAINT [FK_Order_User] FOREIGN KEY ([UpdatedId]) REFERENCES [Identity].[User] ([Id]),
     CONSTRAINT [chk_Order_Amounts] CHECK ([CodAmount] >= (0) AND [DeclaredValue] >= (0))
@@ -59,3 +63,8 @@ GO
 CREATE NONCLUSTERED INDEX [IX_Order_Tenant_Customer_Status]
     ON [Orders].[Order]([TenantId] ASC, [CustomerId] ASC, [Status] ASC)
     INCLUDE([AddressId]);
+
+
+GO
+CREATE NONCLUSTERED INDEX [IX_Order_DeliveryGroupId]
+    ON [Orders].[Order]([DeliveryGroupId] ASC);

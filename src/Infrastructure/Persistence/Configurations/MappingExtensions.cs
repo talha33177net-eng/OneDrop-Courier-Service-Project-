@@ -15,6 +15,7 @@ public static class Schemas
     public const string Customers = "Customers";
     public const string Merchants = "Merchants";
     public const string Orders = "Orders";
+    public const string Grouping = "Grouping";
 }
 
 internal static class MappingExtensions

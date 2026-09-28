@@ -28,9 +28,11 @@
     <TreatWarningsAsErrors>False</TreatWarningsAsErrors>
     <EnableDefaultSqlItems>false</EnableDefaultSqlItems>
     <SkipCheckForNewSDKVersion>true</SkipCheckForNewSDKVersion>
+    <ProjectGuid>{def293bc-c319-4efa-bfc3-af22b92a00e3}</ProjectGuid>
   </PropertyGroup>
   <ItemGroup>
     <Build Include="Security/Customers.sql" />
+    <Build Include="Security/Grouping.sql" />
     <Build Include="Security/Identity.sql" />
     <Build Include="Security/Merchants.sql" />
     <Build Include="Security/Network.sql" />
@@ -57,11 +59,32 @@
     <Build Include="Orders/Tables/Order.sql" />
     <Build Include="Orders/Tables/OrderStatusHistory.sql" />
     <Build Include="Orders/Tables/Package.sql" />
+    <Build Include="Grouping/Sequences/DeliveryGroupNumber.sql" />
+    <Build Include="Grouping/Tables/DeliveryGroup.sql" />
   </ItemGroup>
   <ItemGroup>
     <PostDeploy Include="Script.PostDeployment.sql" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Local.publish.xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Security\" />
+    <Folder Include="Platform\" />
+    <Folder Include="Platform\Tables\" />
+    <Folder Include="Identity\" />
+    <Folder Include="Identity\Tables\" />
+    <Folder Include="Network\" />
+    <Folder Include="Network\Tables\" />
+    <Folder Include="Customers\" />
+    <Folder Include="Customers\Tables\" />
+    <Folder Include="Merchants\" />
+    <Folder Include="Merchants\Tables\" />
+    <Folder Include="Orders\" />
+    <Folder Include="Orders\Sequences\" />
+    <Folder Include="Orders\Tables\" />
+    <Folder Include="Grouping\" />
+    <Folder Include="Grouping\Sequences\" />
+    <Folder Include="Grouping\Tables\" />
   </ItemGroup>
 </Project>
