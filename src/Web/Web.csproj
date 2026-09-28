@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="QRCoder" />
   </ItemGroup>
 
   <ItemGroup>

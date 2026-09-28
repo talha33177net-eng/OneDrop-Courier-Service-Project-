@@ -43,6 +43,8 @@ public class AppDbContext(
 
     public DbSet<Area> Areas => Set<Area>();
 
+    public DbSet<PickupRoute> PickupRoutes => Set<PickupRoute>();
+
     public DbSet<Customer> Customers => Set<Customer>();
 
     public DbSet<CustomerAddress> CustomerAddresses => Set<CustomerAddress>();

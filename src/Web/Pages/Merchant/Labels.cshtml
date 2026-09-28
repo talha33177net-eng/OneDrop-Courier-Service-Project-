@@ -1,0 +1,62 @@
+@page
+@using Application.Orders.PackageLabels
+@using Web.Labels
+@model Web.Pages.Merchant.LabelsModel
+@{
+    ViewData["Title"] = "Labels";
+}
+
+<div class="sheet-head no-print">
+    <div>
+        <h1>Labels</h1>
+        <p class="lead">
+            @(Model.Waiting ? "Every parcel waiting for pickup." : "The orders you picked.")
+            Stick one label on each parcel before the pickup route arrives.
+        </p>
+    </div>
+    @if (Model.Sheet.Labels.Count > 0)
+    {
+        <button type="button" class="button secondary" onclick="window.print()">Print</button>
+    }
+</div>
+
+@if (Model.Sheet.Labels.Count == 0)
+{
+    <div class="card"><p class="muted">No parcels to label.</p></div>
+}
+
+@if (Model.Sheet.More)
+{
+    <p class="notice no-print">
+        These are your @PackageLabelsHandler.MaxOrders newest orders waiting for pickup. Print older ones with the Labels
+        link beside each order in your order list.
+    </p>
+}
+
+<div class="labels">
+    @foreach (var label in Model.Sheet.Labels)
+    {
+        <article class="label">
+            <div class="label-qr">@LabelQrCode.Svg(label.Code)</div>
+            <div class="label-body">
+                <div class="label-hub">@label.DestinationHub</div>
+                <div class="label-code">@label.Code</div>
+                <div>Package @label.Code.Sequence of @label.PackagesInOrder</div>
+                <div class="label-to"><strong>@label.Recipient</strong><br />@label.Area</div>
+                <div>From @label.Merchant</div>
+                @if (label.Cod > 0)
+                {
+                    <div>COD ৳@label.Cod.ToString("N0")</div>
+                }
+                else
+                {
+                    <div>Paid</div>
+                }
+                @if (label.Urgent)
+                {
+                    <div class="label-urgent">Next day</div>
+                }
+            </div>
+        </article>
+    }
+</div>

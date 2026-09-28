@@ -6,10 +6,13 @@ using Application.Grouping;
 using Application.Grouping.CustomerDeliveries;
 using Application.Grouping.LockDueGroups;
 using Application.Grouping.ShipNow;
+using Application.Network.HubScan;
 using Application.Network.ListAreas;
+using Application.Network.PickupRoutes;
 using Application.Notifications.SendOutbox;
 using Application.Orders.CreateOrder;
 using Application.Orders.GetOrder;
+using Application.Orders.PackageLabels;
 using Application.Pricing.GetQuote;
 
 namespace Application;
@@ -31,6 +34,9 @@ public static class DependencyInjection
         services.AddScoped<ListAreasHandler>();
         services.AddScoped<ShipNowHandler>();
         services.AddScoped<CustomerDeliveriesHandler>();
+        services.AddScoped<PickupRoutesHandler>();
+        services.AddScoped<HubScanHandler>();
+        services.AddScoped<PackageLabelsHandler>();
         services.AddScoped<PhoneLoginService>();
 
         return services;

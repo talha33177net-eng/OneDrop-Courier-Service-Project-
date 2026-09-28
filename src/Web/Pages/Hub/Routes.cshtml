@@ -1,0 +1,47 @@
+@page
+@model Web.Pages.Hub.RoutesModel
+@{
+    ViewData["Title"] = "Pickup routes";
+}
+
+<h1>Pickup routes</h1>
+<p class="lead">Each zone's daily run collects the parcels waiting at its merchants and brings them to the hub.</p>
+
+<div class="card">
+    @if (Model.Routes.Count == 0)
+    {
+        <p class="muted">No pickup routes are set up yet.</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Zone</th>
+                        <th>Hub</th>
+                        <th>Next run</th>
+                        <th class="num">Stops</th>
+                        <th class="num">Orders</th>
+                        <th class="num">Packages</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var route in Model.Routes)
+                    {
+                        <tr>
+                            <td><strong>@route.Zone</strong></td>
+                            <td>@route.Hub</td>
+                            <td>@route.NextPickupDay.ToString("ddd d MMM") at @route.PickupTime.ToString("h:mm tt")</td>
+                            <td class="num">@route.Stops</td>
+                            <td class="num">@route.Orders</td>
+                            <td class="num">@route.Packages</td>
+                            <td><a asp-page="/Hub/RouteSheet" asp-route-id="@route.Id">Route sheet</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

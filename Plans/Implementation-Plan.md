@@ -13,10 +13,10 @@ The one place to see where we are and what comes next. Built from the two projec
 
 | | |
 |---|---|
-| Current week | **Week 3 — Operations and money** (not started, 0 of 9) |
-| Next task | 3.1 Pickup routes and QR labels |
-| Last session | 2026-09-28 — tasks 2.1–2.8 committed on `day2` and pushed to `main`; 2.9 demo run passed (uncommitted), Week 2 done |
-| Blockers | None |
+| Current week | **Week 3 — Operations and money** (3 of 9) |
+| Next task | 3.4 Riders and trips |
+| Last session | 2026-09-28 — tasks 3.1 (pickup routes, QR labels), 3.2 (hub scan-in, shelves) and 3.3 (hub shuttle) done and tested (uncommitted). Week 2 is committed on `day2` (pushed to `origin/day2`); `main` stops at 2.8 |
+| Blockers | None. The link to ras-x2 was intermittently slow on 2026-09-28 (a sqlpackage stall, one login timeout); a rerun passed |
 
 ---
 
@@ -46,10 +46,10 @@ A task is **not done** until all of these pass. Record the result in the daily l
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
-| 3 | Operations and money | Group delivered, merchants settled | ⬜ |
+| 3 | Operations and money | Group delivered, merchants settled | 🔄 3 of 9 |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
-Tests today: **188 passing** (115 domain, 6 architecture, 67 integration).
+Tests today: **241 passing** (154 domain, 6 architecture, 81 integration).
 
 ---
 
@@ -209,13 +209,56 @@ Tasks:
 **Done when:** a group is picked up, sorted at the hub, delivered by a rider who collects the fee and COD, and
 next morning each merchant is settled.
 
-- [ ] **3.1 Pickup routes and QR labels.** `Network.Route` per zone with a daily time (tenant setting); route
+- [x] **3.1 Pickup routes and QR labels.** `Network.Route` per zone with a daily time (tenant setting); route
       stops = merchants with parcels; label `OD-100001-1` as a QR code on a printable page. *Tests:* route
       includes only that zone's merchants with waiting parcels.
-- [ ] **3.2 Hub scan-in and shelves.** Hub staff scan a label → order `AtHub`; each open group gets a labelled
+      *Done 2026-09-28:* `Network.PickupRoute` (named so, not `Route`, to stay clear of ASP.NET's `[Route]`): one
+      active route per zone (`UX_PickupRoute_Zone_Active`), `PickupTime` in the tenant's time zone with no default;
+      DbUp `2026/002_SeedPickupRoutes` gives every launch zone a 2 PM run. `PickupRoute.NextPickup` = today's run
+      until it has left, then tomorrow's. `Application/Network/PickupRoutes/PickupRoutesHandler`: the list (next run,
+      stops, orders, packages per zone) and the sheet. A stop is a **pickup point** in the route's zone (the zone of
+      the point's area, where the parcels physically are, not `Merchant.ZoneId`) with orders still `Created`,
+      worked out when asked; Deliver fast and Don't hold orders are flagged "Next day". `Domain/Orders/PackageLabel`
+      writes and parses `OD-100001-1` (for the 3.2 scanner). Pages: `/Hub/Routes` and the printable
+      `/Hub/RouteSheet/{id}` (policy `Operations` = hub staff or tenant admin, nav "Pickup routes");
+      `/Merchant/Labels` prints one QR label per parcel (QRCoder 1.8.0, inline SVG): hub code to sort to, label
+      code, package x of n, recipient and area, shop, COD, "Next day"; no delivery data. Named orders, or every
+      waiting order newest first, at most 100 (a notice says when older ones were left out). Linked from "My
+      orders". *Left:* marking parcels collected at the merchant (`PickedUp`) comes with scanning in 3.2; the
+      13:00 "build pickup routes" job is not needed while sheets are worked out when asked; no screen yet to
+      change a route's time (SQL only, like zones).
+- [x] **3.2 Hub scan-in and shelves.** Hub staff scan a label → order `AtHub`; each open group gets a labelled
       shelf. *Tests:* scanning another tenant's label is rejected; statuses move correctly.
-- [ ] **3.3 Hub shuttle.** Parcels picked up in another zone travel to the customer's zone hub. *Cut option:*
+      *Done 2026-09-28:* `Order.Collect` (collector at the shop: `Created` → `PickedUp`, whole order) and
+      `Order.ReceiveAtHub(sequence, hub)` (per package: `Package.HubId` and `ReceivedOn`; the order is `AtHub` once
+      every package has reached a hub; a parcel with no pickup scan passes through `PickedUp`); a repeated scan is
+      `AlreadyRecorded`, a cancelled or dispatched order is refused. `DeliveryGroup.Shelf`: a delivery waiting at its
+      own hub (open or locked) takes the **lowest free shelf number** there at its first parcel, labelled
+      `MIR-01` (`DeliveryGroup.ShelfCode`), and frees it when dispatched, delivered or cancelled
+      (`UX_DeliveryGroup_Hub_Shelf`). A parcel scanned in at another hub is told "Send on to GUL" and takes no
+      shelf. `Application/Network/HubScan/HubScanHandler` parses with `PackageLabel.TryParse`; another operator's
+      label is "not found" (query filter); two scans at once (same order, or two deliveries taking one shelf) lose
+      on the row version or the unique index and scan again from fresh rows (up to 5 times). Pages (policy
+      `Operations`, nav "Scan" and "Shelves"): `/Hub/Scan?hub=MIR` with tabs **Receive at the hub** and **Collect
+      at the shop**, a box a hand scanner types into, a camera button where the browser has `BarcodeDetector`,
+      and a large answer (shelf, send on, or why not); `/Hub/Shelves?hub=MIR` lists each shelf's delivery, day,
+      orders and "parcels here of total", Ready once locked and complete. *Left:* the parcels to send on are
+      listed by 3.3; a parcel coming back from a rider (not home) is 3.5; collecting is per order, not per package;
+      the camera scan is untested on a real phone.
+- [x] **3.3 Hub shuttle.** Parcels picked up in another zone travel to the customer's zone hub. *Cut option:*
       a manual "transfer" button.
+      *Done 2026-09-28 (not cut):* a scan at each end. `Order.LoadForShuttle(sequence, hub, toHub)`: a package
+      scanned in here whose delivery leaves from another hub goes on the shuttle (`Package.HubId` null,
+      `ShuttleToHubId` = the delivery's hub); a package not scanned in here, one delivered from this hub ("it goes on
+      its shelf"), or one of a cancelled order is refused; loading again is `AlreadyRecorded`. The existing receive
+      scan at the other end clears `ShuttleToHubId` and shelves the delivery. The order stays `AtHub` in transit;
+      "all packages in" now reads `ReceivedOn`, so a package on the shuttle still counts. `HubScanHandler.LoadAsync`
+      and `ShuttleAsync`: the manifest per hub, parcels to load grouped by destination hub (next-day parcels, then
+      the soonest delivery day, first; cancelled, refused and returned left out) and parcels on their way in. Pages:
+      a third scan tab **Load the shuttle** (`/Hub/Scan?hub=MIR&mode=Load`, answer "Load for GUL hub") and the
+      printable `/Hub/Shuttle?hub=MIR` (nav "Shuttle"). No 19:00 job and no shuttle time setting: staff load when
+      the shuttle leaves, from the manifest. *Left:* a parcel whose order is cancelled while it is on the shuttle
+      cannot be scanned in at the other end; sending parcels back to the shop comes with returns (3.5).
 - [ ] **3.4 Riders and trips.** `Delivery.Rider`, `Delivery.Trip`; the plan-trips job assigns Day 3 groups to
       riders; per-bike limit. Rider PWA screen: today's stops.
 - [ ] **3.5 Delivery screen and attempts.** Handover only after the fee is paid ("no fee, no handover"); refuse
@@ -274,9 +317,9 @@ Payments stay fake in the MVP either way.
 | 02:00 | Recalculate trust and reliability scores | 3 |
 | 06:00 | Settle merchants (yesterday's COD) | 3 |
 | 08:00 | Plan delivery trips (Day 3 groups → riders) | 3 |
-| 13:00 | Build pickup routes per zone | 3 |
+| 13:00 | Build pickup routes per zone — not needed: the route sheet is worked out when opened (3.1) | 3 ✅ |
 | 14:00 | Pickup route runs (merchants → hub) | 3 |
-| 19:00 | Hub shuttle (zone → customer's hub) | 3 |
+| 19:00 | Hub shuttle (zone → customer's hub) — no job: staff load it from the manifest (3.3) | 3 ✅ |
 | 23:59 | Groups lock (Day 2 deadline) | 2 |
 
 ## Must-pass tests (from the plan)
@@ -327,6 +370,16 @@ Payments stay fake in the MVP either way.
 | 2026-09-28 | "You save" compares the group fee with each shop sent separately at the tenant's own base fee; nothing is shown for one shop | The documentation's comparison (৳60 per courier) is the one-shop price; a separate "courier price" setting would be a second number to keep in step |
 | 2026-09-28 | An order is "for delivery" unless cancelled, refused or returned (`Order.IsForDelivery`); the fee, the COD due and the package count all use it | One rule, so the page, the door and the fee can never disagree about what is being delivered |
 | 2026-09-28 | The customer app's service worker never caches pages, only the offline page and its style; the manifest is linked by a plain path, not `~/` | Deliveries change all day and a stale page would show the wrong fee or day; `~/` fingerprints the URL per build, and a manifest should keep one address |
+| 2026-09-28 | `Network.PickupRoute`, one active route per zone, its time a tenant setting in local time; stops are worked out when the sheet is opened, not built by a job | An order placed just before the run is on the sheet; nothing to keep in step. `Route` would clash with ASP.NET's `[Route]` attribute |
+| 2026-09-28 | A parcel is collected by the route of its order's pickup point's zone, not the merchant's `ZoneId` | That is where the parcel physically is; a merchant may have pickup points in several zones |
+| 2026-09-28 | The label is `{order number}-{package}` (`PackageLabel`), printed as text and as a QR code holding only that code; it names the destination hub but never the delivery group | The scanner's tenant decides whose parcel it is; a label handed around must not tell a merchant about the customer's other shops |
+| 2026-09-28 | Hub pages use policy `Operations` (hub staff or tenant admin, with a tenant claim) | The operator's own staff; merchants and customers are refused, another operator's route is a 404 |
+| 2026-09-28 | Hub scans are per package (`Package.HubId`, `ReceivedOn`); the order is `AtHub` only when every package has reached a hub. Collecting at the shop is per order | Every parcel of a delivery must be on its shelf before the rider takes it; at the shop the collector takes the whole order |
+| 2026-09-28 | A delivery gets the lowest free shelf number at its own hub at its first parcel scanned in there, and frees it when it leaves (dispatched, delivered, cancelled); shelf = `DeliveryGroup.Shelf`, labelled `MIR-01` | Shelves are fixed places with fixed numbers; reusing the lowest keeps the numbers small. The unique index settles two scans taking the same shelf |
+| 2026-09-28 | Hub staff pick their hub on the page (`?hub=MIR`); users have no hub | The MVP has one hub-staff login per operator; a hub claim on the user can come with the rider app |
+| 2026-09-28 | The hub shuttle is a scan at each end (load, then receive), not the cut "transfer" button; a package on the shuttle has no `HubId` and a `ShuttleToHubId` | "Scan at every handover"; the manifest shows what is still to load and what is on its way, and a package is never at two hubs |
+| 2026-09-28 | No shuttle job and no shuttle time setting: the manifest is worked out when opened and staff load when the shuttle leaves | Same reasoning as the pickup sheet; a time would be a tenant setting with nothing yet reading it |
+| 2026-09-28 | An order stays `AtHub` while a package is on the shuttle; "every package in" means every package has been received at a hub (`ReceivedOn`) | The order status says the parcels are in the hub network; where each one is is on the package |
 
 ## Quick reference
 
@@ -496,6 +549,86 @@ Newest first. One entry per working day: what was done, how it was tested, what 
   404; the same phone is quoted ৳70 at Chattogram; a Dhaka quote after the lock is ৳60, a new delivery; the customer
   cookie on the Chattogram host goes to the login page. No errors in the app log.
 - **Next:** Week 3, task 3.1 pickup routes and QR labels.
+- **Done (task 3.1):** `Domain/Network/PickupRoute` (`NextPickup`), `Domain/Orders/PackageLabel`; SQL
+  `Network/Tables/PickupRoute.sql` and DbUp `2026/002_SeedPickupRoutes.sql`; EF mapping; `PickupRoutesHandler`,
+  `PackageLabelsHandler`; `Web/Labels/LabelQrCode` (QRCoder 1.8.0); pages `/Hub/Routes`, `/Hub/RouteSheet/{id}`,
+  `/Merchant/Labels`; policy `Operations`; print styles; "My orders" links to the labels.
+- **Tested:** build 0 errors, no new warnings; 18 new domain tests (next run today until it has left, then
+  tomorrow, around UTC midnight and across a summer-time change; labels write and read back, typed in lower case
+  with spaces, every sequence up to 20, and junk, a delivery number or a package 0 or 21 refused) and 4 new
+  integration tests (a route lists only its zone's pickup points with waiting parcels: a new Uttara shop's fast
+  order with 2 labels is on the Uttara sheet, flagged, while a picked-up shop and the Mirpur shops are not, and
+  the list counts what the sheet shows; each operator lists its own zones' 2 PM routes and another operator's
+  route is null; hub staff and a tenant admin open the sheet, Chattogram hub staff 404, a merchant is denied,
+  anonymous goes to login; a merchant prints 2 QR labels for its own 2-package order with the hub code and COD and
+  no `DG-`, another shop's order prints nothing). `SchemaMatchesModelTests` now compares `time` precision. The
+  first runs caught `৳` HTML-encoded inside a C# string and the 100-order cap cutting off the newest waiting
+  orders (now newest first, with a notice); both fixed. 133 + 6 + 71 = 210 pass, none skipped. Published both
+  databases: the new table and index only (plus sqlpackage's usual re-create of `chk_Tenant_GroupJoinDays`), one
+  DbUp script. The link to ras-x2 was flaky: the first dev publish stalled before connecting and was stopped
+  (nothing applied), one integration run hit a SQL login timeout and one could not reach the server; the
+  following runs were clean. Live on dev, phone 01957461664: Fashion House OD-100041 (2 packages, COD ৳1,500) and
+  Gadget BD OD-100042 (fast). Hub staff "Pickup routes": 7 Dhaka zones, next run Tue 29 Sep 2:00 PM (it was past
+  2 PM), Mirpur 3 stops / 38 orders / 40 packages; the Mirpur sheet lists OD-100041-1 and -2 under Fashion House
+  and OD-100042 "Next day" under Gadget BD. Tenant admin 200; Chattogram hub staff 404 on the Dhaka sheet and sees
+  its own 5 zones; merchant → access denied; anonymous → login. Fashion House's labels for OD-100041: 2 QR labels
+  (MIR, package 1 of 2, Nadia Rahman, Mirpur 10, COD ৳1,500), no group data; Gadget's OD-100042 prints nothing for
+  Fashion House; "waiting" starts with OD-100041-1. Screenshots of the labels and the sheet looked right. No errors
+  in the app log. Not done: scanning a printed QR with a phone.
+- **Next:** task 3.2, hub scan-in and shelves (scan with `PackageLabel.TryParse`; also mark parcels `PickedUp`).
+- **Done (task 3.2):** `Order.Collect`, `Order.ReceiveAtHub`, `ScanOutcome`; `Package.HubId` / `ReceivedOn`;
+  `DeliveryGroup.Shelf`, `NeedsShelf`, `PutOnShelf`, `ShelfCode` (shelf freed on dispatch, delivery, cancel); SQL
+  `Orders.Package` (+ `FK_Package_Hub`, `IX_Package_Hub`) and `Grouping.DeliveryGroup` (+ `chk_DeliveryGroup_Shelf`,
+  `UX_DeliveryGroup_Hub_Shelf`); EF mapping; `Application/Network/HubScan/HubScanHandler` (hubs, collect, receive,
+  shelves); pages `/Hub/Scan` and `/Hub/Shelves`, nav links, styles.
+- **Tested:** build 0 errors, no new warnings; 17 new domain tests (collect once, a parcel at the hub counts as
+  collected, cancelled and dispatched refused; `AtHub` only when every package is in, straight from `Created`, a
+  second scan changes nothing, a parcel moved on to another hub; unknown package, cancelled order; a shelf is kept,
+  freed on dispatch and taken again for a re-attempt, none for a cancelled group; shelf labels) and 7 new
+  integration tests (three shops' parcels in Uttara share one shelf, a neighbour gets another, statuses `AtHub`, the
+  shelf list counts 4 of 4; a Gulshan parcel at the Uttara hub is sent on to GUL with no shelf, then shelved at GUL;
+  a dispatched delivery frees its shelf for the next; 4 deliveries scanned in parallel get 4 shelves and two
+  packages of one order scanned at once both count — shown to fail with the retry switched off; collecting takes
+  the order off the route sheet and a cancelled order is refused; Chattogram cannot find a Dhaka label or use a
+  Dhaka hub, junk and a package 3 of 2 are refused; the pages scan and list shelves for hub staff, 404 for
+  Chattogram hub staff, access denied for a merchant). The first run caught `Forget` detaching entities from the
+  collection it was looping over (the retry path); fixed. 150 + 6 + 78 = 234 pass, none skipped. The publish script
+  was reviewed first: `Orders.Package` and `Grouping.DeliveryGroup` rebuilt with their rows copied (plus the usual
+  `chk_Tenant_GroupJoinDays` re-create); both databases published. Live on dev, phone 01834561290: Fashion House
+  OD-100043 (2 packages), Gadget BD OD-100044, Beauty Shop OD-100045 in DG-100023. Hub staff on
+  `/Hub/Scan?hub=MIR`: Collect OD-100043-1 → collected, -2 → "already scanned as collected"; Receive the 4 parcels
+  (one typed in lower case) → all "Shelf MIR-01", "1 of 2 packages in" then "2 of 2"; again → "already scanned in
+  here"; `DG-100020` → "is not a parcel label". OD-100046 to Gulshan 1 at MIR → "Send on to GUL hub", at GUL →
+  "GUL-01". Shelves MIR: MIR-01 DG-100023 Wed 30 Sep, 3 orders, 4 of 4, Open. The Mirpur route sheet no longer
+  lists them. Chattogram hub staff: 404 on the MIR pages, a Dhaka label at AGR "No parcel … is expected here";
+  merchant → access denied; anonymous → login. Database: every package with its hub and time, history
+  "Collected from the shop" / "Reached a hub without a pickup scan" / "Every package scanned in at a hub" by
+  hub@dhaka. Screenshots at 390 px: no sideways scroll, the shelf table scrolls in its card. No errors in the app
+  log. Not done: the camera scan on a real phone.
+- **Next:** task 3.3, hub shuttle (list the parcels to send on per hub; receive at the destination with the same scan).
+- **Done (task 3.3):** `Order.LoadForShuttle`, `Package.ShuttleToHubId` (cleared when received); "every package in"
+  reads `ReceivedOn`; SQL `Orders.Package.ShuttleToHubId` with `FK_Package_Hub_ShuttleToHubId` and
+  `IX_Package_ShuttleToHub` (the first hub key renamed `FK_Package_Hub_HubId`, as the conventions name two keys to
+  one table); `HubScanHandler.LoadAsync` and `ShuttleAsync` (hub lookup shared); scan tab **Load the shuttle**,
+  page `/Hub/Shuttle` with `_ShuttleParcels`, nav "Shuttle"; tabs scroll sideways on a phone.
+- **Tested:** build 0 errors, no new warnings; 4 new domain tests (loaded → off the hub and bound for the delivery's
+  hub, loaded again changes nothing, received at the other end clears it, order stays `AtHub`; a package on the
+  shuttle counts as in when the last one arrives; not scanned in here, scanned in elsewhere, delivered from here,
+  unknown package and a cancelled order refused) and 3 new integration tests (a Gulshan parcel scanned in at Uttara
+  is on Uttara's manifest for Gulshan hub, loaded, on its way on Gulshan's manifest, then shelved at GUL and off
+  it — shown to fail when arrival does not clear the shuttle; next-day parcels listed first, a cancelled order and
+  a parcel delivered from here not listed, and the refusals; Chattogram cannot load a Dhaka label or open a Dhaka
+  manifest; the page loads a parcel and the manifests show it). 154 + 6 + 81 = 241 pass, none skipped. The
+  publish script rebuilt `Orders.Package` only, copying `HubId` and `ReceivedOn`; both databases published, the
+  3.2 scans kept. Live on dev, phone 01745219083 in Banani (GUL hub): OD-100047 (Fashion House) and OD-100048
+  (Gadget BD, fast) scanned in at MIR → "Send on to GUL hub"; MIR manifest "2 parcels to load", To Gulshan hub,
+  OD-100048 (Next day) first; loaded OD-100048 → "Load for GUL hub", again → "already scanned onto the shuttle",
+  OD-100044 (a Mirpur delivery) → "goes on its shelf, not the shuttle"; Gulshan's "On the way here" listed
+  OD-100048 until it was scanned in at GUL ("Shelf GUL-02"). The live check caught the scan answer counting a
+  loaded package as not in ("0 of 1"); now counted by `ReceivedOn`, with a test. Chattogram hub staff 404 on the
+  manifest and "not found" for a Dhaka label; anonymous → login. OD-100047 left on the shuttle to GUL. Screenshots
+  at 390 px fine. No errors in the app log.
+- **Next:** task 3.4, riders and trips (the plan-trips job assigns Day 3 groups to riders; rider PWA screen).
 
 ### 2026-09-27
 - **Done:** Week 1 complete (tasks 1.1–1.6).

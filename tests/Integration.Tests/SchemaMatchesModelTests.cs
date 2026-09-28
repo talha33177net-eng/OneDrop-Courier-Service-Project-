@@ -80,7 +80,7 @@ public class SchemaMatchesModelTests(WebAppFactory factory)
                 "nvarchar" or "nchar" or "varchar" or "char" or "binary" or "varbinary" =>
                     $"{dataType}({(reader.GetInt32(2) == -1 ? "max" : reader.GetInt32(2))})",
                 "decimal" or "numeric" => $"decimal({reader.GetByte(3)},{reader.GetInt32(4)})",
-                "datetime2" or "datetimeoffset" => $"{dataType}({reader.GetInt16(5)})",
+                "datetime2" or "datetimeoffset" or "time" => $"{dataType}({reader.GetInt16(5)})",
                 "timestamp" => "rowversion",
                 _ => dataType
             };
@@ -90,11 +90,11 @@ public class SchemaMatchesModelTests(WebAppFactory factory)
         return columns;
     }
 
-    /// <summary>EF writes "datetime2" or "datetimeoffset" for the default precision of 7.</summary>
+    /// <summary>EF writes "datetime2", "datetimeoffset" or "time" for the default precision of 7.</summary>
     private static string Normalise(string? efType)
     {
         var type = (efType ?? "").Replace(" ", "", StringComparison.Ordinal).ToLowerInvariant();
 
-        return type is "datetime2" or "datetimeoffset" ? $"{type}(7)" : type;
+        return type is "datetime2" or "datetimeoffset" or "time" ? $"{type}(7)" : type;
     }
 }

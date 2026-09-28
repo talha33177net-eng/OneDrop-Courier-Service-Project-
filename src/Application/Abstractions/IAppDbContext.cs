@@ -24,6 +24,8 @@ public interface IAppDbContext
 
     DbSet<Area> Areas { get; }
 
+    DbSet<PickupRoute> PickupRoutes { get; }
+
     DbSet<Customer> Customers { get; }
 
     DbSet<CustomerAddress> CustomerAddresses { get; }

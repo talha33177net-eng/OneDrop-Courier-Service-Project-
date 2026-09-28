@@ -1,0 +1,66 @@
+@page
+@model Web.Pages.Hub.ShuttleModel
+@using Web.Pages.Hub
+@{
+    ViewData["Title"] = Model.Current is null ? "Hub shuttle" : $"{Model.Current.Name} shuttle";
+    var toLoad = Model.Manifest.ToLoad.Sum(load => load.Parcels.Count);
+}
+
+@if (Model.Current is null)
+{
+    <h1>Hub shuttle</h1>
+    <p class="lead">Which hub's shuttle?</p>
+    <div class="card">
+        <ul class="hub-list">
+            @foreach (var hub in Model.Hubs)
+            {
+                <li><a asp-page="/Hub/Shuttle" asp-route-hub="@hub.Code">@hub.Name <span class="muted">@hub.Code</span></a></li>
+            }
+        </ul>
+    </div>
+    return;
+}
+
+<div class="sheet-head">
+    <div>
+        <h1>@Model.Current.Name shuttle</h1>
+        <p class="lead">Parcels here whose delivery leaves from another hub. Next-day parcels are listed first.</p>
+    </div>
+    <div class="no-print">
+        <a class="button" asp-page="/Hub/Scan" asp-route-hub="@Model.Current.Code" asp-route-mode="@ScanMode.Load">Scan onto the shuttle</a>
+        <button type="button" class="button secondary" onclick="window.print()">Print</button>
+    </div>
+</div>
+
+<p><strong>@toLoad @(toLoad == 1 ? "parcel" : "parcels")</strong> to load.</p>
+
+@if (toLoad == 0)
+{
+    <div class="card"><p class="muted">Nothing here needs the shuttle.</p></div>
+}
+
+@foreach (var load in Model.Manifest.ToLoad)
+{
+    <section class="card stop">
+        <div class="stop-head">
+            <div>
+                <h2>To @load.HubName <span class="muted">· @load.Hub</span></h2>
+            </div>
+            <span class="pill">@load.Parcels.Count @(load.Parcels.Count == 1 ? "parcel" : "parcels")</span>
+        </div>
+        <partial name="_ShuttleParcels" model="load.Parcels" />
+    </section>
+}
+
+<h2 class="section-title">On the way here</h2>
+<section class="card">
+    @if (Model.Manifest.OnTheWay.Count == 0)
+    {
+        <p class="muted">No parcel is on the shuttle to this hub.</p>
+    }
+    else
+    {
+        <p>Scan each one in when the shuttle arrives.</p>
+        <partial name="_ShuttleParcels" model="Model.Manifest.OnTheWay" />
+    }
+</section>

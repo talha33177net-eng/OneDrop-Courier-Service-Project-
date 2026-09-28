@@ -224,4 +224,106 @@ public class Order : TenantEntity, IMerchantOwned
 
         return Result.Success();
     }
+
+    /// <summary>
+    /// The collector scanned one of the order's labels at the shop: the whole order leaves the merchant. Scanning it
+    /// again, or another of its labels, changes nothing.
+    /// </summary>
+    public Result<ScanOutcome> Collect()
+    {
+        if (Status is OrderStatus.PickedUp or OrderStatus.AtHub)
+        {
+            return ScanOutcome.AlreadyRecorded;
+        }
+
+        if (Status != OrderStatus.Created)
+        {
+            return Error.Conflict("order.scan.collect", $"{Number} is {Status}, so there is nothing to collect.");
+        }
+
+        MoveTo(OrderStatus.PickedUp, "Collected from the shop");
+
+        return ScanOutcome.Recorded;
+    }
+
+    /// <summary>
+    /// Hub staff scanned package <paramref name="sequence"/> in at a hub. The order is <see cref="OrderStatus.AtHub"/>
+    /// once every package has reached a hub; a parcel that arrives without a pickup scan was evidently collected.
+    /// Scanning a package again at the same hub changes nothing.
+    /// </summary>
+    public Result<ScanOutcome> ReceiveAtHub(int sequence, long hubId, DateTime now)
+    {
+        var package = packages.SingleOrDefault(p => p.Sequence == sequence);
+        if (package is null)
+        {
+            return Error.NotFound("order.scan.package", $"{Number} has no package {sequence}.");
+        }
+
+        if (Status is not (OrderStatus.Created or OrderStatus.PickedUp or OrderStatus.AtHub))
+        {
+            return Error.Conflict("order.scan.receive", $"{Number} is {Status}, so it cannot be received at a hub.");
+        }
+
+        if (package.HubId == hubId)
+        {
+            return ScanOutcome.AlreadyRecorded;
+        }
+
+        package.ReceiveAt(hubId, now);
+        if (Status == OrderStatus.Created)
+        {
+            MoveTo(OrderStatus.PickedUp, "Reached a hub without a pickup scan");
+        }
+
+        // A package already on the shuttle between hubs has reached the hub network too
+        if (Status == OrderStatus.PickedUp && packages.All(p => p.ReceivedOn is not null))
+        {
+            MoveTo(OrderStatus.AtHub, "Every package scanned in at a hub");
+        }
+
+        return ScanOutcome.Recorded;
+    }
+
+    /// <summary>
+    /// Hub staff loaded package <paramref name="sequence"/> on the shuttle at <paramref name="hubId"/>, bound for
+    /// <paramref name="toHubId"/>, the hub its delivery leaves from. The package must have been scanned in here, and a
+    /// parcel whose delivery leaves from this hub belongs on its shelf. It is received at the other end with
+    /// <see cref="ReceiveAtHub"/>. Loading it again changes nothing.
+    /// </summary>
+    public Result<ScanOutcome> LoadForShuttle(int sequence, long hubId, long toHubId)
+    {
+        var package = packages.SingleOrDefault(p => p.Sequence == sequence);
+        if (package is null)
+        {
+            return Error.NotFound("order.scan.package", $"{Number} has no package {sequence}.");
+        }
+
+        if (Status is not (OrderStatus.PickedUp or OrderStatus.AtHub))
+        {
+            return Error.Conflict("order.scan.shuttle", $"{Number} is {Status}, so it does not travel on the shuttle.");
+        }
+
+        if (package.HubId is null && package.ShuttleToHubId == toHubId)
+        {
+            return ScanOutcome.AlreadyRecorded;
+        }
+
+        if (package.HubId != hubId)
+        {
+            return Error.Conflict(
+                "order.scan.notHere",
+                $"{Number}-{sequence} has not been scanned in at this hub; scan it in first.");
+        }
+
+        if (toHubId == hubId)
+        {
+            return Error.Conflict(
+                "order.scan.shuttle.home",
+                $"{Number}-{sequence} is delivered from this hub; it goes on its shelf, not the shuttle.");
+        }
+
+        package.LoadForShuttle(toHubId);
+
+        return ScanOutcome.Recorded;
+    }
 }

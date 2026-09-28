@@ -23,3 +23,10 @@ public enum DeliverySpeed : byte
     /// <summary>Next-day delivery, no waiting.</summary>
     Fast = 2
 }
+
+/// <summary>What a parcel scan did. Scanning the same parcel twice is harmless and says so; not stored.</summary>
+public enum ScanOutcome
+{
+    Recorded,
+    AlreadyRecorded
+}

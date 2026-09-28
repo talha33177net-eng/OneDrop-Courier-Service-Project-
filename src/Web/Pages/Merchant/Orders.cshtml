@@ -1,4 +1,5 @@
 @page
+@using Domain.Orders
 @model Web.Pages.Merchant.OrdersModel
 @{
     ViewData["Title"] = "My orders";
@@ -8,7 +9,13 @@
 <p class="lead">Your OneDrop orders. Delivery costs you nothing; the customer pays the fee on delivery day.</p>
 
 <div class="card">
-    <h2>Orders</h2>
+    <div class="sheet-head">
+        <h2>Orders</h2>
+        @if (Model.Orders.Any(order => order.Status == OrderStatus.Created))
+        {
+            <a class="button secondary" asp-page="/Merchant/Labels">Print labels for the pickup</a>
+        }
+    </div>
     @if (Model.Orders.Count == 0)
     {
         <p class="muted">No orders yet. Send one with <code>POST /api/v1/orders</code> (see the API keys below).</p>
@@ -27,6 +34,7 @@
                         <th class="num">Packages</th>
                         <th class="num">COD</th>
                         <th>Created (UTC)</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -41,6 +49,7 @@
                             <td class="num">@order.Packages</td>
                             <td class="num">৳@order.Cod.ToString("N0")</td>
                             <td>@order.Created.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td><a asp-page="/Merchant/Labels" asp-route-order="@order.Number">Labels</a></td>
                         </tr>
                     }
                 </tbody>

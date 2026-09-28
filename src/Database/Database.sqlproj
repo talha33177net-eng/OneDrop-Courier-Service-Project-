@@ -49,6 +49,7 @@
     <Build Include="Identity/Tables/UserToken.sql" />
     <Build Include="Network/Tables/Area.sql" />
     <Build Include="Network/Tables/Hub.sql" />
+    <Build Include="Network/Tables/PickupRoute.sql" />
     <Build Include="Network/Tables/Zone.sql" />
     <Build Include="Customers/Tables/Customer.sql" />
     <Build Include="Customers/Tables/CustomerAddress.sql" />

@@ -24,7 +24,10 @@ public class Merchant : TenantEntity, IArchivable
 
     public string Name { get; private set; } = "";
 
-    /// <summary>The zone whose pickup route collects from this merchant.</summary>
+    /// <summary>
+    /// The merchant's home zone. Parcels are collected by the pickup route of each order's pickup point's zone,
+    /// which is this one unless the merchant has a pickup point elsewhere.
+    /// </summary>
     public long ZoneId { get; private set; }
 
     public string ContactPhone { get; private set; } = "";
