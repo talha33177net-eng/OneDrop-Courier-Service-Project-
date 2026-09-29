@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Application.Auth.PhoneLogin;
 using Application.Customers;
+using Application.Delivery.Door;
 using Application.Delivery.HubTrips;
 using Application.Delivery.PlanTrips;
 using Application.Delivery.RiderDay;
@@ -44,6 +45,7 @@ public static class DependencyInjection
         services.AddScoped<PlanTripsJob>();
         services.AddScoped<HubTripsHandler>();
         services.AddScoped<RiderDayHandler>();
+        services.AddScoped<DoorHandler>();
         services.AddScoped<PhoneLoginService>();
 
         return services;

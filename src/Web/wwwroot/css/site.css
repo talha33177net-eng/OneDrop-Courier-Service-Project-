@@ -664,3 +664,62 @@ progress::-moz-progress-bar {
         display: none;
     }
 }
+
+/* Rider at the door */
+
+.refuse {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.refuse input {
+    width: 20px;
+    height: 20px;
+}
+
+.door-due {
+    border-left: 4px solid var(--orange);
+}
+
+.door-due h2 {
+    margin-top: 0;
+}
+
+.door-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.notice-problem {
+    border-left-color: var(--danger);
+}
+
+.door-qr {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    margin: 12px 0;
+}
+
+.door-qr-code {
+    flex: none;
+    width: 200px;
+    max-width: 100%;
+}
+
+.door-qr-code svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.door-qr p {
+    margin: 0 0 4px;
+}

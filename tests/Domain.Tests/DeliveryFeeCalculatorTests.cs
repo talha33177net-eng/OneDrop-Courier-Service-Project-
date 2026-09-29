@@ -1,3 +1,4 @@
+using Domain.Grouping;
 using Domain.Orders;
 using Domain.Pricing;
 
@@ -212,8 +213,8 @@ public class DeliveryFeeCalculatorTests
 
         Assert.Equal(10, calculator.ShipNowFee);
         Assert.Equal(85, calculator.GroupFee(orders));
-        Assert.Equal(95, calculator.GroupFee(orders, shippedNow: true));
-        Assert.Equal(25, calculator.AddedFee(orders, Waiting(3), shippedNow: true));
+        Assert.Equal(95, calculator.GroupFee(orders, DeliveryGroupKind.ShippedNow));
+        Assert.Equal(25, calculator.AddedFee(orders, Waiting(3), DeliveryGroupKind.ShippedNow));
         Assert.Equal(10, new DeliveryFeeCalculator(Chattogram).ShipNowFee);
     }
 
@@ -223,7 +224,7 @@ public class DeliveryFeeCalculatorTests
         var calculator = new DeliveryFeeCalculator(new FeeSchedule(60, 25, 50, 2000, 15));
 
         Assert.Equal(0, calculator.ShipNowFee);
-        Assert.Equal(60, calculator.GroupFee([Waiting(1)], shippedNow: true));
+        Assert.Equal(60, calculator.GroupFee([Waiting(1)], DeliveryGroupKind.ShippedNow));
     }
 
     [Fact]

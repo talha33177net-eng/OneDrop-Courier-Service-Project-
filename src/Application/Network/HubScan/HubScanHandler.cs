@@ -85,6 +85,12 @@ public class HubScanHandler(IAppDbContext db, ITenantContext tenantContext, Time
         return ScanAsync(label, hubId: null, (order, _) => Task.FromResult(order.Collect()), cancellationToken);
     }
 
+    /// <summary>A parcel the customer did not take is handed back to its shop (the whole order).</summary>
+    public Task<Result<ParcelScan>> ReturnAsync(string? label, CancellationToken cancellationToken = default)
+    {
+        return ScanAsync(label, hubId: null, (order, _) => Task.FromResult(order.ReturnToMerchant()), cancellationToken);
+    }
+
     public async Task<Result<ParcelScan>> ReceiveAsync(
         string hubCode,
         string? label,

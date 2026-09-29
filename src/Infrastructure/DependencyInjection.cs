@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Application.Abstractions;
 using Infrastructure.Identity;
 using Infrastructure.MultiTenancy;
+using Infrastructure.Payments;
 using Infrastructure.Persistence;
 using Infrastructure.Seeding;
 using Infrastructure.Sms;
@@ -43,6 +44,8 @@ public static class DependencyInjection
 
         services.AddSingleton<SmsLog>();
         services.AddSingleton<ISmsSender, FakeSmsSender>();
+        services.AddSingleton<FakePaymentLog>();
+        services.AddSingleton<IPaymentGateway, FakePaymentGateway>();
 
         services.AddSingleton<DemoDataSeeder>();
 

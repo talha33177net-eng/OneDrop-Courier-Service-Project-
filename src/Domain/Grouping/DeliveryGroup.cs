@@ -110,6 +110,18 @@ public class DeliveryGroup : TenantEntity
         return group;
     }
 
+    /// <summary>
+    /// A delivery for orders a rider left behind (<see cref="DeliveryGroupKind.FollowUp"/>): locked at once and
+    /// delivered the next day, like <see cref="OpenAlone"/>, with the customer paying only the extra-shop fee.
+    /// </summary>
+    public static DeliveryGroup FollowUp(NewDeliveryGroup spec)
+    {
+        var group = Create(spec, 1, DeliveryGroupStatus.Locked, DeliveryGroupKind.FollowUp);
+        group.LockedOn = spec.OpenedOn;
+
+        return group;
+    }
+
     /// <summary>Ship now on a group that is locked, on its way, delivered or cancelled.</summary>
     public static Error NotOpenForShipNow => Error.Conflict(
         "deliveryGroup.shipNow.notOpen",

@@ -109,6 +109,12 @@ public class Order : TenantEntity, IMerchantOwned
 
     public string? Note { get; private set; }
 
+    /// <summary>
+    /// When a rider left without the order because it was not ready at the hub, and it moved to a later delivery
+    /// (<see cref="FollowUpIn"/>). The shop's late-handover fee is decided from it.
+    /// </summary>
+    public DateTime? LeftBehindOn { get; private set; }
+
     public byte[] RowVersion { get; private set; } = [];
 
     public IReadOnlyList<Package> Packages => packages;
@@ -259,7 +265,8 @@ public class Order : TenantEntity, IMerchantOwned
             return Error.NotFound("order.scan.package", $"{Number} has no package {sequence}.");
         }
 
-        if (Status is not (OrderStatus.Created or OrderStatus.PickedUp or OrderStatus.AtHub))
+        // A refused order comes back to the hub on its way to the shop; its status stays Refused
+        if (Status is not (OrderStatus.Created or OrderStatus.PickedUp or OrderStatus.AtHub or OrderStatus.Refused))
         {
             return Error.Conflict("order.scan.receive", $"{Number} is {Status}, so it cannot be received at a hub.");
         }
@@ -355,5 +362,57 @@ public class Order : TenantEntity, IMerchantOwned
         MoveTo(OrderStatus.OutForDelivery, "Out with the rider");
 
         return true;
+    }
+
+    /// <summary>
+    /// The rider left without the order (not ready when its delivery went out): it moves to a later delivery of the
+    /// same customer and address, the customer's open one or a follow-up. The merchant's <see cref="AddedFee"/> stays
+    /// as it was given; the customer hears where the order now travels.
+    /// </summary>
+    public void FollowUpIn(DeliveryGroup group, DateTime now)
+    {
+        if (group.CustomerId != CustomerId || group.AddressId != AddressId)
+        {
+            throw new InvalidOperationException("An order can only travel in its own customer and address's group.");
+        }
+
+        if (!IsForDelivery(Status) || Status is OrderStatus.OutForDelivery or OrderStatus.Delivered)
+        {
+            throw new InvalidOperationException($"{Number} is {Status}; only an order still waiting is left behind.");
+        }
+
+        DeliveryGroup = group;
+        DeliveryGroupId = group.Id;
+        LeftBehindOn = now;
+        history.Add(new OrderStatusHistory(this, Status, "Not ready when the rider left; goes in a later delivery"));
+        Withdraw<OrderPlacedInDelivery>();
+        Raise(new OrderPlacedInDelivery(this));
+    }
+
+    /// <summary>
+    /// A refused order is handed back to its shop: its parcels leave the hub. Scanning it again changes nothing.
+    /// </summary>
+    public Result<ScanOutcome> ReturnToMerchant()
+    {
+        if (Status == OrderStatus.ReturnedToMerchant)
+        {
+            return ScanOutcome.AlreadyRecorded;
+        }
+
+        if (Status != OrderStatus.Refused)
+        {
+            return Error.Conflict(
+                "order.scan.return",
+                $"{Number} is {Status}; only an order the customer did not take goes back to the shop.");
+        }
+
+        foreach (var package in packages)
+        {
+            package.LeaveHub();
+        }
+
+        MoveTo(OrderStatus.ReturnedToMerchant, "Handed back to the shop");
+
+        return ScanOutcome.Recorded;
     }
 }

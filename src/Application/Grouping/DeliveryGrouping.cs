@@ -194,12 +194,10 @@ public class DeliveryGrouping(IAppDbContext db, ITenantContext tenantContext, Ti
         DeliveryFeeCalculator fees,
         CancellationToken cancellationToken)
     {
-        var shippedNow = group.Kind == DeliveryGroupKind.ShippedNow;
-
         // A group not saved yet is being opened by this order
         if (group.Id == 0)
         {
-            return fees.AddedFee([], line, shippedNow);
+            return fees.AddedFee([], line, group.Kind);
         }
 
         // The group's other orders belong to other merchants: the fee depends on them, but nothing about them
@@ -210,7 +208,7 @@ public class DeliveryGrouping(IAppDbContext db, ITenantContext tenantContext, Ti
             .Select(o => new FeeLine(o.MerchantId, o.Speed, o.Status, o.Packages.Sum(p => p.WeightGrams)))
             .ToListAsync(cancellationToken);
 
-        return fees.AddedFee(inGroup, line, shippedNow);
+        return fees.AddedFee(inGroup, line, group.Kind);
     }
 
     private Task<DeliveryGroup?> FindOpenAsync(Order order, CancellationToken cancellationToken)

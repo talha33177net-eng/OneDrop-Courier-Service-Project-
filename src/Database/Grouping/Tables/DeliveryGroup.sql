@@ -11,6 +11,7 @@
 --          until a rider takes it; UX_DeliveryGroup_Hub_Shelf keeps a shelf to one group (task 3.2)
 -- Updated: 2026-09-29 - Added Kind, a TINYINT enum (Domain.Grouping.DeliveryGroupKind): waiting, next day, or
 --          brought forward by Ship now. A next-day delivery takes orders after it locks (task 3.4a)
+-- Updated: 2026-09-29 - Kind 4 FollowUp: orders a rider left behind, delivered the next day at the extra-shop fee (3.5)
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Grouping].[DeliveryGroup] (
     [Id]         BIGINT        IDENTITY (1, 1) NOT NULL,
@@ -37,7 +38,7 @@ CREATE TABLE [Grouping].[DeliveryGroup] (
     CONSTRAINT [FK_DeliveryGroup_User] FOREIGN KEY ([UpdatedId]) REFERENCES [Identity].[User] ([Id]),
     CONSTRAINT [chk_DeliveryGroup_LocksAt] CHECK ([LocksAt] > [OpenedOn]),
     CONSTRAINT [chk_DeliveryGroup_Shelf] CHECK ([Shelf] > (0)),
-    CONSTRAINT [chk_DeliveryGroup_Kind] CHECK ([Kind] BETWEEN 1 AND 3)
+    CONSTRAINT [chk_DeliveryGroup_Kind] CHECK ([Kind] BETWEEN 1 AND 4)
 );
 
 

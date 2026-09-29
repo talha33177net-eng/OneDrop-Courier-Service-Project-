@@ -16,5 +16,12 @@ public enum DeliveryGroupKind : byte
     /// A waiting delivery the customer brought forward with Ship now, paying the fast difference. Joined like a
     /// next-day delivery.
     /// </summary>
-    ShippedNow = 3
+    ShippedNow = 3,
+
+    /// <summary>
+    /// Orders a rider had to leave behind because they were not ready when the delivery went out: delivered the next
+    /// day, and the customer pays only the extra-shop fee for the first shop (the visit already paid the base fee).
+    /// Joined like a next-day delivery.
+    /// </summary>
+    FollowUp = 4
 }

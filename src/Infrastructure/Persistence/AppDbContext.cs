@@ -11,6 +11,7 @@ using Domain.Merchants;
 using Domain.Network;
 using Domain.Notifications;
 using Domain.Orders;
+using Domain.Payments;
 using Domain.Platform;
 using Infrastructure.Identity;
 
@@ -73,6 +74,8 @@ public class AppDbContext(
     public DbSet<Trip> Trips => Set<Trip>();
 
     public DbSet<TripStop> TripStops => Set<TripStop>();
+
+    public DbSet<Payment> Payments => Set<Payment>();
 
     /// <summary>Read by the tenant filter at query time. Null means "no tenant", which matches no row.</summary>
     public long? CurrentTenantId => tenantContext.TenantId;

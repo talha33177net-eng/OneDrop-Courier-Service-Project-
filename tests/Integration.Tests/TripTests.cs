@@ -91,16 +91,17 @@ public partial class TripTests(WebAppFactory factory)
         var after = (await RiderTodayAsync("dhaka", rider.UserId.Value))!;
 
         Assert.Equal((TripStatus.Planned, 3), (before.Status, before.Stops.Count));
-        var stop = before.Stops.Single(s => s.Delivery == both);
+        var stop = before.Stops.Single(s => s.Key == both);
         Assert.Equal((dhaka.BaseDeliveryFee + dhaka.ExtraShopFee, 3900m), (stop.Fee, stop.Cod));
         Assert.Equal((false, true), (stop.Orders.Single(o => o.Number == gadget).Ready, stop.Orders.Single(o => o.Number == fashion).Ready));
         Assert.Equal([$"{gadget}-1", $"{gadget}-2"], stop.Orders.Single(o => o.Number == gadget).Labels);
         Assert.Equal(("Trip Customer", phone, "House 12, Road 4", hub.Area), (stop.Recipient, stop.Phone, stop.Address, stop.Area));
-        Assert.StartsWith($"{hub.Code}-", stop.Shelf);
-        Assert.Equal(new StartedTrip(2, 2, 1), started.Value);
+        var shelf = Assert.Single(stop.Shelves);
+        Assert.StartsWith($"{hub.Code}-", shelf);
+        Assert.Equal(new StartedTrip(2, 2, 1, OrdersFollowing: 1), started.Value);
         Assert.Equal("trip.notPlanned", again.Error!.Code);
         Assert.Equal((TripStatus.Out, 2), (after.Status, after.Stops.Count));
-        var taken = after.Stops.Single(s => s.Delivery == both);
+        var taken = after.Stops.Single(s => s.Key == both);
         Assert.Equal((fashion, dhaka.BaseDeliveryFee, 1500m), (taken.Orders.Single().Number, taken.Fee, taken.Cod));
         Assert.Equal(dhaka.BaseDeliveryFee * 2 + 1500 + 650, after.ToCollect);
         Assert.Equal(
@@ -114,10 +115,16 @@ public partial class TripTests(WebAppFactory factory)
         var hubAfter = (await TodayAsync("dhaka", hub))!;
         var outRow = hubAfter.Riders.Single();
         Assert.Equal((TripStatus.Out, new TripLoad(2, 800)), (outRow.Status, outRow.Carried));
-        Assert.Equal((1, 3, (string?)null), outRow.Stops.Where(s => s.Delivery == both).Select(s => (s.ParcelsTaken, s.Parcels, s.Shelf)).Single());
+        Assert.Equal((1, 1, (string?)null), outRow.Stops.Where(s => s.Delivery == both).Select(s => (s.ParcelsTaken, s.Parcels, s.Shelf)).Single());
+
+        // Gadget BD was not ready: it follows tomorrow in a delivery of its own, on the shelf its delivery freed
+        var followUp = await GroupOfAsync(gadget);
+        Assert.NotEqual(both, followUp.Number);
+        Assert.Equal((DeliveryGroupStatus.Locked, DeliveryGroupKind.FollowUp), (followUp.Status, followUp.Kind));
+        Assert.Equal(shelf, DeliveryGroup.ShelfCode(hub.Code, followUp.Shelf!.Value));
         Assert.Equal([nothingReady], hubAfter.Waiting.Select(w => w.Delivery));
         Assert.Equal(new TripPlanningResult(0, 1), await PlanAsync("dhaka", hub));
-        Assert.Contains(alone, after.Stops.Select(s => s.Delivery));
+        Assert.Contains(alone, after.Stops.Select(s => s.Key));
     }
 
     [Fact]
@@ -201,7 +208,7 @@ public partial class TripTests(WebAppFactory factory)
         Assert.Contains("Trip Customer", riderPage);
         Assert.Contains($"{number}-1", riderPage);
         Assert.Contains("/rider.webmanifest", riderPage);
-        Assert.Contains("With you", riderOut);
+        Assert.Contains("At the door</button>", riderOut);
         Assert.DoesNotContain("Start trip", riderOut);
         Assert.Equal([OrderStatus.OutForDelivery], await StatusesAsync(number));
         Assert.Equal(HttpStatusCode.NotFound, (await chattogramHub.GetAsync(url, Cancel)).StatusCode);
@@ -375,14 +382,22 @@ public partial class TripTests(WebAppFactory factory)
         return [.. numbers.Select(number => statuses[number])];
     }
 
-    private async Task<string> CreateAsync(string apiKey, string phone, TestHub hub, int packages = 1, decimal cod = 0)
+    private async Task<string> CreateAsync(
+        string apiKey,
+        string phone,
+        TestHub hub,
+        int packages = 1,
+        decimal cod = 0,
+        string line1 = "House 12, Road 4",
+        string speed = "combine")
     {
         var order = new
         {
             Customer = new { Name = "Trip Customer", Phone = phone },
-            Address = new { Area = hub.Area, Line1 = "House 12, Road 4" },
+            Address = new { Area = hub.Area, Line1 = line1 },
             Packages = Enumerable.Range(1, packages).Select(_ => new { Description = "Parcel", WeightGrams = 400 }),
-            CodAmount = cod
+            CodAmount = cod,
+            Speed = speed
         };
         var response = await factory.ClientFor(apiKey).PostAsJsonAsync("/api/v1/orders", order, Cancel);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);

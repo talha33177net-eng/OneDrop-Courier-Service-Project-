@@ -7,6 +7,7 @@ using Domain.Merchants;
 using Domain.Network;
 using Domain.Notifications;
 using Domain.Orders;
+using Domain.Payments;
 using Domain.Platform;
 
 namespace Application.Abstractions;
@@ -54,6 +55,8 @@ public interface IAppDbContext
     DbSet<Trip> Trips { get; }
 
     DbSet<TripStop> TripStops { get; }
+
+    DbSet<Payment> Payments { get; }
 
     EntityEntry<TEntity> Entry<TEntity>(TEntity entity)
         where TEntity : class;

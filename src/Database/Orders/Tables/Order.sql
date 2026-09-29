@@ -11,6 +11,8 @@
 -- Updated: 2026-09-28 - Added AddedFee: what the order added to its group's delivery fee when accepted (the base
 --          fee, the extra-shop fee or 0), shown to the merchant; filled for older orders by
 --          Pre/002_PriceExistingOrders
+-- Updated: 2026-09-29 - Added LeftBehindOn: when a rider left without the order because it was not ready, and it
+--          moved to a later delivery (task 3.5); the shop's late-handover fee (3.7) reads it
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Orders].[Order] (
     [Id]                BIGINT          IDENTITY (1, 1) NOT NULL,
@@ -32,6 +34,7 @@ CREATE TABLE [Orders].[Order] (
     [DeclaredValue]     DECIMAL (12, 2) DEFAULT ((0)) NOT NULL,
     [AddedFee]          DECIMAL (10, 2) NOT NULL,
     [Note]              NVARCHAR (500)  NULL,
+    [LeftBehindOn]      DATETIME2 (7)   NULL,
     [RowVersion]        ROWVERSION      NOT NULL,
     [UpdatedId]         BIGINT          NULL,
     [UpdatedOn]         DATETIME2 (7)   DEFAULT (getutcdate()) NOT NULL,

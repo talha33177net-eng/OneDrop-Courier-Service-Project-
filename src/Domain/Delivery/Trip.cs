@@ -92,6 +92,19 @@ public class Trip : TenantEntity
         return Result.Success();
     }
 
+    /// <summary>The rider has been to every stop. False, and nothing changes, when the trip is not out.</summary>
+    public bool Finish()
+    {
+        if (Status != TripStatus.Out)
+        {
+            return false;
+        }
+
+        Status = TripStatus.Finished;
+
+        return true;
+    }
+
     /// <summary>
     /// A trip still planned when its day has passed never left; cancelling it frees its deliveries for a trip today.
     /// False when it is not planned.

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
+using Domain.Delivery;
 using Domain.Grouping;
 using Domain.Orders;
 using Domain.Pricing;
@@ -111,13 +112,19 @@ public class CustomerDeliveriesHandler(IAppDbContext db, ITenantContext tenantCo
             .ToListAsync(cancellationToken))
             .ToLookup(order => order.DeliveryGroupId);
 
+        // A delivery handed over shows the fee the rider collected (its part of the visit's one fee)
+        var collected = await db.TripStops
+            .Where(stop => ids.Contains(stop.DeliveryGroupId) && stop.Outcome == StopOutcome.Delivered)
+            .GroupBy(stop => stop.DeliveryGroupId)
+            .Select(stops => new { GroupId = stops.Key, Fee = stops.Sum(stop => stop.FeeCollected ?? 0) })
+            .ToDictionaryAsync(stop => stop.GroupId, stop => stop.Fee, cancellationToken);
+
         return new CustomerDeliveries([.. onTheWay.Select(Describe)], [.. earlier.Select(Describe)], tenant.ExtraShopFee);
 
         CustomerDelivery Describe(DeliveryRow delivery)
         {
             var inDelivery = orders[delivery.Id].ToList();
             var lines = inDelivery.Select(order => order.Line).ToList();
-            var shippedNow = delivery.Group.Kind == DeliveryGroupKind.ShippedNow;
             decimal? shipNowFee = !delivery.Group.CanJoin(now) ? null
                 : delivery.Group.ShipNowBringsForward(now, timeZone) ? fees.ShipNowFee
                 : 0;
@@ -129,8 +136,8 @@ public class CustomerDeliveriesHandler(IAppDbContext db, ITenantContext tenantCo
                 delivery.Address,
                 DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(delivery.LocksAt, timeZone)),
                 [.. inDelivery.Select(order => order.Shown)],
-                fees.GroupFee(lines, shippedNow),
-                fees.Savings(lines, shippedNow),
+                collected.TryGetValue(delivery.Id, out var fee) ? fee : fees.GroupFee(lines, delivery.Group.Kind),
+                fees.Savings(lines, delivery.Group.Kind),
                 shipNowFee);
         }
     }

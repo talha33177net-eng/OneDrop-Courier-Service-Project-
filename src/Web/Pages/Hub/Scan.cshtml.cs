@@ -14,7 +14,10 @@ public enum ScanMode
     Collect,
 
     /// <summary>Hub staff scan parcels onto the hub shuttle to the hub their delivery leaves from.</summary>
-    Load
+    Load,
+
+    /// <summary>Parcels the customer did not take are handed back to their shop.</summary>
+    Return
 }
 
 /// <summary>
@@ -57,6 +60,7 @@ public class ScanModel(HubScanHandler handler) : PageModel
         {
             ScanMode.Collect => await handler.CollectAsync(Label, cancellationToken),
             ScanMode.Load => await handler.LoadAsync(Current.Code, Label, cancellationToken),
+            ScanMode.Return => await handler.ReturnAsync(Label, cancellationToken),
             _ => await handler.ReceiveAsync(Current.Code, Label, cancellationToken)
         };
         Scan = result.IsSuccess ? result.Value : null;

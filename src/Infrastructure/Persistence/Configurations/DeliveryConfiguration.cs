@@ -43,8 +43,11 @@ public class TripStopConfiguration : IEntityTypeConfiguration<TripStop>
     public void Configure(EntityTypeBuilder<TripStop> builder)
     {
         builder.MapTenantOwned(Schemas.Delivery);
+        builder.Property(s => s.FeeCollected).HasPrecision(10, 2);
+        builder.Property(s => s.CodCollected).HasPrecision(12, 2);
         builder.HasOne<Trip>().WithMany().HasForeignKey(s => s.TripId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<DeliveryGroup>().WithMany().HasForeignKey(s => s.DeliveryGroupId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(s => s.Payment).WithMany().HasForeignKey(s => s.PaymentId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(s => new { s.DeliveryGroupId, s.DeliveryDate })
             .IsUnique()
             .HasDatabaseName("UX_TripStop_DeliveryGroup_DeliveryDate");

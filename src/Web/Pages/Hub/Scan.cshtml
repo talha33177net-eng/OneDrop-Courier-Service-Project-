@@ -1,11 +1,13 @@
 @page
 @model Web.Pages.Hub.ScanModel
 @using Domain.Grouping
+@using Domain.Orders
 @using Web.Pages.Hub
 @{
     ViewData["Title"] = Model.Current is null ? "Scan parcels" : $"Scan at {Model.Current.Name}";
     var collect = Model.Mode == ScanMode.Collect;
     var load = Model.Mode == ScanMode.Load;
+    var giveBack = Model.Mode == ScanMode.Return;
     string Tab(ScanMode mode) => Model.Mode == mode ? "active" : "";
 }
 
@@ -36,12 +38,14 @@
     <a asp-page="/Hub/Scan" asp-route-hub="@Model.Current.Code" class="@Tab(ScanMode.Receive)">Receive</a>
     <a asp-page="/Hub/Scan" asp-route-hub="@Model.Current.Code" asp-route-mode="@ScanMode.Load" class="@Tab(ScanMode.Load)">Load the shuttle</a>
     <a asp-page="/Hub/Scan" asp-route-hub="@Model.Current.Code" asp-route-mode="@ScanMode.Collect" class="@Tab(ScanMode.Collect)">Collect at the shop</a>
+    <a asp-page="/Hub/Scan" asp-route-hub="@Model.Current.Code" asp-route-mode="@ScanMode.Return" class="@Tab(ScanMode.Return)">Return to the shop</a>
 </nav>
 
 <form method="post" class="card scan-form" asp-route-hub="@Model.Current.Code" asp-route-mode="@Model.Mode">
     <label for="Label">
         @(collect ? "Scan each parcel as you take it from the shop"
             : load ? "Scan each parcel as it goes on the shuttle"
+            : giveBack ? "Scan each parcel as you hand it back to the shop"
             : "Scan each parcel as it comes in")
     </label>
     <div class="scan-input">
@@ -70,10 +74,21 @@ else if (Model.Scan is { } scan)
                 bring all @scan.Packages @(scan.Packages == 1 ? "package" : "packages") to the hub.
             </p>
         }
+        else if (giveBack)
+        {
+            <div class="scan-big">Returned</div>
+            <p><strong>@scan.Order</strong> is back with @scan.Merchant.</p>
+        }
         else if (load)
         {
             <div class="scan-label">Load for</div>
             <div class="scan-big">@scan.SendTo hub</div>
+        }
+        else if (scan.Status == OrderStatus.Refused)
+        {
+            <div class="scan-label">Back to the shop</div>
+            <div class="scan-big">@scan.Merchant</div>
+            <p>The customer did not take it. Keep it with the returns for the shop's next pickup.</p>
         }
         else if (scan.Shelf is { } shelf)
         {
@@ -93,7 +108,7 @@ else if (Model.Scan is { } scan)
 
         @if (scan.AlreadyScanned)
         {
-            <p class="notice">This parcel was already scanned@(collect ? " as collected" : load ? " onto the shuttle" : " in here").</p>
+            <p class="notice">This parcel was already scanned@(collect ? " as collected" : giveBack ? " as returned" : load ? " onto the shuttle" : " in here").</p>
         }
 
         <dl class="scan-facts">
