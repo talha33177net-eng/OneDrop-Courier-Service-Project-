@@ -51,6 +51,13 @@
                 <dt>Delivery fee</dt>
                 <dd>৳@due.Fee.ToString("N0")</dd>
             </div>
+            @if (due.PaidInAdvance > 0)
+            {
+                <div>
+                    <dt>Already paid in advance</dt>
+                    <dd>৳@due.PaidInAdvance.ToString("N0")</dd>
+                </div>
+            }
             @if (due.Cod > 0)
             {
                 <div>

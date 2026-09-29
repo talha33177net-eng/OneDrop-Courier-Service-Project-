@@ -66,6 +66,8 @@ builder.Services.AddRazorPages(options =>
 {
     options.Conventions.AuthorizeFolder("/Merchant", Policies.MerchantPortal);
     options.Conventions.AuthorizeFolder("/Customer", Policies.CustomerPortal);
+    // The SMS link is the key: the customer opens their order without signing in, and the token names no customer
+    options.Conventions.AllowAnonymousToPage("/Customer/Order");
     options.Conventions.AuthorizeFolder("/Platform", Policies.PlatformAdmin);
     options.Conventions.AuthorizeFolder("/Hub", Policies.Operations);
     options.Conventions.AuthorizeFolder("/Rider", Policies.Rider);

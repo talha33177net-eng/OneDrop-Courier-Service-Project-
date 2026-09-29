@@ -113,6 +113,17 @@ public class RiderDayHandler(IAppDbContext db, ITenantContext tenantContext, Tim
             .Where(p => p.TripId == trip.Id && p.Status == PaymentStatus.Paid)
             .ToDictionaryAsync(p => p.Id, cancellationToken);
 
+        // Fees paid in advance (3.6b) come off what is still to collect at the door
+        var deliveryIds = visits.SelectMany(visit => visit.Deliveries).Select(delivery => delivery.Group.Id).ToList();
+        var advances = await db.Payments
+            .AsNoTracking()
+            .Where(p => deliveryIds.Contains(p.DeliveryGroupId) &&
+                p.Purpose == PaymentPurpose.Advance &&
+                p.Status == PaymentStatus.Paid)
+            .GroupBy(p => p.DeliveryGroupId)
+            .Select(delivery => new { Id = delivery.Key, Paid = delivery.Sum(p => p.Fee) })
+            .ToDictionaryAsync(delivery => delivery.Id, delivery => delivery.Paid, cancellationToken);
+
         return new RiderToday(
             rider.Name,
             hub.Name,
@@ -138,7 +149,10 @@ public class RiderDayHandler(IAppDbContext db, ITenantContext tenantContext, Tim
                         .. due.Select(delivery => new FeeDelivery(
                             delivery.Kind,
                             [.. delivery.Orders.Select(FeeLine.Of)]))
-                    ]).Sum()
+                    ])
+                    .Select((share, index) =>
+                        Math.Max(0, share - advances.GetValueOrDefault(visit.Deliveries[index].Group.Id)))
+                    .Sum()
                 : visit.Deliveries.Sum(delivery => delivery.Stop.FeeCollected ?? 0);
             var cod = visit.Outcome is null
                 ? due.Sum(delivery => delivery.Orders.Sum(order => order.CodAmount))

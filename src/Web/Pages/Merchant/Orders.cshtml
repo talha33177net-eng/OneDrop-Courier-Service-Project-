@@ -1,5 +1,6 @@
 @page
 @using Domain.Orders
+@using Domain.Customers
 @model Web.Pages.Merchant.OrdersModel
 @{
     ViewData["Title"] = "My orders";
@@ -45,7 +46,17 @@
                             <td>@order.Reference</td>
                             <td>@order.Recipient</td>
                             <td>@order.Area</td>
-                            <td><span class="status">@order.Status</span></td>
+                            <td>
+                                <span class="status">@order.Status</span>
+                                @if (order.Waits == CustomerStep.Confirm)
+                                {
+                                    <span class="status status-waiting">Not confirmed by the customer yet</span>
+                                }
+                                else if (order.Waits == CustomerStep.PayInAdvance)
+                                {
+                                    <span class="status status-waiting">Waiting for the delivery fee in advance</span>
+                                }
+                            </td>
                             <td class="num">@order.Packages</td>
                             <td class="num">৳@order.Cod.ToString("N0")</td>
                             <td>@order.Created.ToString("yyyy-MM-dd HH:mm")</td>

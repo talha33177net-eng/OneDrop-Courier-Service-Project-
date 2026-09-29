@@ -114,6 +114,20 @@ public class DeliveryFeeCalculator(FeeSchedule schedule)
         return shares;
     }
 
+    /// <summary>
+    /// What the delivery's first shop costs, whatever the other shops and kilograms add: the fee a customer at risk
+    /// pays in advance. The base fee; the fast fee with a Deliver fast order; base plus the Ship now difference when
+    /// shipped now; the extra-shop fee in a follow-up.
+    /// </summary>
+    public decimal FirstShopFee(IEnumerable<FeeLine> orders, DeliveryGroupKind kind = DeliveryGroupKind.Waiting)
+    {
+        return kind == DeliveryGroupKind.FollowUp ? schedule.ExtraShopFee
+            : orders.Any(order => Order.IsForDelivery(order.Status) && order.Speed == DeliverySpeed.Fast)
+                ? schedule.FastDeliveryFee
+            : kind == DeliveryGroupKind.ShippedNow ? schedule.BaseDeliveryFee + ShipNowFee
+            : schedule.BaseDeliveryFee;
+    }
+
     private decimal ShopsFee(IReadOnlyCollection<FeeLine> charged, DeliveryGroupKind kind)
     {
         var shops = charged.Select(order => order.MerchantId).Distinct().Count();
@@ -122,12 +136,7 @@ public class DeliveryFeeCalculator(FeeSchedule schedule)
             return 0;
         }
 
-        var first = kind == DeliveryGroupKind.FollowUp ? schedule.ExtraShopFee
-            : charged.Any(order => order.Speed == DeliverySpeed.Fast) ? schedule.FastDeliveryFee
-            : kind == DeliveryGroupKind.ShippedNow ? schedule.BaseDeliveryFee + ShipNowFee
-            : schedule.BaseDeliveryFee;
-
-        return first + schedule.ExtraShopFee * (shops - 1);
+        return FirstShopFee(charged, kind) + schedule.ExtraShopFee * (shops - 1);
     }
 
     private decimal WeightFee(IEnumerable<FeeLine> charged)

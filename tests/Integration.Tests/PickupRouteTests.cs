@@ -54,9 +54,14 @@ public partial class PickupRouteTests(WebAppFactory factory)
         Assert.Contains(mirpurSheet.Stops.Single(s => s.Merchant == "Fashion House").Orders, o => o.Number == mirpur);
         Assert.DoesNotContain(mirpurSheet.Stops, s => s.Merchant == uttaraShop.Name);
 
-        // The list counts the same parcels the sheet shows
+        // The list counts the same parcels the sheet says to collect: an order still waiting for its delivery fee in
+        // advance (task 3.6b) is listed on the sheet but stays at the shop, so neither counts it
         Assert.Equal(
-            (uttara.Stops.Count, uttara.Stops.Sum(s => s.Orders.Count), uttara.Packages),
+            (
+                uttara.Stops.Count(s => s.Orders.Any(o => o.Collect)),
+                uttara.Stops.Sum(s => s.Orders.Count(o => o.Collect)),
+                uttara.Packages
+            ),
             (uttaraRoute.Stops, uttaraRoute.Orders, uttaraRoute.Packages));
     }
 

@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
+using Domain.Customers;
 using Domain.Grouping;
 using Domain.Orders;
+using Domain.Payments;
 using Domain.Pricing;
 
 namespace Application.Grouping;
@@ -59,6 +61,7 @@ public class DeliveryGrouping(IAppDbContext db, ITenantContext tenantContext, Ti
                 cancellationToken)
             ?? (order.WaitsForGroup ? DeliveryGroup.Open(spec) : DeliveryGroup.OpenAlone(spec));
         order.PlaceIn(group, await AddedFeeAsync(group, line, fees, cancellationToken));
+        await MatchAdvanceAsync(order, group, now, cancellationToken);
         db.Orders.Add(order);
         try
         {
@@ -78,6 +81,7 @@ public class DeliveryGrouping(IAppDbContext db, ITenantContext tenantContext, Ti
             // Move the order before dropping the unsaved group: detaching a group an order still points at
             // would sever a required relationship
             order.PlaceIn(winner, await AddedFeeAsync(winner, line, fees, cancellationToken));
+            await MatchAdvanceAsync(order, winner, now, cancellationToken);
             db.Entry(order).DetectChanges();
             db.Entry(group).State = EntityState.Detached;
             await db.SaveChangesAsync(cancellationToken);
@@ -112,6 +116,43 @@ public class DeliveryGrouping(IAppDbContext db, ITenantContext tenantContext, Ti
         return group is null
             ? new DeliveryQuote(fees.AddedFee([], line), JoinsDelivery: false)
             : new DeliveryQuote(await AddedFeeAsync(group, line, fees, cancellationToken), JoinsDelivery: true);
+    }
+
+    /// <summary>
+    /// An advance is the delivery's first-shop fee and is paid once, whatever shop each order comes from: an order
+    /// joining a delivery whose advance is paid waits for nothing, and one joining a delivery still waiting for its
+    /// advance waits for the same payment.
+    /// </summary>
+    private async Task MatchAdvanceAsync(Order order, DeliveryGroup group, DateTime now, CancellationToken cancellationToken)
+    {
+        if (group.IsNew)
+        {
+            return;
+        }
+
+        var paid = await db.Payments.AnyAsync(
+            payment => payment.DeliveryGroupId == group.Id &&
+                payment.Purpose == PaymentPurpose.Advance &&
+                payment.Status == PaymentStatus.Paid,
+            cancellationToken);
+        if (paid)
+        {
+            order.AdvancePaid(now);
+
+            return;
+        }
+
+        var waiting = await db.Orders
+            .IgnoreQueryFilters([QueryFilters.Merchant])
+            .AnyAsync(
+                other => other.DeliveryGroupId == group.Id &&
+                    other.CustomerStep == CustomerStep.PayInAdvance &&
+                    other.ConfirmedOn == null,
+                cancellationToken);
+        if (waiting)
+        {
+            order.WaitForAdvance();
+        }
     }
 
     /// <summary>

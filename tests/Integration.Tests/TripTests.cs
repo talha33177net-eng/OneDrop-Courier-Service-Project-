@@ -389,7 +389,8 @@ public partial class TripTests(WebAppFactory factory)
         int packages = 1,
         decimal cod = 0,
         string line1 = "House 12, Road 4",
-        string speed = "combine")
+        string speed = "combine",
+        bool feeInAdvance = false)
     {
         var order = new
         {
@@ -397,7 +398,8 @@ public partial class TripTests(WebAppFactory factory)
             Address = new { Area = hub.Area, Line1 = line1 },
             Packages = Enumerable.Range(1, packages).Select(_ => new { Description = "Parcel", WeightGrams = 400 }),
             CodAmount = cod,
-            Speed = speed
+            Speed = speed,
+            FeeInAdvance = feeInAdvance
         };
         var response = await factory.ClientFor(apiKey).PostAsJsonAsync("/api/v1/orders", order, Cancel);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);

@@ -87,6 +87,7 @@ public class CreateOrderHandler(
             address.Landmark,
             cancellationToken);
 
+        var standing = await customers.StandingAsync(customer, cancellationToken);
         var created = Order.Create(new NewOrder(
             merchantId,
             customer.Id,
@@ -102,7 +103,11 @@ public class CreateOrderHandler(
             ExternalReference = command.ExternalReference,
             IdempotencyKey = command.IdempotencyKey,
             RequestHash = requestHash,
-            Note = command.Note
+            Note = command.Note,
+            CustomerStep = standing.StepFor(
+                command.CodAmount,
+                command.FeeInAdvance,
+                tenantContext.Tenant!.TrustedAfterDeliveries)
         });
         if (created.IsFailure)
         {
@@ -140,7 +145,8 @@ public class CreateOrderHandler(
             order.Packages.Count,
             order.CodAmount,
             order.AddedFee,
-            order.Created);
+            order.Created,
+            order.ConfirmedOn == null ? order.CustomerStep : CustomerStep.None);
     }
 
     private async Task<Result<CreateOrderResult>?> FindReplayAsync(
@@ -177,7 +183,8 @@ public class CreateOrderHandler(
                     order.Packages.Count,
                     order.CodAmount,
                     order.AddedFee,
-                    order.Created)
+                    order.Created,
+                    order.ConfirmedOn == null ? order.CustomerStep : CustomerStep.None)
             })
             .FirstOrDefaultAsync(cancellationToken);
 

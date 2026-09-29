@@ -1,4 +1,7 @@
+using System.Buffers.Text;
+using System.Security.Cryptography;
 using Domain.Common;
+using Domain.Customers;
 using Domain.Grouping;
 
 namespace Domain.Orders;
@@ -23,6 +26,9 @@ public sealed record NewOrder(
     public byte[]? RequestHash { get; init; }
 
     public string? Note { get; init; }
+
+    /// <summary>What the order waits for from the customer (<see cref="CustomerStanding.StepFor"/>).</summary>
+    public CustomerStep CustomerStep { get; init; }
 }
 
 public sealed record NewPackage(string Description, int WeightGrams);
@@ -115,6 +121,24 @@ public class Order : TenantEntity, IMerchantOwned
     /// </summary>
     public DateTime? LeftBehindOn { get; private set; }
 
+    /// <summary>
+    /// What the order waits for from the customer before the shop hands it over: a one-tap confirmation, or the
+    /// delivery fee paid in advance (the order is not collected until then). Decided once, when the order is placed.
+    /// </summary>
+    public CustomerStep CustomerStep { get; private set; }
+
+    /// <summary>When the customer confirmed the order or paid its delivery's fee in advance.</summary>
+    public DateTime? ConfirmedOn { get; private set; }
+
+    /// <summary>The secret in the SMS link that opens the order for the customer; set when the order waits for them.</summary>
+    public string? CustomerToken { get; private set; }
+
+    /// <summary>True while the customer has still to confirm the order or pay in advance.</summary>
+    public bool WaitsForCustomer => CustomerStep != CustomerStep.None && ConfirmedOn is null;
+
+    /// <summary>True while the order waits for the fee in advance: it stays at the shop.</summary>
+    public bool WaitsForAdvance => CustomerStep == CustomerStep.PayInAdvance && ConfirmedOn is null;
+
     public byte[] RowVersion { get; private set; } = [];
 
     public IReadOnlyList<Package> Packages => packages;
@@ -177,7 +201,11 @@ public class Order : TenantEntity, IMerchantOwned
             IdempotencyKey = spec.IdempotencyKey.NullIfBlank(),
             RequestHash = spec.RequestHash,
             Note = spec.Note.NullIfBlank(),
-            Status = OrderStatus.Created
+            Status = OrderStatus.Created,
+            CustomerStep = spec.CustomerStep,
+            CustomerToken = spec.CustomerStep == CustomerStep.None
+                ? null
+                : Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(16))
         };
 
         var sequence = 1;
@@ -213,6 +241,49 @@ public class Order : TenantEntity, IMerchantOwned
         Raise(new OrderPlacedInDelivery(this));
     }
 
+    /// <summary>
+    /// The customer confirmed the order with one tap. Confirming again changes nothing; an order waiting for the fee
+    /// in advance is confirmed only by paying it (<see cref="AdvancePaid"/>).
+    /// </summary>
+    public Result Confirm(DateTime now)
+    {
+        if (WaitsForAdvance)
+        {
+            return Error.Conflict("order.confirm.advance", $"{Number} goes out once the delivery fee is paid in advance.");
+        }
+
+        if (CustomerStep != CustomerStep.None)
+        {
+            ConfirmedOn ??= now;
+        }
+
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// The order joined a delivery whose fee is being paid in advance, so it waits for the same payment: one advance
+    /// covers the delivery, whatever shop each order comes from.
+    /// </summary>
+    public void WaitForAdvance()
+    {
+        if (ConfirmedOn is not null)
+        {
+            return;
+        }
+
+        CustomerStep = CustomerStep.PayInAdvance;
+        CustomerToken ??= Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(16));
+    }
+
+    /// <summary>The fee of the order's delivery was paid in advance: the order no longer waits for the customer.</summary>
+    public void AdvancePaid(DateTime now)
+    {
+        if (CustomerStep != CustomerStep.None)
+        {
+            ConfirmedOn ??= now;
+        }
+    }
+
     public bool CanMoveTo(OrderStatus status)
     {
         return Transitions[Status].Contains(status);
@@ -233,7 +304,8 @@ public class Order : TenantEntity, IMerchantOwned
 
     /// <summary>
     /// The collector scanned one of the order's labels at the shop: the whole order leaves the merchant. Scanning it
-    /// again, or another of its labels, changes nothing.
+    /// again, or another of its labels, changes nothing. An order waiting for its delivery fee in advance is refused:
+    /// no parcel travels to a door that has not paid.
     /// </summary>
     public Result<ScanOutcome> Collect()
     {
@@ -245,6 +317,13 @@ public class Order : TenantEntity, IMerchantOwned
         if (Status != OrderStatus.Created)
         {
             return Error.Conflict("order.scan.collect", $"{Number} is {Status}, so there is nothing to collect.");
+        }
+
+        if (WaitsForAdvance)
+        {
+            return Error.Conflict(
+                "order.scan.advance",
+                $"{Number} waits for its delivery fee in advance. Leave it at the shop.");
         }
 
         MoveTo(OrderStatus.PickedUp, "Collected from the shop");

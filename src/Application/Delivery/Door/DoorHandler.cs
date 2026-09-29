@@ -19,7 +19,8 @@ public sealed record DoorQr(PaymentMethod Method, decimal Amount, string Link);
 /// <summary>
 /// What the customer pays at a stop for the orders they take: the delivery fee on what is handed over (one fee for
 /// the whole visit) and the shops' cash on delivery. Refused orders cost nothing and go back to their shops.
-/// <see cref="Qr"/> is the wallet payment already shown for this amount, if any.
+/// <see cref="Qr"/> is the wallet payment already shown for this amount, if any. <see cref="PaidInAdvance"/> is what the
+/// customer paid before the parcel left the shop (3.6b): it is already off <see cref="Fee"/>.
 /// </summary>
 public sealed record DoorDue(
     string Stop,
@@ -27,7 +28,8 @@ public sealed record DoorDue(
     IReadOnlyList<DoorOrder> Refusing,
     decimal Fee,
     decimal Cod,
-    DoorQr? Qr = null)
+    DoorQr? Qr = null,
+    decimal PaidInAdvance = 0)
 {
     public decimal Total => Fee + Cod;
 }
@@ -166,7 +168,7 @@ public class DoorHandler(IAppDbContext db, ITenantContext tenantContext, IPaymen
             return dropped.Error!;
         }
 
-        var shares = SharesOf(door.Visit, refused);
+        var shares = await NetSharesAsync(door, refused, cancellationToken);
         foreach (var (delivery, share) in door.Visit.Deliveries.Zip(shares))
         {
             var taking = Out(delivery).Where(order => !refused.Contains(order.Number)).ToList();
@@ -329,7 +331,9 @@ public class DoorHandler(IAppDbContext db, ITenantContext tenantContext, IPaymen
             .Where(merchant => merchantIds.Contains(merchant.Id))
             .ToDictionaryAsync(merchant => merchant.Id, merchant => merchant.Name, cancellationToken);
         var taking = carried.Where(order => !refused.Contains(order.Number)).ToList();
-        var fee = SharesOf(door.Visit, refused).Sum();
+        var advances = await AdvancesAsync(door, cancellationToken);
+        var fee = (await NetSharesAsync(door, refused, cancellationToken)).Sum();
+        var paidInAdvance = advances.Values.Sum();
         var cod = taking.Sum(order => order.CodAmount);
         var shown = door.Pending.FirstOrDefault(p => p.Amount == fee + cod);
 
@@ -339,7 +343,43 @@ public class DoorHandler(IAppDbContext db, ITenantContext tenantContext, IPaymen
             [.. carried.Except(taking).Select(order => new DoorOrder(order.Number, shops[order.MerchantId]))],
             fee,
             cod,
-            shown is null ? null : new DoorQr(shown.Method, shown.Amount, shown.PaymentLink!));
+            shown is null ? null : new DoorQr(shown.Method, shown.Amount, shown.PaymentLink!),
+            paidInAdvance);
+    }
+
+    /// <summary>
+    /// What the customer already paid in advance per delivery of the visit (3.6b), so the delivery fee is never paid
+    /// twice. The advance is kept even when everything is refused.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<long, decimal>> AdvancesAsync(OpenDoor door, CancellationToken cancellationToken)
+    {
+        var deliveryIds = door.Visit.Deliveries.Select(delivery => delivery.Group.Id).ToList();
+
+        return await db.Payments
+            .Where(payment => deliveryIds.Contains(payment.DeliveryGroupId) &&
+                payment.Purpose == PaymentPurpose.Advance &&
+                payment.Status == PaymentStatus.Paid)
+            .GroupBy(payment => payment.DeliveryGroupId)
+            .Select(delivery => new { Id = delivery.Key, Paid = delivery.Sum(payment => payment.Fee) })
+            .ToDictionaryAsync(delivery => delivery.Id, delivery => delivery.Paid, cancellationToken);
+    }
+
+    /// <summary>
+    /// Each delivery's part of the visit's fee still to collect: its share less what was paid in advance for it. The
+    /// stops record these parts, so they add up to what the customer pays at the door.
+    /// </summary>
+    private async Task<IReadOnlyList<decimal>> NetSharesAsync(
+        OpenDoor door,
+        IReadOnlyCollection<string> refused,
+        CancellationToken cancellationToken)
+    {
+        var advances = await AdvancesAsync(door, cancellationToken);
+
+        return
+        [
+            .. SharesOf(door.Visit, refused).Select((share, index) =>
+                Math.Max(0, share - advances.GetValueOrDefault(door.Visit.Deliveries[index].Group.Id)))
+        ];
     }
 
     /// <summary>The paid payment for what is due: new cash, or the QR shown for it once the gateway has the money.</summary>

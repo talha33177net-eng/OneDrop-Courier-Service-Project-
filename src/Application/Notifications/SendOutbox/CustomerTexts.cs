@@ -14,7 +14,7 @@ namespace Application.Notifications.SendOutbox;
 /// Writes and sends the customer's SMS for one outbox message. The text is built from the data as it is now, so a
 /// retried message never says anything stale about the delivery day. Dates are in the tenant's time zone.
 /// </summary>
-public class CustomerTexts(IAppDbContext db, ITenantContext tenantContext, ISmsSender sms)
+public class CustomerTexts(IAppDbContext db, ITenantContext tenantContext, ICustomerLinks links, ISmsSender sms)
 {
     public async Task SendAsync(OutboxMessage message, CancellationToken cancellationToken)
     {
@@ -41,11 +41,34 @@ public class CustomerTexts(IAppDbContext db, ITenantContext tenantContext, ISmsS
             join delivery in db.DeliveryGroups on order.DeliveryGroupId equals delivery.Id
             join customer in db.Customers on order.CustomerId equals customer.Id
             where order.Id == message.OrderId
-            select new { Order = order.Number, Shop = merchant.Name, delivery.Number, delivery.Status, delivery.LocksAt, customer.Phone })
+            select new
+            {
+                Order = order.Number,
+                Shop = merchant.Name,
+                delivery.Number,
+                delivery.Status,
+                delivery.LocksAt,
+                customer.Phone,
+                order.CustomerStep,
+                order.ConfirmedOn,
+                order.CustomerToken
+            })
             .AsNoTracking()
             .SingleAsync(cancellationToken);
 
         var deliveryDay = LocalDate(placed.LocksAt);
+        if (placed.ConfirmedOn is null && placed.CustomerStep != CustomerStep.None)
+        {
+            // The order waits for the customer: ask, and say no more about it than the shop already knows
+            var link = links.Order(placed.CustomerToken!);
+
+            return (placed.Phone, placed.CustomerStep == CustomerStep.Confirm
+                ? $"Is your {placed.Shop} order {placed.Order} correct? Confirm it and we deliver on " +
+                    $"{Format(deliveryDay)}: {link}"
+                : $"Your {placed.Shop} order {placed.Order} goes out once the OneDrop delivery fee is paid. " +
+                    $"Pay it here and we deliver on {Format(deliveryDay)}: {link}");
+        }
+
         var text = placed.Status == DeliveryGroupStatus.Open
             ? $"Your {placed.Shop} order {placed.Order} is in OneDrop delivery {placed.Number}. Orders from other " +
                 $"shops can join it until the end of {Format(deliveryDay.AddDays(-1))}; we deliver on {Format(deliveryDay)}."

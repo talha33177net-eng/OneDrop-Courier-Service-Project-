@@ -29,7 +29,10 @@ public enum PaymentStatus : byte
 public enum PaymentPurpose : byte
 {
     /// <summary>The delivery fee and the shops' cash on delivery, paid at the door.</summary>
-    Door = 1
+    Door = 1,
+
+    /// <summary>The first shop's delivery fee, paid before the shop hands the order over (a customer at risk).</summary>
+    Advance = 2
 }
 
 public static class PaymentMethodNames

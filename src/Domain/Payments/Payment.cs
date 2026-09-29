@@ -90,6 +90,30 @@ public class Payment : TenantEntity
         return payment;
     }
 
+    /// <summary>
+    /// The first shop's delivery fee for <paramref name="deliveryGroupId"/>, paid before the shop hands the order over,
+    /// by bKash or Nagad through the gateway's link. Pending until the gateway says it is paid.
+    /// </summary>
+    public static Payment InAdvance(long customerId, long deliveryGroupId, PaymentMethod method, decimal fee)
+    {
+        if (method == PaymentMethod.Cash)
+        {
+            throw new ArgumentOutOfRangeException(nameof(method), "An advance is paid by wallet.");
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(fee);
+
+        return new Payment
+        {
+            CustomerId = customerId,
+            DeliveryGroupId = deliveryGroupId,
+            Purpose = PaymentPurpose.Advance,
+            Method = method,
+            Fee = fee,
+            Status = PaymentStatus.Pending
+        };
+    }
+
     /// <summary>The gateway's reference and the link the customer pays through, for a QR payment.</summary>
     public void RequestedAs(string gatewayReference, string paymentLink)
     {

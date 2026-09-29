@@ -3,11 +3,13 @@
 -- Purpose: Money a customer paid. At the door: the visit's delivery fee (Fee) and the shops' cash on delivery (Cod)
 --          together, kept apart for the ledger; TripId and RiderId say who collected it and DeliveryGroupId is the
 --          visit's first delivery (the stops it paid for point here through Delivery.TripStop.PaymentId).
---          TINYINT enums (Domain.Payments): Purpose 1 Door; Method 1 Cash, 2 Bkash, 3 Nagad; Status 1 Pending,
---          2 Paid, 3 Cancelled. A QR payment is Pending with the gateway's reference and link until paid; cash is
---          Paid when recorded
+--          TINYINT enums (Domain.Payments): Purpose 1 Door, 2 Advance; Method 1 Cash, 2 Bkash, 3 Nagad; Status
+--          1 Pending, 2 Paid, 3 Cancelled. A QR payment is Pending with the gateway's reference and link until paid;
+--          cash is Paid when recorded
 -- Author: Courier team
 -- Date: 2026-09-29
+-- Updated: 2026-09-29 - Purpose 2 Advance (task 3.6b): the first shop's fee paid by wallet before the shop hands
+--          the order over; no trip, rider or COD
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Payments].[Payment] (
     [Id]               BIGINT          IDENTITY (1, 1) NOT NULL,
@@ -35,7 +37,7 @@ CREATE TABLE [Payments].[Payment] (
     CONSTRAINT [FK_Payment_Rider] FOREIGN KEY ([RiderId]) REFERENCES [Delivery].[Rider] ([Id]),
     CONSTRAINT [FK_Payment_DeliveryGroup] FOREIGN KEY ([DeliveryGroupId]) REFERENCES [Grouping].[DeliveryGroup] ([Id]),
     CONSTRAINT [FK_Payment_User] FOREIGN KEY ([UpdatedId]) REFERENCES [Identity].[User] ([Id]),
-    CONSTRAINT [chk_Payment_Purpose] CHECK ([Purpose] = 1),
+    CONSTRAINT [chk_Payment_Purpose] CHECK ([Purpose] BETWEEN 1 AND 2),
     CONSTRAINT [chk_Payment_Method] CHECK ([Method] BETWEEN 1 AND 3),
     CONSTRAINT [chk_Payment_Status] CHECK ([Status] BETWEEN 1 AND 3),
     CONSTRAINT [chk_Payment_Amounts] CHECK ([Fee] >= (0) AND [Cod] >= (0) AND [Fee] + [Cod] > (0))

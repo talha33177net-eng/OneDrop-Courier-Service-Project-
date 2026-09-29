@@ -14,6 +14,7 @@ using Application.Network.HubScan;
 using Application.Network.ListAreas;
 using Application.Network.PickupRoutes;
 using Application.Notifications.SendOutbox;
+using Application.Orders.ConfirmOrder;
 using Application.Orders.CreateOrder;
 using Application.Orders.GetOrder;
 using Application.Orders.PackageLabels;
@@ -34,6 +35,7 @@ public static class DependencyInjection
         services.AddScoped<CustomerTexts>();
         services.AddScoped<CreateOrderHandler>();
         services.AddScoped<GetOrderHandler>();
+        services.AddScoped<ConfirmOrderHandler>();
         services.AddScoped<GetQuoteHandler>();
         services.AddScoped<ListAreasHandler>();
         services.AddScoped<ShipNowHandler>();

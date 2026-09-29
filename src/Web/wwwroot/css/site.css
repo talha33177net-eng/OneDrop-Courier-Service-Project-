@@ -292,6 +292,11 @@ code {
     color: #a3620a;
 }
 
+.pill-waiting {
+    background: #fdf1dc;
+    color: #9a5b00;
+}
+
 .lines {
     list-style: none;
     margin: 12px 0;

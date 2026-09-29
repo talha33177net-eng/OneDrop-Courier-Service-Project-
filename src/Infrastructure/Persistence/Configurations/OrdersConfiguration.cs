@@ -29,6 +29,9 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(o => o.AddedFee).HasPrecision(10, 2);
         builder.Property(o => o.RowVersion).IsRowVersion();
         builder.Ignore(o => o.TotalWeightGrams);
+        builder.Property(o => o.CustomerToken).HasMaxLength(30);
+        builder.Ignore(o => o.WaitsForCustomer);
+        builder.Ignore(o => o.WaitsForAdvance);
 
         builder.HasOne<Merchant>().WithMany().HasForeignKey(o => o.MerchantId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Customer>().WithMany().HasForeignKey(o => o.CustomerId).OnDelete(DeleteBehavior.Restrict);
@@ -42,6 +45,10 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Navigation(o => o.History).HasField("history");
 
         builder.HasIndex(o => o.Number).IsUnique().HasDatabaseName("UX_Order_Number");
+        builder.HasIndex(o => o.CustomerToken)
+            .IsUnique()
+            .HasFilter("[CustomerToken] IS NOT NULL")
+            .HasDatabaseName("UX_Order_CustomerToken");
         builder.HasIndex(o => new { o.MerchantId, o.IdempotencyKey })
             .IsUnique()
             .HasFilter("[IdempotencyKey] IS NOT NULL")

@@ -13,9 +13,9 @@ The one place to see where we are and what comes next. Built from the two projec
 
 | | |
 |---|---|
-| Current week | **Week 3 — Operations and money** (7 of 11) |
-| Next task | 3.6b Confirmation and advance payment (one-tap confirmation, merchant warning, advance by risk; decisions in the task) |
-| Last session | 2026-09-29 — 3.4a committed on `day3` (`31a994f`, pushed); tasks 3.5 (delivery screen and attempts) and 3.6a (door payment) done and tested, both **uncommitted** for review. 3.4, the market review, 3.4a, 3.5 and 3.6a are not yet in `main` |
+| Current week | **Week 3 — Operations and money** (8 of 11) |
+| Next task | 3.7 Ledger and next-day settlement (split each payment per merchant, settle job, rider cash deposit; return charge and late-handover fee to confirm) |
+| Last session | 2026-09-29 — 3.5 and 3.6a committed on `day3` (`cbd9afd`, not pushed); task 3.6b (confirmation and advance payment) done and tested, **uncommitted** for review. 3.4, the market review, 3.4a, 3.5, 3.6a and 3.6b are not yet in `main` |
 | Blockers | None |
 
 ---
@@ -46,10 +46,10 @@ A task is **not done** until all of these pass. Record the result in the daily l
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
-| 3 | Operations and money | Group delivered, merchants settled | 🔄 7 of 11 |
+| 3 | Operations and money | Group delivered, merchants settled | 🔄 8 of 11 |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
-Tests today: **313 passing** (211 domain, 6 architecture, 96 integration).
+Tests today: **327 passing** (220 domain, 6 architecture, 101 integration).
 
 ---
 
@@ -383,7 +383,7 @@ next morning each merchant is settled.
       *Left:* a wallet payment for orders then refused is not refunded (the rider must hand over what was paid for);
       the customer's page does not say how a delivery was paid (the receipt does); the rider's cash hand-in at the hub
       is 3.7; a real gateway's callback is not modelled (the rider checks); no phone-width screenshot of the QR yet.
-- [ ] **3.6b Confirmation and advance payment.** Owner's answers (2026-09-29): an order waiting for its advance is
+- [x] **3.6b Confirmation and advance payment.** Owner's answers (2026-09-29): an order waiting for its advance is
       **not collected** from the shop until paid (the route sheet shows "Waiting for the advance" and skips it, and so
       does the merchant's list); a customer with **10 accepted deliveries** never pays in advance (a tenant setting,
       Dhaka and Chattogram 10). Advance payment, narrowed by the market review from the documentation's "new and
@@ -394,6 +394,67 @@ next morning each merchant is settled.
         merchant asks for it on the order; never for a product already paid online; never for a customer with
         enough accepted deliveries (tenant setting). The advance is the first shop's fee; extra shops are paid at
         the door; it is kept when everything is refused.
+      *Done 2026-09-29:* `Domain/Customers/CustomerStanding` (accepted deliveries, failed visits) and `CustomerStep`
+      (`None`, `Confirm`, `PayInAdvance`) decide what one order waits for: nothing for a product paid online or a
+      customer with `Tenant.TrustedAfterDeliveries` accepted deliveries; the fee in advance after a failed visit or
+      refusal, or when the shop sets `feeInAdvance` on the order; otherwise a one-tap confirmation for a customer who
+      has never taken a delivery. `Order.CustomerStep`, `ConfirmedOn` and `CustomerToken` (the unguessable secret in the
+      SMS link, `UX_Order_CustomerToken`), `Confirm`, `AdvancePaid`, `WaitForAdvance`, `WaitsForCustomer` /
+      `WaitsForAdvance`; `Order.Collect` refuses an order waiting for its advance (`order.scan.advance`), so no parcel
+      travels to an unpaid door. `CustomerDirectory.StandingAsync` counts the customer's delivered deliveries, failed
+      stops and refused or returned orders **across every shop** (the merchant filter lifted, so one shop's refusal
+      protects the others without telling them why). `Payments.Payment` gains `Purpose` 2 `Advance` (wallet only, no
+      trip, rider or COD) and `DeliveryFeeCalculator.FirstShopFee` prices it: one advance covers the delivery, so
+      `DeliveryGrouping.MatchAdvanceAsync` makes an order joining a delivery wait for the same payment, or clears it
+      when the advance is already paid. `Application/Orders/ConfirmOrder/ConfirmOrderHandler` (find by token, confirm,
+      request the advance by bKash or Nagad, check it) with the anonymous page `/Customer/Order?token=…` (order, day,
+      COD, "Yes, send it", or the fee with wallet buttons, the QR and "I have paid"); an unknown or used-up token is a
+      404. The "placed" SMS asks instead of telling (`ICustomerLinks` + `Links:PortalUrlFormat`, so the outbox can build
+      a link without a request). Create Order and Get Order return `waitsFor`; the route sheet flags "Leave it: waiting
+      for the fee in advance" or "Not confirmed by the customer yet" (an unpaid order is not in the parcels to collect,
+      on the sheet or in the route list) and the merchant's list shows the same. New tenant setting
+      `TrustedAfterDeliveries` (nullable in SQL, DbUp `2026/006_TrustedAfterDeliveries` sets 10 for both launch
+      tenants; `TenantCatalog` will not serve a tenant without it).
+      *Tested:* build 0 errors, 0 warnings; 8 new domain tests (a first cash order confirms, a paid-online order and a
+      trusted customer wait for nothing, a failed visit or the shop's request asks for the advance, one delivery short
+      of the tenant's count still does; a waiting order gets a unique token, confirming is recorded once, an order
+      waiting for the advance is not collected and is not confirmed by tapping, paying lets it go; the advance is the
+      delivery's first-shop fee for each kind; an advance is wallet-only with no COD) and 4 new integration tests (a new
+      cash customer: `waitsFor` confirm, the SMS asks with the link, the sheet warns but still collects, confirming
+      clears it, an unknown token and another operator's are not found; a shop asking for the advance: the sheet says
+      "leave it" and counts 0 packages, the scan refuses it, cash and a plain confirmation are refused, the same link on
+      a second ask, "not received yet", switching wallet cancels the first request, a second shop's order joins and
+      waits with it, paying releases both, a later order waits for nothing; a refusal asks for the advance at every shop
+      of the operator while the same phone at another operator only confirms; the page confirms an order and pays an
+      advance, and a guessed token is a 404). `PickupRouteTests` now compares the list with what the sheet says to
+      collect, and the outbox tests order paid-online products so they still check the "joined" text. Mutation: letting
+      the collector take an unpaid order fails 1 domain and 1 integration test. 220 + 6 + 100 = 326 pass, none skipped.
+      The publish script was reviewed first (`Orders.Order` and `Platform.Tenant` rebuilt with their rows copied, no
+      data loss); both databases published, DbUp 006 ran. Live on dev: Nusrat Jahan 01819274071 Fashion House OD-100068
+      `confirm` ("Is your Fashion House order OD-100068 correct? … http://dhaka.localhost:5080/Customer/Order?token=…"),
+      Imran Hossain OD-100069 paid online `none` (normal "joined" text), Sabina Yasmin OD-100070 `payInAdvance` ("goes
+      out once the OneDrop delivery fee is paid"). The page confirmed OD-100068 ("your order is confirmed. We deliver it
+      on Thursday 1 October"); a guessed token 404. For OD-100070 the Mirpur sheet showed "Leave it: waiting for the fee
+      in advance" and the collect scan answered "OD-100070 waits for its delivery fee in advance. Leave it at the shop";
+      the page showed ৳60 with bKash and Nagad, the bKash QR, "We have not received the OD-100070 delivery fee yet"
+      before paying, then after paying on `/Dev/Payments` "the delivery fee is paid. Your order is on its way" — the
+      scan then answered "Collected" and the row holds a `Paid` ৳60 advance. Shirin Akhter (01819274051), whose parcel
+      was refused in the 3.5 live check, was asked for the advance on a **Fashion House** order (OD-100071) although the
+      refusal was Gadget BD's; Gadget BD's own OD-100072 (shop asked) shows "Waiting for the delivery fee in advance" on
+      its merchant page, Fashion House cannot see it, and the customer token 404s on the Chattogram host. No errors in
+      the app log.
+      **The advance comes off the door** (found while writing this entry: the door would otherwise have charged the fee
+      twice). `DoorHandler` nets each delivery's paid advance off its share of the visit's fee, so the stops record what
+      was actually collected and the rider's stop and door card agree; `DoorDue.PaidInAdvance` is shown as "Already paid
+      in advance". One more integration test covers it (an advance paid, a second shop joining, the door collecting the
+      extra-shop fee and the COD only, the stop recording ৳25/৳1,500 and the advance staying `Paid`); mutation: ignoring
+      the advance fails it. 220 + 6 + 101 = 327 pass. Live: Shirin Akhter's OD-100071 advance ৳60 paid by Nagad, Beauty
+      Shop OD-100073 joined DG-100043 at ৳25 needing nothing, the rider's stop and door both said ৳25 + ৳1,100 with
+      "Already paid in advance ৳60", cash ৳1,125 handed over, receipt "৳1,125 paid in cash … Delivery fee ৳25", rows:
+      advance ৳60 `Paid` + door ৳25/৳1,100, stop ৳25/৳1,100.
+      *Left:* a wallet advance is not refunded when everything is refused (it is kept, as the plan says); no "nobody
+      home" or "advance kept" texts; the customer's page for the advance is one order at a time; trust is worked out per
+      order from history, with no stored score (3.8); the customer's "My deliveries" does not show the advance.
 - [ ] **3.7 Ledger and next-day settlement.** Split every payment per merchant; the settle job pays yesterday's
       COD to each merchant (fake bKash/bank). Rider end-of-day cash deposit and check. *Tests:* ledger balances;
       each merchant gets exactly its COD.
@@ -401,6 +462,10 @@ next morning each merchant is settled.
       **late-handover fee** per order left behind (tenant settings; Dhaka ৳30–40 return charge, to confirm).
       Merchants pay nothing for a delivered order, and COD handling stays free (Dhaka couriers charge 0–1%).
       Next-day payout must not slip: Pathao pays daily.
+      *From 3.6a–3.6b:* a delivery's fee can now arrive in two payments (a `Purpose` `Advance` row before pickup and the
+      `Door` row at the door), and cash and wallet money are settled differently — the rider hands in only the cash
+      (`RiderToday.Cash`), while a wallet payment is already with the operator. The ledger reads `Payments.Payment` and
+      `Delivery.TripStop`, whose `FeeCollected` and `CodCollected` are what was collected at that door.
 - [ ] **3.8 Trust score (simple).** Refusals and no-shows lower it; merchants' late handovers lower theirs.
       *Cut option:* a simple refusal counter.
       *Added by the market review:* a customer's refusal or no-show switches on advance payment (3.6) at every shop
@@ -559,6 +624,11 @@ Payments stay fake in the MVP either way.
 | 2026-09-29 | One payment per visit, fee and COD kept apart; every stop of the visit points at it; a stop that collects money must have a paid payment | The ledger (3.7) splits COD per shop and the fee per delivery from the stops; the domain enforces "no fee, no handover" |
 | 2026-09-29 | An unpaid QR is cancelled when the wallet, the amount or the outcome changes; one the customer has paid is never dropped, the rider must hand over what it paid for | No double charge, and no refunds to handle in the MVP |
 | 2026-09-29 | For 3.6b: an order waiting for its advance is not collected until paid; 10 accepted deliveries and a customer never pays in advance (tenant setting) (owner) | No parcel travels to an unpaid door; the two-way cost is what advance payment exists to avoid |
+| 2026-09-29 | What an order waits for is decided once, when it is placed, from the customer's record across every shop (`CustomerStanding`: accepted deliveries, failed visits and refused orders) and stored on the order (`CustomerStep`) | The shop is told what its order waits for at once and the answer never changes under it; the record is read with the merchant filter lifted, so one shop's refusal protects the others without telling them why |
+| 2026-09-29 | The SMS link's token is the only key to the confirmation page: no sign-in, an unknown or used-up token is a 404, and the page is the "placed" text rather than an extra SMS | A customer who never visits OneDrop must be able to answer with one tap; a token names no customer, so a guessed link tells nobody anything, and one message per order is what a new customer expects |
+| 2026-09-29 | One advance covers the delivery: an order joining a delivery whose advance is unpaid waits for the same payment, and one joining a paid delivery waits for nothing | The advance is the first shop's fee, which the delivery pays once; the extra shops are still paid at the door |
+| 2026-09-29 | A paid advance comes off the fee at the door, per delivery, and the stops record what was actually collected | The customer must never pay the delivery fee twice; 3.7's ledger adds the advance row and the door row to the delivery's fee |
+| 2026-09-29 | Customer links in SMS are built from `Links:PortalUrlFormat` and the tenant's slug, not from the current request | The outbox sends from a background job, which has no request; a link must still open the right operator's portal |
 
 ## Quick reference
 

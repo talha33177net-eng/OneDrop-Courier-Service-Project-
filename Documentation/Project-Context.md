@@ -99,7 +99,7 @@ The user supplied two PDFs (not stored in the repo): *OneDrop Implementation Pla
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
-| 3 | Operations and money | Group delivered, merchants settled | 🔄 3.1–3.6a done, next 3.6b (confirmation and advance payment) |
+| 3 | Operations and money | Group delivered, merchants settled | 🔄 3.1–3.6b done, next 3.7 (ledger and settlement) |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
 Task-level detail, the cut list, the job schedule, must-pass tests and the daily log are in
@@ -107,18 +107,18 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 
 ---
 
-## 3. What exists today (Weeks 1 and 2, tasks 3.1–3.6a)
+## 3. What exists today (Weeks 1 and 2, tasks 3.1–3.6b)
 
 ### Solution layout (`Courier.sln`)
 | Project | Path | Contents |
 |---|---|---|
-| Domain | `src/Domain` | Entities and rules, no packages. `Common` (Entity with domain events, TenantEntity, Result/Error), `Platform/Tenant`, `Network` (Hub, Zone, Area, PickupRoute), `Customers` (Customer, CustomerAddress, PhoneNumber, PhoneOtp), `Merchants` (Merchant, MerchantApiKey, PickupPoint), `Orders` (Order + state machine and scans, Package with its hub, PackageLabel, OrderStatusHistory), `Grouping` (DeliveryGroup + state machine, lock time and shelf, events), `Delivery` (Rider, Trip, TripStop, TripLoad, TripPlanner), `Pricing` (DeliveryFeeCalculator, FeeSchedule), `Payments` (Payment: cash or wallet, pending until paid), `Notifications` (OutboxMessage + retry rule) |
-| Application | `src/Application` | Use cases as vertical slices: `Orders/CreateOrder`, `Orders/GetOrder`, `Network/ListAreas`, `Network/PickupRoutes` (route list and sheet), `Network/HubScan` (collect, receive at a hub, shelves, shuttle load and manifest), `Orders/PackageLabels`, `Auth/PhoneLogin`, `Customers/CustomerDirectory` (find-or-create by phone/address), `Grouping/DeliveryGrouping` (join or open the order's group; quote), `Grouping/LockDueGroups` (the lock job), `Grouping/ShipNow`, `Grouping/CustomerDeliveries` ("My deliveries"), `Delivery/PlanTrips` (planner and job), `Delivery/HubTrips`, `Delivery/RiderDay` (the rider's stops, Start trip), `Delivery/Door` (at the door: amount due, QR, hand over, nobody home), `Pricing/GetQuote`, `Notifications` (outbox contracts, `SendOutbox` job and SMS texts). Interfaces: `IAppDbContext`, `ITenantJob`, `ITenantContext` (`TenantInfo.Fees`), `ITenantCatalog`, `ICurrentUser`, `ISmsSender`, `IPaymentGateway`; `QueryFilters` (filter names) |
-| Infrastructure | `src/Infrastructure` | `Persistence/AppDbContext` (EF Core, query filters), `Configurations/*` (mapping), `TenantSaveInterceptor`, `MultiTenancy` (TenantContext, TenantCatalog), `Identity` (AppUser, AppRole, claims), `Sms/FakeSmsSender`, `Payments/FakePaymentGateway` (paid by hand on `/Dev/Payments`), `Seeding/DemoDataSeeder`, `Jobs` (Hangfire setup, TenantJobRunner, TenantJobRegistry, OutboxDispatcher); `AppDbContext.SaveChangesAsync` writes the outbox |
+| Domain | `src/Domain` | Entities and rules, no packages. `Common` (Entity with domain events, TenantEntity, Result/Error), `Platform/Tenant`, `Network` (Hub, Zone, Area, PickupRoute), `Customers` (Customer, CustomerAddress, PhoneNumber, PhoneOtp, CustomerStanding + CustomerStep), `Merchants` (Merchant, MerchantApiKey, PickupPoint), `Orders` (Order + state machine and scans, Package with its hub, PackageLabel, OrderStatusHistory), `Grouping` (DeliveryGroup + state machine, lock time and shelf, events), `Delivery` (Rider, Trip, TripStop, TripLoad, TripPlanner), `Pricing` (DeliveryFeeCalculator, FeeSchedule), `Payments` (Payment: cash or wallet, at the door or in advance, pending until paid), `Notifications` (OutboxMessage + retry rule) |
+| Application | `src/Application` | Use cases as vertical slices: `Orders/CreateOrder`, `Orders/GetOrder`, `Orders/ConfirmOrder` (the SMS link: confirm, or pay the fee in advance), `Network/ListAreas`, `Network/PickupRoutes` (route list and sheet), `Network/HubScan` (collect, receive at a hub, shelves, shuttle load and manifest), `Orders/PackageLabels`, `Auth/PhoneLogin`, `Customers/CustomerDirectory` (find-or-create by phone/address), `Grouping/DeliveryGrouping` (join or open the order's group; quote), `Grouping/LockDueGroups` (the lock job), `Grouping/ShipNow`, `Grouping/CustomerDeliveries` ("My deliveries"), `Delivery/PlanTrips` (planner and job), `Delivery/HubTrips`, `Delivery/RiderDay` (the rider's stops, Start trip), `Delivery/Door` (at the door: amount due, QR, hand over, nobody home), `Pricing/GetQuote`, `Notifications` (outbox contracts, `SendOutbox` job and SMS texts). Interfaces: `IAppDbContext`, `ITenantJob`, `ITenantContext` (`TenantInfo.Fees`), `ITenantCatalog`, `ICurrentUser`, `ISmsSender`, `IPaymentGateway`, `ICustomerLinks`; `QueryFilters` (filter names) |
+| Infrastructure | `src/Infrastructure` | `Persistence/AppDbContext` (EF Core, query filters), `Configurations/*` (mapping), `TenantSaveInterceptor`, `MultiTenancy` (TenantContext, TenantCatalog, CustomerLinks), `Identity` (AppUser, AppRole, claims), `Sms/FakeSmsSender`, `Payments/FakePaymentGateway` (paid by hand on `/Dev/Payments`), `Seeding/DemoDataSeeder`, `Jobs` (Hangfire setup, TenantJobRunner, TenantJobRegistry, OutboxDispatcher); `AppDbContext.SaveChangesAsync` writes the outbox |
 | Web | `src/Web` | Razor Pages portals (merchant, customer, hub, platform), `Labels/LabelQrCode` (QRCoder), `Api/V1` (orders, quote, areas by API key; deliveries by customer cookie), `Authentication/ApiKeyAuthenticationHandler`, `MultiTenancy` middleware, `Program.cs` |
 | Database | `src/Database` | SQL project (Microsoft.Build.Sql 2.1.0) → `Database.dacpac`. Owns the schema |
 | Database Update | `src/Database Update` | DbUp console (`dbup.exe`): data migrations in `Scripts/<Year>/`, data-loss scripts in `Scripts/Pre/` |
-| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 211 + 6 + 96 = **313 tests, all passing** |
+| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 220 + 6 + 101 = **327 tests, all passing** |
 | Tools | `tools/db/publish.ps1` | Deploys a database: `dbup pre` → dacpac publish → `dbup` |
 
 ### Features that work
@@ -228,7 +228,20 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   amount or outcome changes; one already paid is never dropped. `PaymentReceived` → outbox → SMS receipt (amount,
   method, delivery, fee, each order and its COD). The rider's **Today** shows how each stop was paid and the **cash
   to hand in**. The fake gateway's requests are paid by hand on `/Dev/Payments` (Development).
-- **Not yet:** one-tap confirmation and advance payment (3.6b), ledger and settlement (3.7), a screen to add riders or change a bike's limit, a screen to change route times or weight settings, Ship now by SMS "reply 1" (needs an inbound SMS gateway), a screen for failed outbox messages,
+- **Confirmation and advance payment** (3.6b, `Domain/Customers/CustomerStanding`, `Application/Orders/ConfirmOrder`):
+  when an order is placed, the customer's record across every shop (accepted deliveries, failed visits, refused orders)
+  decides what it waits for (`Order.CustomerStep`, decided once and stored): **nothing** for a product paid online or a
+  customer with `Tenant.TrustedAfterDeliveries` (10) accepted deliveries; **the fee in advance** after a refusal or
+  no-show, or when the shop sends `feeInAdvance`; otherwise a **one-tap confirmation** for a customer who has never
+  taken a delivery. The order's "placed" SMS asks instead of telling, with a link holding `Order.CustomerToken`
+  (`ICustomerLinks` + `Links:PortalUrlFormat`). `/Customer/Order?token=…` needs no sign-in (the token is the key; an
+  unknown one is a 404): "Yes, send it", or the delivery's first-shop fee with bKash / Nagad, the QR and "I have paid".
+  An order waiting for its advance is **not collected** (`Order.Collect` refuses it; the route sheet says "Leave it" and
+  leaves it out of the parcels to collect, and the merchant's list says why). One advance covers the delivery: an order
+  joining it waits for the same payment, or for nothing once it is paid. At the door the paid advance comes off that
+  delivery's share ("Already paid in advance"), so the fee is never collected twice. Create Order and Get Order return
+  `waitsFor`.
+- **Not yet:** ledger and settlement (3.7), a screen to add riders or change a bike's limit, a screen to change route times or weight settings, Ship now by SMS "reply 1" (needs an inbound SMS gateway), a screen for failed outbox messages,
   merchant screens to create API keys or enter orders manually, tenant admin screens.
 
 ### Database
@@ -237,18 +250,20 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   MerchantApiKey, PickupPoint), `Orders` (Order, Package, OrderStatusHistory, sequence OrderNumber → `OD-100001`),
   `Grouping` (DeliveryGroup, sequence DeliveryGroupNumber → `DG-100001`; one `Open` group per customer + address
   by filtered unique index), `Delivery` (Rider, Trip — one per rider a day, TripStop — a delivery on one trip a
-  day), `Notifications` (OutboxMessage), `Payments` (Payment: `Purpose` 1 Door, `Method` 1 Cash / 2 Bkash / 3 Nagad,
+  day), `Notifications` (OutboxMessage), `Payments` (Payment: `Purpose` 1 Door / 2 Advance, `Method` 1 Cash / 2 Bkash / 3 Nagad,
   `Status` 1 Pending / 2 Paid / 3 Cancelled; `Delivery.TripStop.PaymentId` points at it). `Order.DeliveryGroupId` is NOT NULL: every order travels in a group
   (`Scripts/Pre/001_GroupExistingOrders` grouped the orders saved before 2.2). `Order.AddedFee` is NOT NULL
   (`Scripts/Pre/002_PriceExistingOrders` priced the orders saved before 2.3). `Package.HubId`/`ReceivedOn` say
   where a parcel was last scanned in (null on the shuttle, when `ShuttleToHubId` says where it is going);
   `DeliveryGroup.Shelf` is unique per hub while set (`UX_DeliveryGroup_Hub_Shelf`). `Grouping.DeliveryGroup.Kind` 4 = FollowUp;
   `Delivery.TripStop.Outcome` (1 Delivered, 2 Refused, 3 NotHome), `FeeCollected`, `CodCollected`, `CompletedOn`;
-  `Orders.Order.LeftBehindOn`.
+  `Orders.Order.LeftBehindOn`; `Orders.Order.CustomerStep` (0 None, 1 Confirm, 2 PayInAdvance), `ConfirmedOn` and
+  `CustomerToken` (`UX_Order_CustomerToken`).
 - `Platform.Tenant` settings (fees, `GroupJoinDays`, time zone, currency, SMS sender, `WeightAllowanceGrams`,
-  `ExtraKgFee`) have **no defaults**, in SQL or C#: every tenant states its own. No business value is hard-coded
-  anywhere. The two weight settings are nullable in SQL (the launch seed 001 inserts tenants without them);
-  `TenantCatalog` does not serve a tenant that has not set them. `Grouping.DeliveryGroup.Kind` (TINYINT, 1 Waiting,
+  `ExtraKgFee`, `TrustedAfterDeliveries`) have **no defaults**, in SQL or C#: every tenant states its own. No business
+  value is hard-coded anywhere. The two weight settings and `TrustedAfterDeliveries` are nullable in SQL (the launch
+  seed 001 inserts tenants without them; DbUp 004 and 006 set them); `TenantCatalog` does not serve a tenant that has
+  not set them. `Grouping.DeliveryGroup.Kind` (TINYINT, 1 Waiting,
   2 NextDay, 3 ShippedNow) was filled in for existing groups by `Scripts/Pre/003_DeliveryGroupKind`.
 - Every tenant table: `TenantId` + FK + index; housekeeping columns `Archived`, `UpdatedId`, `UpdatedOn`, `Created`.
 - Seeded by DbUp `2026/001_SeedLaunchTenants.sql`: **OneDrop Dhaka** (id 1, slug `dhaka`, 7 zones on 5 hubs,
@@ -257,7 +272,8 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   launch zone a pickup route, staggered by `2026/005_StaggeredPickupTimes.sql` (Dhaka Uttara 11:00, Mirpur 11:30,
   Motijheel 12:00, Mohammadpur 12:30, Dhanmondi and Banani 13:00, Gulshan 13:30; Chattogram Halishahar 11:00,
   Nasirabad 11:30, Chawkbazar 12:00, Agrabad 12:30, Panchlaish 13:00). `2026/004_WeightAllowance.sql`: 2 kg per
-  shop, then ৳15 (Dhaka) or ৳20 (Chattogram) per started kg. Roles are seeded by `Script.PostDeployment.sql`.
+  shop, then ৳15 (Dhaka) or ৳20 (Chattogram) per started kg. `2026/006_TrustedAfterDeliveries.sql`: 10 accepted
+  deliveries at both operators. Roles are seeded by `Script.PostDeployment.sql`.
 - Dev data in `OneDrop`: merchants 1–3 (Dhaka: Fashion House, Gadget BD, Beauty Shop) and 4–6 (Chattogram, same
   names); demo riders Rafiq Hasan (`rider@dhaka`, MIR, 30 parcels / 25 kg), Sumon Ali (`rider2@dhaka`, MIR, 12 /
   15 kg), Kamal Uddin (`rider3@dhaka`, GUL), Jamal Chowdhury (`rider@chattogram`, AGR). Orders OD-100001 onwards
@@ -329,6 +345,10 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 | One payment per visit, fee and COD kept apart, linked from every stop; money at a stop needs a paid payment (enforced in `TripStop.Complete`) | The ledger (3.7) splits COD per shop and the fee per delivery from the stops |
 | An unpaid QR is cancelled when the wallet, amount or outcome changes; a paid one is never dropped (the rider hands over what it paid for) | No double charge and no refunds to handle in the MVP |
 | For 3.6b (owner): an order waiting for its advance is not collected from the shop until paid; a customer with 10 accepted deliveries never pays in advance (tenant setting) | No parcel travels to an unpaid door; the two-way cost is what advance payment avoids |
+| Done in 3.6b: what an order waits for is decided once when it is placed, from the customer's record across every shop, and stored on the order (`CustomerStep`) | The shop hears the answer at once and it never changes under them; reading the record with the merchant filter lifted lets one shop's refusal protect the others without telling them why |
+| The confirmation page is opened by the token in the SMS, with no sign-in; an unknown or used-up token is a 404, and the "placed" text itself asks | A customer who never visits OneDrop answers with one tap; a token names no customer, so a guessed link tells nobody anything, and one text per order is what they expect |
+| One advance covers the delivery (a joining order waits for the same payment, or for nothing once paid), and a paid advance comes off the fee at that door | The advance is the first shop's fee, paid once; the customer must never pay the delivery fee twice, and 3.7 adds the advance row and the door row to the delivery's fee |
+| SMS links come from `Links:PortalUrlFormat` + the tenant's slug, not from the current request | The outbox sends from a background job with no request, and the link must open the right operator's portal |
 
 ---
 

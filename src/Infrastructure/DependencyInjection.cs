@@ -25,6 +25,7 @@ public static class DependencyInjection
         services.AddScoped<ITenantContext>(provider => provider.GetRequiredService<TenantContext>());
         services.AddSingleton<ITenantCatalog, TenantCatalog>();
         services.AddScoped<ICurrentUser, CurrentUser>();
+        services.AddScoped<ICustomerLinks, CustomerLinks>();
 
         services.AddScoped<TenantSaveInterceptor>();
         // Read from the final configuration when the context is built, not at registration, so every source -

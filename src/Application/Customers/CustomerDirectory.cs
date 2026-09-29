@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
 using Domain.Customers;
+using Domain.Delivery;
+using Domain.Grouping;
+using Domain.Orders;
 
 namespace Application.Customers;
 
@@ -71,5 +74,37 @@ public class CustomerDirectory(IAppDbContext db)
 
             return existing;
         }
+    }
+
+    /// <summary>
+    /// The customer's record so far: deliveries they accepted, and failed visits (a stop refused or with nobody home,
+    /// or an order refused at the door). A customer not saved yet has none.
+    /// </summary>
+    public async Task<CustomerStanding> StandingAsync(Customer customer, CancellationToken cancellationToken)
+    {
+        if (customer.IsNew)
+        {
+            return CustomerStanding.New;
+        }
+
+        var accepted = await db.DeliveryGroups
+            .CountAsync(g => g.CustomerId == customer.Id && g.Status == DeliveryGroupStatus.Delivered, cancellationToken);
+        var failedStops = await (
+            from stop in db.TripStops
+            join g in db.DeliveryGroups on stop.DeliveryGroupId equals g.Id
+            where g.CustomerId == customer.Id &&
+                (stop.Outcome == StopOutcome.Refused || stop.Outcome == StopOutcome.NotHome)
+            select stop.Id)
+            .CountAsync(cancellationToken);
+
+        // Across every shop: the merchant filter would hide the other shops' refusals from a merchant's request
+        var refusedOrders = await db.Orders
+            .IgnoreQueryFilters([QueryFilters.Merchant])
+            .CountAsync(
+                order => order.CustomerId == customer.Id &&
+                    (order.Status == OrderStatus.Refused || order.Status == OrderStatus.ReturnedToMerchant),
+                cancellationToken);
+
+        return new CustomerStanding(accepted, failedStops + refusedOrders);
     }
 }

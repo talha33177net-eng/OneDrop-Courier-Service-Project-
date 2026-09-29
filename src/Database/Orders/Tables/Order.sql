@@ -13,6 +13,10 @@
 --          Pre/002_PriceExistingOrders
 -- Updated: 2026-09-29 - Added LeftBehindOn: when a rider left without the order because it was not ready, and it
 --          moved to a later delivery (task 3.5); the shop's late-handover fee (3.7) reads it
+-- Updated: 2026-09-29 - Added CustomerStep (TINYINT enum Domain.Customers.CustomerStep: 0 None, 1 Confirm, 2
+--          PayInAdvance), ConfirmedOn and CustomerToken (task 3.6b): what the order waits for from the customer, when
+--          they confirmed or paid in advance, and the secret in their SMS link. An order waiting for the advance is not
+--          collected from the shop
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Orders].[Order] (
     [Id]                BIGINT          IDENTITY (1, 1) NOT NULL,
@@ -35,6 +39,9 @@ CREATE TABLE [Orders].[Order] (
     [AddedFee]          DECIMAL (10, 2) NOT NULL,
     [Note]              NVARCHAR (500)  NULL,
     [LeftBehindOn]      DATETIME2 (7)   NULL,
+    [CustomerStep]      TINYINT         DEFAULT ((0)) NOT NULL,
+    [ConfirmedOn]       DATETIME2 (7)   NULL,
+    [CustomerToken]     NVARCHAR (30)   NULL,
     [RowVersion]        ROWVERSION      NOT NULL,
     [UpdatedId]         BIGINT          NULL,
     [UpdatedOn]         DATETIME2 (7)   DEFAULT (getutcdate()) NOT NULL,
@@ -47,7 +54,8 @@ CREATE TABLE [Orders].[Order] (
     CONSTRAINT [FK_Order_DeliveryGroup] FOREIGN KEY ([DeliveryGroupId]) REFERENCES [Grouping].[DeliveryGroup] ([Id]),
     CONSTRAINT [FK_Order_PickupPoint] FOREIGN KEY ([PickupPointId]) REFERENCES [Merchants].[PickupPoint] ([Id]),
     CONSTRAINT [FK_Order_User] FOREIGN KEY ([UpdatedId]) REFERENCES [Identity].[User] ([Id]),
-    CONSTRAINT [chk_Order_Amounts] CHECK ([CodAmount] >= (0) AND [DeclaredValue] >= (0) AND [AddedFee] >= (0))
+    CONSTRAINT [chk_Order_Amounts] CHECK ([CodAmount] >= (0) AND [DeclaredValue] >= (0) AND [AddedFee] >= (0)),
+    CONSTRAINT [chk_Order_CustomerStep] CHECK ([CustomerStep] BETWEEN 0 AND 2)
 );
 
 
@@ -75,3 +83,8 @@ CREATE NONCLUSTERED INDEX [IX_Order_Tenant_Customer_Status]
 GO
 CREATE NONCLUSTERED INDEX [IX_Order_DeliveryGroupId]
     ON [Orders].[Order]([DeliveryGroupId] ASC);
+
+
+GO
+CREATE UNIQUE NONCLUSTERED INDEX [UX_Order_CustomerToken]
+    ON [Orders].[Order]([CustomerToken] ASC) WHERE ([CustomerToken] IS NOT NULL);

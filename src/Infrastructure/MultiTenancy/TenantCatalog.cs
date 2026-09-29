@@ -47,17 +47,20 @@ public class TenantCatalog(IServiceScopeFactory scopeFactory, IMemoryCache cache
 
             // A setting added after the launch seed is nullable in the table; a tenant that has not stated it is not
             // served rather than given another operator's value
-            foreach (var unset in tenants.Where(t => t.WeightAllowanceGrams is null || t.ExtraKgFee is null))
+            foreach (var unset in tenants.Where(t =>
+                t.WeightAllowanceGrams is null || t.ExtraKgFee is null || t.TrustedAfterDeliveries is null))
             {
                 logger.LogWarning(
-                    "Tenant {Slug} has no weight allowance or extra kg fee set and is not served",
+                    "Tenant {Slug} has no weight allowance, extra kg fee or trusted-after count set and is not served",
                     unset.Slug);
             }
 
             return (IReadOnlyList<TenantInfo>)
             [
                 .. tenants
-                    .Where(t => t.WeightAllowanceGrams is not null && t.ExtraKgFee is not null)
+                    .Where(t => t.WeightAllowanceGrams is not null &&
+                        t.ExtraKgFee is not null &&
+                        t.TrustedAfterDeliveries is not null)
                     .Select(t => new TenantInfo(
                         t.Id,
                         t.Name,
@@ -70,7 +73,8 @@ public class TenantCatalog(IServiceScopeFactory scopeFactory, IMemoryCache cache
                         t.FastDeliveryFee,
                         t.GroupJoinDays,
                         t.WeightAllowanceGrams!.Value,
-                        t.ExtraKgFee!.Value))
+                        t.ExtraKgFee!.Value,
+                        t.TrustedAfterDeliveries!.Value))
             ];
         }) ?? [];
     }

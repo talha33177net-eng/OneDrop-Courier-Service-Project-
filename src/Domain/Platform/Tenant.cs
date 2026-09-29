@@ -50,5 +50,11 @@ public class Tenant : AuditedEntity, IArchivable
     /// <summary>Fee for every started kilogram a shop's parcels weigh above <see cref="WeightAllowanceGrams"/>.</summary>
     public decimal? ExtraKgFee { get; private set; }
 
+    /// <summary>
+    /// Accepted deliveries after which a customer never pays the fee in advance, even after a refusal or when a shop
+    /// asks. Nullable only because the column came after the launch seed; a tenant without it is not served.
+    /// </summary>
+    public int? TrustedAfterDeliveries { get; private set; }
+
     public bool Archived { get; private set; }
 }

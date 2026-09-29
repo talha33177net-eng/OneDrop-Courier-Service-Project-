@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Application.Abstractions;
 using Application.Delivery.Door;
+using Application.Orders.ConfirmOrder;
 using Application.Notifications;
 using Application.Notifications.SendOutbox;
 using Domain.Customers;
@@ -179,6 +180,83 @@ public partial class TripTests
         Assert.Contains("Delivered, paid by Nagad", done);
         Assert.Matches(@"Cash to hand in</dt>\s*<dd>৳0</dd>", done);
         Assert.Equal([OrderStatus.Delivered], await StatusesAsync(order));
+    }
+
+    [Fact]
+    public async Task A_fee_paid_in_advance_is_not_collected_again_at_the_door()
+    {
+        WebAppFactory.RequireDatabase();
+        var dhaka = await TenantAsync("dhaka");
+        var hub = await NewHubAsync();
+        var rider = await NewRiderAsync(hub, "Advance rider", new TripLoad(30, 25_000));
+        var phone = NewPhone();
+        var paidAhead = await CreateAsync(WebAppFactory.DhakaFashion, phone, hub, cod: 1000, feeInAdvance: true);
+        var token = await AdvanceTokenAsync(paidAhead);
+
+        // The customer pays the delivery's first-shop fee before the parcel leaves the shop (3.6b)
+        await ConfirmAsync(handler => handler.RequestAdvanceAsync(token, PaymentMethod.Bkash, Cancel));
+        var advance = Assert.Single(await AdvancesOfAsync(paidAhead));
+        factory.Services.GetRequiredService<FakePaymentLog>().Pay(advance.GatewayReference!, DateTime.UtcNow);
+        await ConfirmAsync(handler => handler.CheckAdvanceAsync(token, Cancel));
+
+        // A second shop joins the same delivery: its extra-shop fee is still paid at the door
+        var joining = await CreateAsync(WebAppFactory.DhakaGadget, phone, hub, cod: 500);
+        var delivery = await DueAsync(hub, [paidAhead, joining]);
+        await PlanAsync("dhaka", hub);
+        await StartAsync("dhaka", rider.UserId!.Value);
+        var userId = rider.UserId.Value;
+
+        var stopBefore = Assert.Single((await RiderTodayAsync("dhaka", userId))!.Stops);
+        var due = (await DoorAsync("dhaka", door => door.DueAsync(userId, delivery, [], Cancel))).Value;
+        var handedOver = await DoorAsync("dhaka", door => door.HandOverAsync(userId, delivery, [], due.Total, PaymentMethod.Cash, Cancel));
+        var stop = Assert.Single(await StopsOfAsync(delivery));
+
+        // The base fee was paid ahead, so only the extra shop and the COD are left at the door
+        Assert.Equal((dhaka.BaseDeliveryFee, dhaka.ExtraShopFee, 1500m), (due.PaidInAdvance, due.Fee, due.Cod));
+
+        // The rider's stop shows the same, not the fee the whole delivery cost
+        Assert.Equal((dhaka.ExtraShopFee, 1500m), (stopBefore.Fee, stopBefore.Cod));
+        Assert.Equal(dhaka.ExtraShopFee + 1500, due.Total);
+        Assert.Equal(StopOutcome.Delivered, handedOver.Value.Outcome);
+        Assert.Equal(new StopRow(StopOutcome.Delivered, dhaka.ExtraShopFee, 1500), stop);
+
+        // The advance is a payment of its own and stays paid
+        Assert.Equal(
+            [(PaymentPurpose.Advance, PaymentStatus.Paid, dhaka.BaseDeliveryFee)],
+            (await AdvancesOfAsync(paidAhead)).Select(p => (p.Purpose, p.Status, p.Fee)));
+    }
+
+    private async Task<T> ConfirmAsync<T>(Func<ConfirmOrderHandler, Task<T>> act)
+    {
+        await using var scope = await ScopeAsync("dhaka");
+
+        return await act(scope.ServiceProvider.GetRequiredService<ConfirmOrderHandler>());
+    }
+
+    private async Task<string> AdvanceTokenAsync(string number)
+    {
+        await using var scope = await ScopeAsync("dhaka");
+
+        return (await scope.ServiceProvider.GetRequiredService<AppDbContext>().Orders
+            .AsNoTracking()
+            .SingleAsync(order => order.Number == number, Cancel))
+            .CustomerToken!;
+    }
+
+    /// <summary>The advances paid for the order's delivery, oldest first.</summary>
+    private async Task<IReadOnlyList<Payment>> AdvancesOfAsync(string number)
+    {
+        await using var scope = await ScopeAsync("dhaka");
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        return await (
+            from payment in db.Payments
+            join order in db.Orders on payment.DeliveryGroupId equals order.DeliveryGroupId
+            where order.Number == number && payment.Purpose == PaymentPurpose.Advance
+            orderby payment.Id
+            select payment)
+            .AsNoTracking()
+            .ToListAsync(Cancel);
     }
 
     private static FormUrlEncodedContent Form(string page, params (string Name, string Value)[] fields)
