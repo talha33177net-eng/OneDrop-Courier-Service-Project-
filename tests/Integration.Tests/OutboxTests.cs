@@ -235,14 +235,18 @@ public class OutboxTests(WebAppFactory factory)
             .SingleAsync(m => m.Id == id, Cancel);
     }
 
-    private async Task<Created> CreateAsync(string apiKey, string phone, string speed = "combine")
+    /// <summary>
+    /// A product paid online (no cash on delivery), so the order needs no confirmation from the customer (task 3.6b)
+    /// and the text is the one about the delivery it joined.
+    /// </summary>
+    private async Task<Created> CreateAsync(string apiKey, string phone, string speed = "combine", decimal cod = 0)
     {
         var order = new
         {
             Customer = new { Name = "Outbox Customer", Phone = phone },
             Address = new { Area, Line1 = Home },
             Packages = new[] { new { Description = "Parcel", WeightGrams = 400 } },
-            CodAmount = 500,
+            CodAmount = cod,
             Speed = speed
         };
         var response = await factory.ClientFor(apiKey).PostAsJsonAsync("/api/v1/orders", order, Json, Cancel);

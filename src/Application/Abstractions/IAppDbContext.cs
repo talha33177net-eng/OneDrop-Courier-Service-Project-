@@ -1,11 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Domain.Customers;
+using Domain.Delivery;
 using Domain.Grouping;
 using Domain.Merchants;
 using Domain.Network;
 using Domain.Notifications;
 using Domain.Orders;
+using Domain.Payments;
 using Domain.Platform;
 
 namespace Application.Abstractions;
@@ -47,6 +49,18 @@ public interface IAppDbContext
     DbSet<DeliveryGroup> DeliveryGroups { get; }
 
     DbSet<OutboxMessage> OutboxMessages { get; }
+
+    DbSet<Rider> Riders { get; }
+
+    DbSet<Trip> Trips { get; }
+
+    DbSet<TripStop> TripStops { get; }
+
+    DbSet<Payment> Payments { get; }
+
+    DbSet<LedgerEntry> LedgerEntries { get; }
+
+    DbSet<Settlement> Settlements { get; }
 
     EntityEntry<TEntity> Entry<TEntity>(TEntity entity)
         where TEntity : class;

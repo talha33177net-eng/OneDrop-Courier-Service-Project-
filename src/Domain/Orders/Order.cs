@@ -1,4 +1,7 @@
+using System.Buffers.Text;
+using System.Security.Cryptography;
 using Domain.Common;
+using Domain.Customers;
 using Domain.Grouping;
 
 namespace Domain.Orders;
@@ -23,6 +26,9 @@ public sealed record NewOrder(
     public byte[]? RequestHash { get; init; }
 
     public string? Note { get; init; }
+
+    /// <summary>What the order waits for from the customer (<see cref="CustomerStanding.StepFor"/>).</summary>
+    public CustomerStep CustomerStep { get; init; }
 }
 
 public sealed record NewPackage(string Description, int WeightGrams);
@@ -109,6 +115,30 @@ public class Order : TenantEntity, IMerchantOwned
 
     public string? Note { get; private set; }
 
+    /// <summary>
+    /// When a rider left without the order because it was not ready at the hub, and it moved to a later delivery
+    /// (<see cref="FollowUpIn"/>). The shop's late-handover fee is decided from it.
+    /// </summary>
+    public DateTime? LeftBehindOn { get; private set; }
+
+    /// <summary>
+    /// What the order waits for from the customer before the shop hands it over: a one-tap confirmation, or the
+    /// delivery fee paid in advance (the order is not collected until then). Decided once, when the order is placed.
+    /// </summary>
+    public CustomerStep CustomerStep { get; private set; }
+
+    /// <summary>When the customer confirmed the order or paid its delivery's fee in advance.</summary>
+    public DateTime? ConfirmedOn { get; private set; }
+
+    /// <summary>The secret in the SMS link that opens the order for the customer; set when the order waits for them.</summary>
+    public string? CustomerToken { get; private set; }
+
+    /// <summary>True while the customer has still to confirm the order or pay in advance.</summary>
+    public bool WaitsForCustomer => CustomerStep != CustomerStep.None && ConfirmedOn is null;
+
+    /// <summary>True while the order waits for the fee in advance: it stays at the shop.</summary>
+    public bool WaitsForAdvance => CustomerStep == CustomerStep.PayInAdvance && ConfirmedOn is null;
+
     public byte[] RowVersion { get; private set; } = [];
 
     public IReadOnlyList<Package> Packages => packages;
@@ -171,7 +201,11 @@ public class Order : TenantEntity, IMerchantOwned
             IdempotencyKey = spec.IdempotencyKey.NullIfBlank(),
             RequestHash = spec.RequestHash,
             Note = spec.Note.NullIfBlank(),
-            Status = OrderStatus.Created
+            Status = OrderStatus.Created,
+            CustomerStep = spec.CustomerStep,
+            CustomerToken = spec.CustomerStep == CustomerStep.None
+                ? null
+                : Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(16))
         };
 
         var sequence = 1;
@@ -207,6 +241,49 @@ public class Order : TenantEntity, IMerchantOwned
         Raise(new OrderPlacedInDelivery(this));
     }
 
+    /// <summary>
+    /// The customer confirmed the order with one tap. Confirming again changes nothing; an order waiting for the fee
+    /// in advance is confirmed only by paying it (<see cref="AdvancePaid"/>).
+    /// </summary>
+    public Result Confirm(DateTime now)
+    {
+        if (WaitsForAdvance)
+        {
+            return Error.Conflict("order.confirm.advance", $"{Number} goes out once the delivery fee is paid in advance.");
+        }
+
+        if (CustomerStep != CustomerStep.None)
+        {
+            ConfirmedOn ??= now;
+        }
+
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// The order joined a delivery whose fee is being paid in advance, so it waits for the same payment: one advance
+    /// covers the delivery, whatever shop each order comes from.
+    /// </summary>
+    public void WaitForAdvance()
+    {
+        if (ConfirmedOn is not null)
+        {
+            return;
+        }
+
+        CustomerStep = CustomerStep.PayInAdvance;
+        CustomerToken ??= Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(16));
+    }
+
+    /// <summary>The fee of the order's delivery was paid in advance: the order no longer waits for the customer.</summary>
+    public void AdvancePaid(DateTime now)
+    {
+        if (CustomerStep != CustomerStep.None)
+        {
+            ConfirmedOn ??= now;
+        }
+    }
+
     public bool CanMoveTo(OrderStatus status)
     {
         return Transitions[Status].Contains(status);
@@ -227,7 +304,8 @@ public class Order : TenantEntity, IMerchantOwned
 
     /// <summary>
     /// The collector scanned one of the order's labels at the shop: the whole order leaves the merchant. Scanning it
-    /// again, or another of its labels, changes nothing.
+    /// again, or another of its labels, changes nothing. An order waiting for its delivery fee in advance is refused:
+    /// no parcel travels to a door that has not paid.
     /// </summary>
     public Result<ScanOutcome> Collect()
     {
@@ -239,6 +317,13 @@ public class Order : TenantEntity, IMerchantOwned
         if (Status != OrderStatus.Created)
         {
             return Error.Conflict("order.scan.collect", $"{Number} is {Status}, so there is nothing to collect.");
+        }
+
+        if (WaitsForAdvance)
+        {
+            return Error.Conflict(
+                "order.scan.advance",
+                $"{Number} waits for its delivery fee in advance. Leave it at the shop.");
         }
 
         MoveTo(OrderStatus.PickedUp, "Collected from the shop");
@@ -259,7 +344,8 @@ public class Order : TenantEntity, IMerchantOwned
             return Error.NotFound("order.scan.package", $"{Number} has no package {sequence}.");
         }
 
-        if (Status is not (OrderStatus.Created or OrderStatus.PickedUp or OrderStatus.AtHub))
+        // A refused order comes back to the hub on its way to the shop; its status stays Refused
+        if (Status is not (OrderStatus.Created or OrderStatus.PickedUp or OrderStatus.AtHub or OrderStatus.Refused))
         {
             return Error.Conflict("order.scan.receive", $"{Number} is {Status}, so it cannot be received at a hub.");
         }
@@ -323,6 +409,88 @@ public class Order : TenantEntity, IMerchantOwned
         }
 
         package.LoadForShuttle(toHubId);
+
+        return ScanOutcome.Recorded;
+    }
+
+    /// <summary>
+    /// True when every package is at <paramref name="hubId"/> and the order can go out from there: it is
+    /// <see cref="OrderStatus.AtHub"/> and none of its packages is still on the shuttle or at another hub.
+    /// </summary>
+    public bool IsReadyAt(long hubId)
+    {
+        return Status == OrderStatus.AtHub && packages.All(p => p.HubId == hubId);
+    }
+
+    /// <summary>
+    /// The rider takes the order out from <paramref name="hubId"/>: its packages leave the hub and the order is out
+    /// for delivery. False, and nothing changes, when it is not ready there (<see cref="IsReadyAt"/>): it stays behind.
+    /// </summary>
+    public bool HandToRider(long hubId)
+    {
+        if (!IsReadyAt(hubId))
+        {
+            return false;
+        }
+
+        foreach (var package in packages)
+        {
+            package.LeaveHub();
+        }
+
+        MoveTo(OrderStatus.OutForDelivery, "Out with the rider");
+
+        return true;
+    }
+
+    /// <summary>
+    /// The rider left without the order (not ready when its delivery went out): it moves to a later delivery of the
+    /// same customer and address, the customer's open one or a follow-up. The merchant's <see cref="AddedFee"/> stays
+    /// as it was given; the customer hears where the order now travels.
+    /// </summary>
+    public void FollowUpIn(DeliveryGroup group, DateTime now)
+    {
+        if (group.CustomerId != CustomerId || group.AddressId != AddressId)
+        {
+            throw new InvalidOperationException("An order can only travel in its own customer and address's group.");
+        }
+
+        if (!IsForDelivery(Status) || Status is OrderStatus.OutForDelivery or OrderStatus.Delivered)
+        {
+            throw new InvalidOperationException($"{Number} is {Status}; only an order still waiting is left behind.");
+        }
+
+        DeliveryGroup = group;
+        DeliveryGroupId = group.Id;
+        LeftBehindOn = now;
+        history.Add(new OrderStatusHistory(this, Status, "Not ready when the rider left; goes in a later delivery"));
+        Withdraw<OrderPlacedInDelivery>();
+        Raise(new OrderPlacedInDelivery(this));
+    }
+
+    /// <summary>
+    /// A refused order is handed back to its shop: its parcels leave the hub. Scanning it again changes nothing.
+    /// </summary>
+    public Result<ScanOutcome> ReturnToMerchant()
+    {
+        if (Status == OrderStatus.ReturnedToMerchant)
+        {
+            return ScanOutcome.AlreadyRecorded;
+        }
+
+        if (Status != OrderStatus.Refused)
+        {
+            return Error.Conflict(
+                "order.scan.return",
+                $"{Number} is {Status}; only an order the customer did not take goes back to the shop.");
+        }
+
+        foreach (var package in packages)
+        {
+            package.LeaveHub();
+        }
+
+        MoveTo(OrderStatus.ReturnedToMerchant, "Handed back to the shop");
 
         return ScanOutcome.Recorded;
     }

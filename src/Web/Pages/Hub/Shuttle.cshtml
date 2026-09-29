@@ -8,29 +8,30 @@
 
 @if (Model.Current is null)
 {
-    <h1>Hub shuttle</h1>
-    <p class="lead">Which hub's shuttle?</p>
-    <div class="card">
-        <ul class="hub-list">
-            @foreach (var hub in Model.Hubs)
-            {
-                <li><a asp-page="/Hub/Shuttle" asp-route-hub="@hub.Code">@hub.Name <span class="muted">@hub.Code</span></a></li>
-            }
-        </ul>
-    </div>
+    <partial name="_HubPicker" model='new HubPicker("/Hub/Shuttle", "Hub shuttle", "Which hub are you working at?", Model.Hubs)' />
     return;
 }
 
-<div class="sheet-head">
+<div class="page-head">
     <div>
-        <h1>@Model.Current.Name shuttle</h1>
-        <p class="lead">Parcels here whose delivery leaves from another hub. Next-day parcels are listed first.</p>
+        <p class="eyebrow">Step 4 · @Model.Current.Name</p>
+        <h1>Shuttle list</h1>
+        <p class="lead">Parcels here whose customer is served by another hub. Next-day parcels are listed first.</p>
     </div>
-    <div class="no-print">
+    <div class="actions no-print">
         <a class="button" asp-page="/Hub/Scan" asp-route-hub="@Model.Current.Code" asp-route-mode="@ScanMode.Load">Scan onto the shuttle</a>
-        <button type="button" class="button secondary" onclick="window.print()">Print</button>
+        <button type="button" class="button ghost" onclick="window.print()">Print the list</button>
     </div>
 </div>
+
+<details class="help">
+    <summary>How the shuttle works</summary>
+    <ol>
+        <li>Print this list, or keep it open, when the shuttle is about to leave (about 2:30 PM).</li>
+        <li>Press <strong>Scan onto the shuttle</strong> and scan each parcel as it goes on. It leaves this list.</li>
+        <li>At the other hub, staff scan it in with <strong>Receive at the hub</strong>, which puts it on its shelf.</li>
+    </ol>
+</details>
 
 <p><strong>@toLoad @(toLoad == 1 ? "parcel" : "parcels")</strong> to load.</p>
 

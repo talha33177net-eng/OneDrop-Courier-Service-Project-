@@ -1,0 +1,108 @@
+@page
+@model Web.Pages.Customer.OrderModel
+@using Domain.Customers
+@using Domain.Payments
+@using Web.Labels
+@{
+    ViewData["Title"] = "Your order";
+    var order = Model.Order!;
+}
+
+@section Head {
+    <partial name="_CustomerApp" />
+}
+
+<section class="card narrow center">
+    <p class="eyebrow">@order.Shop · @order.Number</p>
+    <h1>@(order.Done ? "All set" : order.Step == CustomerStep.Confirm ? "Is this your order?" : "Pay the delivery fee")</h1>
+    <ol class="tracker" aria-label="Progress">
+        <li class="done">Ordered</li>
+        <li class="@(order.Done ? "done" : "now")">@(order.Step == CustomerStep.Confirm ? "You confirm" : "You pay the fee")</li>
+        <li class="@(order.Done ? "now" : null)">Shop sends it</li>
+        <li>Delivered</li>
+    </ol>
+
+    @if (Model.Problem is not null)
+    {
+        <p class="notice notice-problem">@Model.Problem</p>
+    }
+    <dl class="money">
+        <div>
+            <dt>Shop</dt>
+            <dd>@order.Shop</dd>
+        </div>
+        <div>
+            <dt>Order</dt>
+            <dd>@order.Number</dd>
+        </div>
+        <div>
+            <dt>Arriving</dt>
+            <dd>@order.DeliveryDate.ToString("dddd d MMMM")</dd>
+        </div>
+        @if (order.CodAmount > 0)
+        {
+            <div>
+                <dt>To pay for the products at the door</dt>
+                <dd>৳@order.CodAmount.ToString("N0")</dd>
+            </div>
+        }
+    </dl>
+
+    @if (order.Done)
+    {
+        <p class="notice">
+            @if (order.Step == CustomerStep.PayInAdvance)
+            {
+                @:Thank you: the delivery fee is paid. Your order is on its way.
+            }
+            else
+            {
+                @:Thank you: your order is confirmed. We deliver it on @order.DeliveryDate.ToString("dddd d MMMM").
+            }
+        </p>
+        <a class="button" asp-page="/Customer/Index">My deliveries</a>
+    }
+    else if (order.Step == CustomerStep.Confirm)
+    {
+        <p>Confirm the order and the shop sends it to us. Nothing to pay now.</p>
+        <form method="post" asp-page-handler="Confirm">
+            <input type="hidden" name="token" value="@Model.Token" />
+            <button class="button" type="submit">Yes, send it</button>
+        </form>
+    }
+    else
+    {
+        <p>
+            Your order goes out once the OneDrop delivery fee of <strong>৳@order.Fee.ToString("N0")</strong> is paid.
+            Anything more for other shops in the same delivery is paid at the door.
+        </p>
+        @if (order.PaymentLink is not null)
+        {
+            <div class="door-qr">
+                <div class="door-qr-code">@LabelQrCode.Svg(order.PaymentLink)</div>
+                <div>
+                    <p><strong>৳@order.Fee.ToString("N0") by @order.Method!.Value.DisplayName()</strong></p>
+                    <p class="muted">
+                        Open the link in your @order.Method.Value.DisplayName() app, or scan this code from another
+                        phone. Then check below.
+                    </p>
+                    <p><a href="@order.PaymentLink">Pay ৳@order.Fee.ToString("N0") by @order.Method.Value.DisplayName()</a></p>
+                    <form method="post" asp-page-handler="Check">
+                        <input type="hidden" name="token" value="@Model.Token" />
+                        <button class="button" type="submit">I have paid</button>
+                    </form>
+                </div>
+            </div>
+        }
+        <form method="post" asp-page-handler="Pay" class="door-actions">
+            <input type="hidden" name="token" value="@Model.Token" />
+            <span class="muted">Pay with:</span>
+            @foreach (var wallet in new[] { PaymentMethod.Bkash, PaymentMethod.Nagad })
+            {
+                <button class="button @(order.Method == wallet ? "" : "secondary")" type="submit" name="method" value="@wallet">
+                    @wallet.DisplayName()
+                </button>
+            }
+        </form>
+    }
+</section>

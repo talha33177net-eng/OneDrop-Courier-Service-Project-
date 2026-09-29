@@ -48,6 +48,9 @@ public class CustomerDeliveriesTests(WebAppFactory factory)
         Assert.Equal(LocalDate(dhaka, group.LocksAt), delivery.DeliveryDay);
         Assert.Equal(delivery.DeliveryDay.AddDays(-1), delivery.LastDayToJoin);
         Assert.Equal(dhaka.ExtraShopFee, deliveries.ExtraShopFee);
+
+        // Opened today (Day 1): Ship now would bring the day forward for the fast difference
+        Assert.Equal(dhaka.FastDeliveryFee - dhaka.BaseDeliveryFee, delivery.ShipNowFee);
         Assert.Empty(deliveries.Earlier);
     }
 
@@ -122,7 +125,8 @@ public class CustomerDeliveriesTests(WebAppFactory factory)
         Assert.Empty(delivered.OnTheWay);
         var earlier = Assert.Single(delivered.Earlier);
         Assert.Equal((number, DeliveryGroupStatus.Delivered), (earlier.Number, earlier.Status));
-        Assert.Equal(dhaka.BaseDeliveryFee + dhaka.ExtraShopFee, earlier.Fee);
+        // Ship now on Day 1 brought the delivery forward: the first shop is charged the fast fee
+        Assert.Equal(dhaka.FastDeliveryFee + dhaka.ExtraShopFee, earlier.Fee);
     }
 
     [Fact]

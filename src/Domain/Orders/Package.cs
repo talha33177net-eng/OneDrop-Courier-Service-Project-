@@ -32,8 +32,8 @@ public class Package : TenantEntity, IMerchantOwned
     public int WeightGrams { get; private set; }
 
     /// <summary>
-    /// The hub the parcel is at: where it was last scanned in. Null until it first reaches a hub, and while it is on
-    /// the shuttle to <see cref="ShuttleToHubId"/>.
+    /// The hub the parcel is at: where it was last scanned in. Null until it first reaches a hub, while it is on
+    /// the shuttle to <see cref="ShuttleToHubId"/>, and while a rider has it.
     /// </summary>
     public long? HubId { get; private set; }
 
@@ -54,5 +54,10 @@ public class Package : TenantEntity, IMerchantOwned
     {
         HubId = null;
         ShuttleToHubId = toHubId;
+    }
+
+    internal void LeaveHub()
+    {
+        HubId = null;
     }
 }

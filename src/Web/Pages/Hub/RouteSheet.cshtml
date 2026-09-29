@@ -1,10 +1,12 @@
 @page "{id:long}"
+@using Domain.Customers
 @model Web.Pages.Hub.RouteSheetModel
 @{
     var sheet = Model.Sheet;
     ViewData["Title"] = $"{sheet.Zone} pickup";
 }
 
+<p class="no-print"><a asp-page="/Hub/Routes">‹ All pickup routes</a></p>
 <div class="sheet-head">
     <div>
         <h1>@sheet.Zone pickup</h1>
@@ -20,6 +22,7 @@
     <strong>@sheet.Stops.Count @(sheet.Stops.Count == 1 ? "stop" : "stops")</strong>,
     @sheet.Packages @(sheet.Packages == 1 ? "package" : "packages") to collect.
     Scan or tick every label; a parcel that is not ready stays for the next run.
+    An order marked "Leave it" waits for its delivery fee in advance: do not take it.
 </p>
 
 @if (sheet.Stops.Count == 0)
@@ -53,9 +56,19 @@
                                 {
                                     <span class="pill pill-open">Next day</span>
                                 }
+                                @if (order.Waits == CustomerStep.PayInAdvance)
+                                {
+                                    <span class="pill pill-waiting">Leave it: waiting for the fee in advance</span>
+                                }
+                                else if (order.Waits == CustomerStep.Confirm)
+                                {
+                                    <span class="pill pill-waiting">Not confirmed by the customer yet</span>
+                                }
                             </td>
                             <td>@string.Join(", ", order.Labels)</td>
-                            <td class="num">@string.Concat(Enumerable.Repeat("☐ ", order.Packages))</td>
+                            <td class="num">
+                                @(order.Collect ? string.Concat(Enumerable.Repeat("☐ ", order.Packages)) : "—")
+                            </td>
                         </tr>
                     }
                 </tbody>

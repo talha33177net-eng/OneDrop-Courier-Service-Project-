@@ -1,5 +1,5 @@
-// The customer app's service worker. Pages are never cached: deliveries change all day and must never show another
-// moment's data. Without a signal the app shows the offline page instead of the browser's error. Each operator's
+// The phone apps' service worker (customer and rider). Pages are never cached: deliveries change all day and must
+// never show another moment's data. Without a signal the app shows the offline page instead of the browser's error. Each operator's
 // subdomain registers its own worker.
 const cache = 'onedrop-v1';
 const offlinePage = '/offline.html';

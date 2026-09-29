@@ -2,7 +2,10 @@ using Domain.Pricing;
 
 namespace Application.Abstractions;
 
-/// <summary>A tenant and its settings, as cached by <see cref="ITenantCatalog"/>.</summary>
+/// <summary>
+/// A tenant and its settings, as cached by <see cref="ITenantCatalog"/>. <see cref="ReturnCharge"/> and
+/// <see cref="LateHandoverFee"/> are what a shop pays for an order that comes back and for one left behind.
+/// </summary>
 public sealed record TenantInfo(
     long Id,
     string Name,
@@ -13,10 +16,15 @@ public sealed record TenantInfo(
     decimal BaseDeliveryFee,
     decimal ExtraShopFee,
     decimal FastDeliveryFee,
-    int GroupJoinDays)
+    int GroupJoinDays,
+    int WeightAllowanceGrams,
+    decimal ExtraKgFee,
+    int TrustedAfterDeliveries,
+    decimal ReturnCharge,
+    decimal LateHandoverFee)
 {
     /// <summary>The tenant's prices, for <see cref="DeliveryFeeCalculator"/>.</summary>
-    public FeeSchedule Fees => new(BaseDeliveryFee, ExtraShopFee, FastDeliveryFee);
+    public FeeSchedule Fees => new(BaseDeliveryFee, ExtraShopFee, FastDeliveryFee, WeightAllowanceGrams, ExtraKgFee);
 }
 
 /// <summary>

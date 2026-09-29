@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
@@ -15,9 +16,11 @@ namespace Integration.Tests;
 
 /// <summary>
 /// Task 3.1: pickup routes and parcel labels. The demo shops are all in Mirpur and every test class orders from
-/// them, so these tests open shops of their own in Uttara (no other class picks up there) and check who is on a
-/// sheet, not Mirpur's totals.
+/// them, so these tests open shops of their own in Uttara and check who is on a sheet, not Mirpur's totals. The hub
+/// scan tests also open an Uttara shop, so the two classes share a collection and never run at the same time: the
+/// route list and a sheet read a moment apart would otherwise count another class's new parcels differently.
 /// </summary>
+[Collection("Uttara pickups")]
 public partial class PickupRouteTests(WebAppFactory factory)
 {
     private const string Password = "OneDrop#2026";
@@ -51,9 +54,14 @@ public partial class PickupRouteTests(WebAppFactory factory)
         Assert.Contains(mirpurSheet.Stops.Single(s => s.Merchant == "Fashion House").Orders, o => o.Number == mirpur);
         Assert.DoesNotContain(mirpurSheet.Stops, s => s.Merchant == uttaraShop.Name);
 
-        // The list counts the same parcels the sheet shows
+        // The list counts the same parcels the sheet says to collect: an order still waiting for its delivery fee in
+        // advance (task 3.6b) is listed on the sheet but stays at the shop, so neither counts it
         Assert.Equal(
-            (uttara.Stops.Count, uttara.Stops.Sum(s => s.Orders.Count), uttara.Packages),
+            (
+                uttara.Stops.Count(s => s.Orders.Any(o => o.Collect)),
+                uttara.Stops.Sum(s => s.Orders.Count(o => o.Collect)),
+                uttara.Packages
+            ),
             (uttaraRoute.Stops, uttaraRoute.Orders, uttaraRoute.Packages));
     }
 
@@ -72,7 +80,13 @@ public partial class PickupRouteTests(WebAppFactory factory)
         Assert.Equal(
             ["Agrabad", "Chawkbazar", "Halishahar", "Nasirabad", "Panchlaish"],
             chattogram.Select(route => route.Zone));
-        Assert.All(dhaka.Concat(chattogram), route => Assert.Equal(new TimeOnly(14, 0), route.PickupTime));
+        // Staggered by DbUp 005, farthest zones first, every parcel at its hub by about 14:00
+        Assert.Equal(
+            ["13:00", "13:00", "13:30", "11:30", "12:30", "12:00", "11:00"],
+            dhaka.Select(route => route.PickupTime.ToString("HH:mm", CultureInfo.InvariantCulture)));
+        Assert.Equal(
+            ["12:30", "12:00", "11:00", "11:30", "13:00"],
+            chattogram.Select(route => route.PickupTime.ToString("HH:mm", CultureInfo.InvariantCulture)));
         Assert.Null(dhakaRouteFromChattogram);
     }
 

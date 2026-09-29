@@ -1,5 +1,6 @@
 using FluentValidation;
 using Domain.Customers;
+using Domain.Orders;
 
 namespace Application.Pricing.GetQuote;
 
@@ -14,6 +15,7 @@ public class GetQuoteValidator : AbstractValidator<GetQuoteQuery>
         RuleFor(query => query.Line1).NotEmpty().MaximumLength(300);
         RuleFor(query => query.Line2).MaximumLength(300);
         RuleFor(query => query.Speed).IsInEnum();
+        RuleFor(query => query.WeightGrams).InclusiveBetween(1, Order.MaxPackages * Order.MaxPackageWeightGrams);
         RuleFor(query => query)
             .Must(query => query.AreaId.HasValue || !string.IsNullOrWhiteSpace(query.Area))
             .OverridePropertyName(nameof(GetQuoteQuery.Area))

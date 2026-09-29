@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Domain.Customers;
 using Domain.Orders;
 
 namespace Application.Orders.CreateOrder;
@@ -31,6 +32,12 @@ public sealed record CreateOrderCommand
     /// <summary>Food, medicine or dated gifts that must not wait for the group.</summary>
     public bool DoNotHold { get; init; }
 
+    /// <summary>
+    /// The shop asks for the delivery fee to be paid in advance before it sends the order. Not applied to a product
+    /// paid online or to a customer the operator trusts.
+    /// </summary>
+    public bool FeeInAdvance { get; init; }
+
     public string? Note { get; init; }
 
     /// <summary>From the Idempotency-Key header, not the body.</summary>
@@ -49,6 +56,10 @@ public sealed record PackageInput(string? Description, int WeightGrams);
 /// What this order adds to the customer's delivery fee (<c>Order.AddedFee</c>). Never the group's total, which
 /// would tell the merchant how many other shops the customer bought from.
 /// </param>
+/// <param name="WaitsFor">
+/// What the order waits for from the customer before the shop sends it: nothing, a one-tap confirmation, or the fee
+/// paid in advance (then it is not collected until paid). Never why.
+/// </param>
 public sealed record CreateOrderResult(
     long OrderId,
     string Number,
@@ -62,7 +73,8 @@ public sealed record CreateOrderResult(
     int PackageCount,
     decimal CodAmount,
     decimal Fee,
-    DateTime Created)
+    DateTime Created,
+    CustomerStep WaitsFor)
 {
     /// <summary>True when this is an earlier order returned for a repeated Idempotency-Key.</summary>
     public bool Replayed { get; init; }

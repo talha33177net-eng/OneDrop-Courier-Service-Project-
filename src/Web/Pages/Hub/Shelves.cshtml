@@ -7,26 +7,27 @@
 
 @if (Model.Current is null)
 {
-    <h1>Shelves</h1>
-    <p class="lead">Which hub's shelves?</p>
-    <div class="card">
-        <ul class="hub-list">
-            @foreach (var hub in Model.Hubs)
-            {
-                <li><a asp-page="/Hub/Shelves" asp-route-hub="@hub.Code">@hub.Name <span class="muted">@hub.Code</span></a></li>
-            }
-        </ul>
-    </div>
+    <partial name="_HubPicker" model='new Web.Pages.Hub.HubPicker("/Hub/Shelves", "Shelves", "Which hub are you working at?", Model.Hubs)' />
     return;
 }
 
-<div class="sheet-head">
+<div class="page-head">
     <div>
-        <h1>@Model.Current.Name shelves</h1>
+        <p class="eyebrow">Step 3 · @Model.Current.Name</p>
+        <h1>Shelves</h1>
         <p class="lead">Each delivery waiting here has its own shelf, from its first parcel until a rider takes it out.</p>
     </div>
-    <a class="button no-print" asp-page="/Hub/Scan" asp-route-hub="@Model.Current.Code">Scan parcels</a>
+    <a class="button no-print" asp-page="/Hub/Scan" asp-route-hub="@Model.Current.Code">Scan parcels in</a>
 </div>
+
+<details class="help">
+    <summary>What the labels mean</summary>
+    <ul>
+        <li><span class="pill pill-open">Open</span> other shops can still add orders to this delivery; more parcels may come.</li>
+        <li><span class="pill">Waiting for parcels</span> closed, but some parcels are not here yet.</li>
+        <li><span class="pill pill-ready">Ready</span> closed and every parcel is on the shelf: it goes out on its delivery day.</li>
+    </ul>
+</details>
 
 <div class="card">
     @if (Model.Shelves.Count == 0)

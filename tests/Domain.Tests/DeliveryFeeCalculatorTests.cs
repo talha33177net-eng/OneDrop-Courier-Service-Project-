@@ -1,3 +1,4 @@
+using Domain.Grouping;
 using Domain.Orders;
 using Domain.Pricing;
 
@@ -5,9 +6,9 @@ namespace Domain.Tests;
 
 public class DeliveryFeeCalculatorTests
 {
-    // The launch tenants' prices (seed 001). The calculator holds none of its own.
-    private static readonly FeeSchedule Dhaka = new(60, 25, 60);
-    private static readonly FeeSchedule Chattogram = new(70, 30, 80);
+    // The launch tenants' prices (seed 001, fast fee from 003, weight from 004). The calculator holds none of its own.
+    private static readonly FeeSchedule Dhaka = new(60, 25, 70, 2000, 15);
+    private static readonly FeeSchedule Chattogram = new(70, 30, 80, 2000, 20);
 
     [Theory]
     [InlineData(1, 60)]
@@ -77,7 +78,7 @@ public class DeliveryFeeCalculatorTests
     {
         FeeLine[] fast = [Waiting(1) with { Speed = DeliverySpeed.Fast }];
 
-        Assert.Equal(60, new DeliveryFeeCalculator(Dhaka).GroupFee(fast));
+        Assert.Equal(70, new DeliveryFeeCalculator(Dhaka).GroupFee(fast));
         Assert.Equal(80, new DeliveryFeeCalculator(Chattogram).GroupFee(fast));
     }
 
@@ -132,7 +133,7 @@ public class DeliveryFeeCalculatorTests
     [Fact]
     public void One_shop_saves_nothing_even_when_its_fast_fee_is_below_the_base_fee()
     {
-        var calculator = new DeliveryFeeCalculator(new FeeSchedule(60, 25, 50));
+        var calculator = new DeliveryFeeCalculator(new FeeSchedule(60, 25, 50, 2000, 15));
 
         Assert.Equal(0, calculator.Savings([Waiting(1), Waiting(1)]));
         Assert.Equal(0, calculator.Savings([Waiting(1) with { Speed = DeliverySpeed.Fast }]));
@@ -147,8 +148,100 @@ public class DeliveryFeeCalculatorTests
         Assert.Equal(35, new DeliveryFeeCalculator(Dhaka).Savings(orders));
     }
 
+    [Theory]
+    [InlineData(2000, 60, 70)]
+    [InlineData(2001, 75, 90)] // one gram over starts a kilogram
+    [InlineData(3000, 75, 90)] // a 3 kg shop pays one extra kg: ৳15 in Dhaka, ৳20 in Chattogram
+    [InlineData(3001, 90, 110)]
+    public void Each_started_kg_above_the_allowance_costs_the_tenants_extra_kg_fee(
+        int grams,
+        decimal dhaka,
+        decimal chattogram)
+    {
+        FeeLine[] orders = [Waiting(1) with { WeightGrams = grams }];
+
+        Assert.Equal(dhaka, new DeliveryFeeCalculator(Dhaka).GroupFee(orders));
+        Assert.Equal(chattogram, new DeliveryFeeCalculator(Chattogram).GroupFee(orders));
+    }
+
+    [Fact]
+    public void The_allowance_is_per_shop_and_counts_all_its_orders()
+    {
+        var calculator = new DeliveryFeeCalculator(Dhaka);
+
+        // Two shops of 1.5 kg each: both inside their allowance
+        FeeLine[] twoShops = [Waiting(1) with { WeightGrams = 1500 }, Waiting(2) with { WeightGrams = 1500 }];
+        Assert.Equal(85, calculator.GroupFee(twoShops));
+
+        // One shop's two orders of 1.5 kg: 3 kg, one kg over
+        FeeLine[] oneShop = [Waiting(1) with { WeightGrams = 1500 }, Waiting(1) with { WeightGrams = 1500 }];
+        Assert.Equal(75, calculator.GroupFee(oneShop));
+    }
+
+    [Fact]
+    public void An_order_taking_its_shop_past_the_allowance_adds_the_kg_fee()
+    {
+        var calculator = new DeliveryFeeCalculator(Dhaka);
+        FeeLine[] group = [Waiting(1) with { WeightGrams = 1500 }, Waiting(2)];
+
+        Assert.Equal(15, calculator.AddedFee(group, Waiting(1) with { WeightGrams = 1500 }));
+    }
+
+    [Fact]
+    public void A_parcel_not_delivered_is_not_weighed()
+    {
+        FeeLine[] orders = [Waiting(1), Waiting(1) with { WeightGrams = 5000, Status = OrderStatus.Refused }];
+
+        Assert.Equal(60, new DeliveryFeeCalculator(Dhaka).GroupFee(orders));
+    }
+
+    [Fact]
+    public void Weight_does_not_eat_into_the_saving()
+    {
+        FeeLine[] orders = [Waiting(1) with { WeightGrams = 3000 }, Waiting(2), Waiting(3)];
+
+        // ৳125 with one kg over; three separate deliveries would also have charged that kg
+        Assert.Equal(125, new DeliveryFeeCalculator(Dhaka).GroupFee(orders));
+        Assert.Equal(70, new DeliveryFeeCalculator(Dhaka).Savings(orders));
+    }
+
+    [Fact]
+    public void A_delivery_brought_forward_by_Ship_now_costs_the_fast_difference_on_its_first_shop()
+    {
+        var calculator = new DeliveryFeeCalculator(Dhaka);
+        FeeLine[] orders = [Waiting(1), Waiting(2)];
+
+        Assert.Equal(10, calculator.ShipNowFee);
+        Assert.Equal(85, calculator.GroupFee(orders));
+        Assert.Equal(95, calculator.GroupFee(orders, DeliveryGroupKind.ShippedNow));
+        Assert.Equal(25, calculator.AddedFee(orders, Waiting(3), DeliveryGroupKind.ShippedNow));
+        Assert.Equal(10, new DeliveryFeeCalculator(Chattogram).ShipNowFee);
+    }
+
+    [Fact]
+    public void Ship_now_is_never_cheaper_than_waiting()
+    {
+        var calculator = new DeliveryFeeCalculator(new FeeSchedule(60, 25, 50, 2000, 15));
+
+        Assert.Equal(0, calculator.ShipNowFee);
+        Assert.Equal(60, calculator.GroupFee([Waiting(1)], DeliveryGroupKind.ShippedNow));
+    }
+
+    [Fact]
+    public void Shops_joining_a_fast_delivery_add_the_extra_shop_fee()
+    {
+        var calculator = new DeliveryFeeCalculator(Dhaka);
+        var fast = Waiting(1) with { Speed = DeliverySpeed.Fast };
+
+        Assert.Equal(25, calculator.AddedFee([fast], Waiting(2)));
+        Assert.Equal(95, calculator.GroupFee([fast, Waiting(2)]));
+
+        // A fast order joining a Don't hold delivery (base fee) makes it fast and adds a shop
+        Assert.Equal(35, calculator.AddedFee([Waiting(2)], fast));
+    }
+
     private static FeeLine Waiting(long merchantId)
     {
-        return new FeeLine(merchantId, DeliverySpeed.Combine, OrderStatus.Created);
+        return new FeeLine(merchantId, DeliverySpeed.Combine, OrderStatus.Created, WeightGrams: 500);
     }
 }

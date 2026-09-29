@@ -58,7 +58,7 @@ public class PricingTests(WebAppFactory factory)
     }
 
     [Fact]
-    public async Task Deliver_fast_costs_the_fast_fee_and_Dont_hold_the_base_fee_beside_an_open_group()
+    public async Task Deliver_fast_and_Dont_hold_cost_the_fast_and_base_fee_alone_and_the_extra_fee_joining()
     {
         WebAppFactory.RequireDatabase();
         var dhaka = await TenantAsync("dhaka");
@@ -66,10 +66,13 @@ public class PricingTests(WebAppFactory factory)
         await CreateAsync(WebAppFactory.DhakaFashion, NewOrder(phone));
 
         var fast = await CreateAsync(WebAppFactory.DhakaGadget, NewOrder(phone) with { Speed = "fast" });
-        var food = await CreateAsync(WebAppFactory.DhakaBeauty, NewOrder(phone) with { DoNotHold = true });
+        var foodJoining = await CreateAsync(WebAppFactory.DhakaBeauty, NewOrder(phone) with { DoNotHold = true });
+        var foodAlone = await CreateAsync(WebAppFactory.DhakaBeauty, NewOrder(NewPhone()) with { DoNotHold = true });
 
         Assert.Equal(dhaka.FastDeliveryFee, fast.Fee);
-        Assert.Equal(dhaka.BaseDeliveryFee, food.Fee);
+        Assert.Equal(dhaka.ExtraShopFee, foodJoining.Fee);
+        Assert.Equal(dhaka.BaseDeliveryFee, foodAlone.Fee);
+        Assert.Equal(dhaka.FastDeliveryFee + dhaka.ExtraShopFee, await GroupFeeAsync(fast.Number));
     }
 
     [Fact]
@@ -112,6 +115,38 @@ public class PricingTests(WebAppFactory factory)
         Assert.Equal(created.Fee, details!.Fee);
     }
 
+    [Theory]
+    [InlineData("dhaka", WebAppFactory.DhakaFashion, "Mirpur 10")]
+    [InlineData("chattogram", WebAppFactory.ChattogramFashion, "Agrabad")]
+    public async Task A_shop_over_the_weight_allowance_pays_each_started_kg_at_its_operators_price(
+        string slug,
+        string apiKey,
+        string area)
+    {
+        WebAppFactory.RequireDatabase();
+        var tenant = await TenantAsync(slug);
+        var phone = NewPhone();
+        var heavy = NewOrder(phone) with
+        {
+            Address = new AddressBody(area, "House 3, Road 8"),
+            Packages = [new PackageBody("Rice cooker", 1500), new PackageBody("Pots", 1500)]
+        };
+        var client = factory.ClientFor(apiKey);
+        var startedKgs = Math.Ceiling((3000m - tenant.WeightAllowanceGrams) / 1000);
+
+        var quoted = await client.GetFromJsonAsync<Quoted>(
+            $"/api/v1/quote?phone={phone}&area={area}&line1=House 3, Road 8&weightGrams=3000",
+            Json,
+            TestContext.Current.CancellationToken);
+        var created = await CreateAsync(apiKey, heavy);
+
+        // 3 kg in Dhaka: ৳60 + one kg at ৳15; Chattogram: ৳70 + one kg at ৳20 (read from the tenant)
+        Assert.Equal(1, startedKgs);
+        Assert.Equal(tenant.BaseDeliveryFee + startedKgs * tenant.ExtraKgFee, created.Fee);
+        Assert.Equal(created.Fee, quoted!.Fee);
+        Assert.Equal(created.Fee, await GroupFeeAsync(created.Number, slug));
+    }
+
     private async Task<Priced> CreateAsync(string apiKey, OrderRequest order)
     {
         var response = await factory.ClientFor(apiKey).PostAsJsonAsync("/api/v1/orders", order, Json);
@@ -134,9 +169,9 @@ public class PricingTests(WebAppFactory factory)
     }
 
     /// <summary>The fee the customer would pay at the door for the group <paramref name="orderNumber"/> is in.</summary>
-    private async Task<decimal> GroupFeeAsync(string orderNumber)
+    private async Task<decimal> GroupFeeAsync(string orderNumber, string slug = "dhaka")
     {
-        var tenant = await TenantAsync("dhaka");
+        var tenant = await TenantAsync(slug);
         await using var scope = factory.Services.CreateAsyncScope();
         scope.ServiceProvider.GetRequiredService<TenantContext>().Set(tenant);
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -146,7 +181,7 @@ public class PricingTests(WebAppFactory factory)
             .SingleAsync(TestContext.Current.CancellationToken);
         var orders = await db.Orders
             .Where(o => o.DeliveryGroupId == groupId)
-            .Select(o => new FeeLine(o.MerchantId, o.Speed, o.Status))
+            .Select(o => new FeeLine(o.MerchantId, o.Speed, o.Status, o.Packages.Sum(p => p.WeightGrams)))
             .ToListAsync(TestContext.Current.CancellationToken);
 
         return new DeliveryFeeCalculator(tenant.Fees).GroupFee(orders);
@@ -185,4 +220,6 @@ public class PricingTests(WebAppFactory factory)
     private sealed record PackageBody(string Description, int WeightGrams);
 
     private sealed record Priced(string Number, decimal Fee);
+
+    private sealed record Quoted(decimal Fee, bool JoinsDelivery);
 }

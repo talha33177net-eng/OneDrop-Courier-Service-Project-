@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
+using Domain.Customers;
+using Domain.Grouping;
 using Domain.Orders;
 
 namespace Application.Network.PickupRoutes;
@@ -19,11 +21,16 @@ public sealed record PickupRouteSummary(
     int Packages);
 
 /// <summary>
-/// One waiting order at a stop. Deliver fast and Don't hold orders are <see cref="Urgent"/>: they leave the hub the
-/// next day and must not miss this run.
+/// One waiting order at a stop. Orders in a next-day delivery (Deliver fast, Don't hold, Ship now, or one that joined
+/// such a delivery) are <see cref="Urgent"/>: they must not miss this run. <see cref="Waits"/> is what the order still
+/// waits for from the customer: one waiting for the fee in advance stays at the shop, one waiting to be confirmed is
+/// collected and only flagged.
 /// </summary>
-public sealed record PickupStopOrder(string Number, int Packages, bool Urgent)
+public sealed record PickupStopOrder(string Number, int Packages, bool Urgent, CustomerStep Waits = CustomerStep.None)
 {
+    /// <summary>False while the order waits for its delivery fee in advance: the collector leaves it at the shop.</summary>
+    public bool Collect => Waits != CustomerStep.PayInAdvance;
+
     public IReadOnlyList<PackageLabel> Labels =>
         [.. Enumerable.Range(1, Packages).Select(sequence => new PackageLabel(Number, sequence))];
 }
@@ -36,7 +43,7 @@ public sealed record PickupStop(
     string ContactPhone,
     IReadOnlyList<PickupStopOrder> Orders)
 {
-    public int Packages => Orders.Sum(order => order.Packages);
+    public int Packages => Orders.Where(order => order.Collect).Sum(order => order.Packages);
 }
 
 /// <summary>The collector's sheet: where to go, what to collect, where to bring it.</summary>
@@ -76,7 +83,8 @@ public class PickupRoutesHandler(IAppDbContext db, ITenantContext tenantContext,
             join order in db.Orders on package.OrderId equals order.Id
             join point in db.PickupPoints on order.PickupPointId equals point.Id
             join area in db.Areas on point.AreaId equals area.Id
-            where order.Status == OrderStatus.Created
+            where order.Status == OrderStatus.Created &&
+                (order.CustomerStep != CustomerStep.PayInAdvance || order.ConfirmedOn != null)
             group new { OrderId = order.Id, order.PickupPointId } by area.ZoneId into zone
             select new
             {
@@ -124,6 +132,7 @@ public class PickupRoutesHandler(IAppDbContext db, ITenantContext tenantContext,
             join point in db.PickupPoints on order.PickupPointId equals point.Id
             join area in db.Areas on point.AreaId equals area.Id
             join merchant in db.Merchants on order.MerchantId equals merchant.Id
+            join g in db.DeliveryGroups on order.DeliveryGroupId equals g.Id
             where order.Status == OrderStatus.Created && area.ZoneId == route.ZoneId
             orderby merchant.Name, point.Id, order.Id
             select new
@@ -136,7 +145,8 @@ public class PickupRoutesHandler(IAppDbContext db, ITenantContext tenantContext,
                 Order = new PickupStopOrder(
                     order.Number,
                     order.Packages.Count,
-                    order.Speed == DeliverySpeed.Fast || order.DoNotHold)
+                    g.Kind != DeliveryGroupKind.Waiting,
+                    order.ConfirmedOn == null ? order.CustomerStep : CustomerStep.None)
             })
             .AsNoTracking()
             .ToListAsync(cancellationToken);

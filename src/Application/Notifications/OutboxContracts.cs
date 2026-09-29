@@ -2,6 +2,7 @@ using System.Text.Json;
 using Domain.Common;
 using Domain.Grouping;
 using Domain.Notifications;
+using Domain.Payments;
 
 namespace Application.Notifications;
 
@@ -10,6 +11,9 @@ public sealed record OrderPlacedMessage(long OrderId);
 
 /// <summary>A delivery closed: text the customer the delivery day.</summary>
 public sealed record DeliveryLockedMessage(long DeliveryGroupId);
+
+/// <summary>A customer paid: text them a receipt.</summary>
+public sealed record PaymentReceivedMessage(long PaymentId);
 
 /// <summary>
 /// Turns domain events into outbox rows. The row stores the contract's name and its JSON; the ids are read after the
@@ -23,6 +27,7 @@ public static class OutboxContracts
         {
             OrderPlacedInDelivery placed => Write(new OrderPlacedMessage(placed.Order.Id)),
             DeliveryGroupLocked locked => Write(new DeliveryLockedMessage(locked.Group.Id)),
+            PaymentReceived received => Write(new PaymentReceivedMessage(received.Payment.Id)),
             _ => throw new InvalidOperationException($"No outbox message is defined for {domainEvent.GetType().Name}.")
         };
     }

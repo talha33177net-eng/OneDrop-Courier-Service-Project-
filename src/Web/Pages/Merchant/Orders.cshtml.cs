@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
+using Domain.Customers;
 using Domain.Orders;
 
 namespace Web.Pages.Merchant;
@@ -34,7 +35,8 @@ public class OrdersModel(IAppDbContext db) : PageModel
                 order.Status,
                 order.Packages.Count,
                 order.CodAmount,
-                order.Created))
+                order.Created,
+                order.ConfirmedOn == null ? order.CustomerStep : CustomerStep.None))
             .Take(100)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
@@ -54,7 +56,8 @@ public class OrdersModel(IAppDbContext db) : PageModel
         OrderStatus Status,
         int Packages,
         decimal Cod,
-        DateTime Created);
+        DateTime Created,
+        CustomerStep Waits);
 
     public sealed record KeyRow(string Name, string Prefix, DateTime? LastUsed, bool Active);
 }

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
 using Domain.Common;
+using Domain.Customers;
 using Domain.Orders;
 
 namespace Application.Orders.GetOrder;
@@ -20,7 +21,8 @@ public sealed record OrderDetails(
     decimal Fee,
     DateTime Created,
     IReadOnlyList<PackageDetails> Packages,
-    IReadOnlyList<StatusDetails> History);
+    IReadOnlyList<StatusDetails> History,
+    CustomerStep WaitsFor = CustomerStep.None);
 
 public sealed record PackageDetails(int Sequence, string Label, string Description, int WeightGrams);
 
@@ -65,7 +67,8 @@ public class GetOrderHandler(IAppDbContext db)
                 order.History
                     .OrderBy(h => h.Id)
                     .Select(h => new StatusDetails(h.Status, h.Note, h.Created))
-                    .ToList()))
+                    .ToList(),
+                order.ConfirmedOn == null ? order.CustomerStep : CustomerStep.None))
             .AsNoTracking()
             .FirstOrDefaultAsync(cancellationToken);
 

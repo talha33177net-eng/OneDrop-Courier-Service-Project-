@@ -13,10 +13,10 @@ The one place to see where we are and what comes next. Built from the two projec
 
 | | |
 |---|---|
-| Current week | **Week 3 — Operations and money** (3 of 9) |
-| Next task | 3.4 Riders and trips |
-| Last session | 2026-09-28 — tasks 3.1 (pickup routes, QR labels), 3.2 (hub scan-in, shelves) and 3.3 (hub shuttle) done and tested (uncommitted). Week 2 is committed on `day2` (pushed to `origin/day2`); `main` stops at 2.8 |
-| Blockers | None. The link to ras-x2 was intermittently slow on 2026-09-28 (a sqlpackage stall, one login timeout); a rerun passed |
+| Current week | **Week 3 — Operations and money** (9 of 11) |
+| Next task | 3.8 Trust score (simple) |
+| Last session | 2026-09-29 — 3.6b (`0587846`), then task 3.7 (ledger, next-day payouts, riders' cash hand-in) and the UI upgrade (role homes, Hub today, New order, guide) committed together on `day3`, not pushed. 3.4, the market review, 3.4a, 3.5, 3.6a, 3.6b, 3.7 and the UI upgrade are not yet in `main` |
+| Blockers | None |
 
 ---
 
@@ -46,10 +46,10 @@ A task is **not done** until all of these pass. Record the result in the daily l
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
-| 3 | Operations and money | Group delivered, merchants settled | 🔄 3 of 9 |
+| 3 | Operations and money | Group delivered, merchants settled | 🔄 9 of 11 |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
-Tests today: **241 passing** (154 domain, 6 architecture, 81 integration).
+Tests today: **344 passing** (229 domain, 6 architecture, 109 integration).
 
 ---
 
@@ -76,7 +76,7 @@ another tenant, one customer for two phone spellings, same phone = different cus
 **Carried forward from Week 1** (small gaps, fit them into later weeks):
 - [x] Create Order returns the fee (৳60 / +৳25) → task 2.3 (this order's fee only; see 2.3).
 - [ ] Merchant portal: issue and revoke API keys (only seeded keys exist today).
-- [ ] Merchant portal: manual order form for Facebook sellers (the API is the only way in today).
+- [x] Merchant portal: manual order form for Facebook sellers → **New order** (`/Merchant/NewOrder`, UI upgrade 2026-09-29).
 - [ ] Tenant admin portal: zones, hubs, areas, merchants (today only through SQL/seed).
 
 ---
@@ -92,7 +92,8 @@ Rules from the documentation this week must implement:
   tenant's time zone) join it; it **locks at the end of Day 2** and is delivered on **Day 3**. The deadline is
   counted from the first order and **never moves**. An order on Day 3 starts a **new** group.
 - **Ship now:** the customer can close the group early (app or SMS "reply 1").
-- **Deliver fast** (next day, ৳60, no waiting) and **Don't hold** items skip the group.
+- **Deliver fast** (next day at the tenant's fast fee, no waiting; the documentation said ৳60, Dhaka charges ৳70
+  since the market review) and **Don't hold** items skip the group.
 - Fee = `BaseDeliveryFee` + `ExtraShopFee` × (distinct **accepted** shops − 1); always calculated on what is
   actually delivered.
 - Only **one open group per customer + address**, even with two orders at the same moment.
@@ -259,17 +260,278 @@ next morning each merchant is settled.
       printable `/Hub/Shuttle?hub=MIR` (nav "Shuttle"). No 19:00 job and no shuttle time setting: staff load when
       the shuttle leaves, from the manifest. *Left:* a parcel whose order is cancelled while it is on the shuttle
       cannot be scanned in at the other end; sending parcels back to the shop comes with returns (3.5).
-- [ ] **3.4 Riders and trips.** `Delivery.Rider`, `Delivery.Trip`; the plan-trips job assigns Day 3 groups to
+- [x] **3.4 Riders and trips.** `Delivery.Rider`, `Delivery.Trip`; the plan-trips job assigns Day 3 groups to
       riders; per-bike limit. Rider PWA screen: today's stops.
-- [ ] **3.5 Delivery screen and attempts.** Handover only after the fee is paid ("no fee, no handover"); refuse
+      *Done 2026-09-28:* schema `Delivery`: `Rider` (hub, login `UserId`, name, phone, and the bike's limit
+      `MaxParcels` and `MaxWeightGrams`, set per rider with no default), `Trip` (rider, hub, `DeliveryDate` in the
+      tenant's days, `Planned` → `Out`; one per rider a day, `UX_Trip_Rider_DeliveryDate`) and `TripStop` (a delivery
+      on a trip, the trip's date copied so `UX_TripStop_DeliveryGroup_DeliveryDate` keeps a delivery on one trip a
+      day). `Domain/Delivery/TripPlanner` (pure): deliveries already late first, then area by area so a rider's stops
+      are neighbours, each to the first rider (by name) whose bike still has room on parcels and weight; one too big
+      for any bike's room waits. `Application/Delivery/PlanTrips/TripPlanning` plans each hub: due = `Locked` with
+      `LocksAt` passed (delivery day has started) and at least one parcel on its shelf; a rider takes deliveries until
+      they leave, so running again adds only what has become ready; a trip still `Planned` after its day is
+      `Cancelled` and its deliveries go out today; each stop is saved on its own and one taken by a planner running
+      at the same moment is skipped. `PlanTripsJob` (tenant job) runs it every 15 minutes (`Jobs:PlanTrips`), not
+      once at 08:00 (see the decisions log). **Start trip** (`RiderDayHandler.StartAsync`): every order whose parcels
+      are all on the shelf is handed over (`Order.HandToRider`: `OutForDelivery`, packages off the hub), its delivery
+      becomes `Dispatched` and frees its shelf; an order not ready stays at the hub; a delivery with nothing ready
+      comes off the trip and stays `Locked`; nothing ready at all is refused. Pages: hub **Trips**
+      (`/Hub/Trips?hub=MIR`, policy `Operations`): each rider's deliveries against the bike (parcels here while
+      planned, parcels taken once out), the deliveries due today on no trip, and **Plan trips now**; rider **Today**
+      (`/Rider`, policy `Rider`, the landing page for riders): stops by area with recipient, address, landmark, phone,
+      shelf, each shop's labels ("On the shelf" / "Not all here yet"), the fee on what is taken and COD, the total to
+      collect, and Start trip; installs as a phone app (`rider.webmanifest`, `Shared/_RiderApp`). Demo riders (dev
+      only): two Mirpur bikes of different sizes, one Gulshan, one Agrabad. *Left:* no screen yet to add riders or
+      change a bike's limit (SQL only, like zones); a stop added by the planner at the very moment the rider starts
+      could land on the trip that just left (it goes out on the next day's trip); parcels are handed over without a
+      scan per parcel; what happens to an order left behind when its delivery went out (a later delivery at +৳25)
+      is 3.5; no customer SMS for "out for delivery" yet (3.6 sends the receipt).
+- [x] **3.4a Market pricing** (added by the market review of 2026-09-28, see the decisions log).
+      - **Fast and Don't hold deliveries can be joined.** A delivery leaving tomorrow takes the customer's other
+        orders to the same address while the new order's pickup route still runs before that day's trips (its next
+        run falls on the delivery day, `PickupRoute.NextPickup`). A new order joins the delivery that leaves soonest
+        and can still take it, at the extra-shop fee. The one-open-group rule for Day 3 deliveries is unchanged.
+      - **Ship now is an upgrade to fast.** When it brings the delivery day forward it adds the tenant's fast fee
+        minus its base fee (Dhaka +৳10), shown on the button ("Deliver tomorrow for +৳10") and counted in the fee
+        at the door; on Day 2 it moves nothing and stays free.
+      - **Weight allowance per shop.** New tenant settings: the weight included per shop in a delivery (Dhaka 2 kg)
+        and a fee per started kg above it (Dhaka ৳15–20, to confirm). One calculator for Create Order, the quote
+        (optional weight) and the door. New NOT NULL tenant columns go through `Scripts/Pre`.
+      - **Daily timetable.** Pickup routes staggered 11:00–13:30 (farthest zones first), the shuttle right after
+        scan-in (about 14:30), riders out at 17:00, so every order placed by the end of Day 2 reaches its hub by
+        16:00. Route times are data (a DbUp script; times to confirm with the owner); the shuttle manifest lists
+        parcels for today's trips first.
+      *Tests:* a second shop joins a fast delivery before its pickup route leaves on the delivery day and opens a
+      new one after; the quote says the same; Ship now on Day 1 adds the difference and on Day 2 nothing; a 3 kg
+      shop pays one extra kg in Dhaka and Chattogram uses its own settings.
+      *Done 2026-09-29:* `Grouping.DeliveryGroup.Kind` (`DeliveryGroupKind`: `Waiting`, `NextDay` for a group opened by
+      a Deliver fast or Don't hold order, `ShippedNow` for one brought forward by Ship now; `Pre/003` filled it in for
+      existing groups, sent-early ones as `Waiting` so nobody is charged afterwards). `DeliveryGroup.CanTake(now,
+      pickup, waits)`: an open group before its deadline; a locked `NextDay`/`ShippedNow` delivery not yet out while
+      the order's pickup (`PickupRoute.NextPickup` of its pickup point's zone) falls on or before its delivery day; an
+      order that must not wait (fast, Don't hold) only a delivery arriving by tomorrow, so on Day 2 it also joins the
+      open group. `DeliveryGrouping` puts the order in the candidate that leaves soonest (lowest `LocksAt`, then id),
+      else opens a group or a next-day delivery; the quote chooses the same way and now takes the pickup point
+      (default point when not given). A locked `Waiting` group still takes nothing, so an order on Day 3 starts a new
+      group. **Fee:** the first shop costs the fast fee when a fast order is in the delivery, base + `ShipNowFee`
+      (fast − base, never negative) when shipped now, else the base fee; + extra-shop fee per other shop; + each
+      started kg a shop's orders weigh above `Tenant.WeightAllowanceGrams`, at `Tenant.ExtraKgFee`. "You save" leaves
+      the weight out (separate couriers charge it too). Dhaka 2 kg + ৳15, Chattogram 2 kg + ৳20 (DbUp
+      `2026/004_WeightAllowance`, owner's values); the columns are **nullable** in SQL because the launch seed (001)
+      inserts tenants without them and must not be edited, and `TenantCatalog` does not serve a tenant without them
+      (warning in the log). **Ship now:** `ShipNowBringsForward` → the delivery becomes `ShippedNow`; the API returns
+      `addedFee`; "My deliveries" shows "Deliver tomorrow for +৳10" (free "Ship now" on Day 2). Rider stops and the
+      customer page price by the same calculator with weights and kind. **Timetable:** DbUp
+      `2026/005_StaggeredPickupTimes` (owner's times): Dhaka Uttara 11:00, Mirpur 11:30, Motijheel 12:00, Mohammadpur
+      12:30, Dhanmondi and Banani 13:00, Gulshan 13:30; Chattogram Halishahar 11:00, Nasirabad 11:30, Chawkbazar
+      12:00, Agrabad 12:30, Panchlaish 13:00. The shuttle manifest lists the soonest delivery day first, then next-day
+      deliveries; the manifest, route sheet and scan answer mark "Next day" by the delivery's kind (so an order that
+      joined a fast delivery is marked), while the merchant's labels keep the order's own flag (merchant privacy).
+      *Left:* an order joining a next-day delivery at the moment its rider presses Start trip is left behind with it
+      (3.5 sends orders left behind the next day); an order for a delivery due today whose parcels arrive after the
+      riders left is 3.5's too; no screen yet to change weight settings or route times (SQL only).
+- [x] **3.5 Delivery screen and attempts.** Handover only after the fee is paid ("no fee, no handover"); refuse
       one parcel (fee counts accepted shops only); not home = one free re-attempt, then return.
-- [ ] **3.6 Door payment.** Collect fee + COD, cash or QR (bKash/Nagad adapter, fake in MVP). SMS receipt.
-      New and low-trust customers pay the fee in advance by payment link.
-- [ ] **3.7 Ledger and next-day settlement.** Split every payment per merchant; the settle job pays yesterday's
+      *Added by the market review:*
+      - **One stop, one fee.** Deliveries for the same phone in the same area on one trip are one stop for the
+        rider and one fee over every shop handed over, so a missed address match never costs ৳60 + ৳60.
+      - **An order left behind** (shop not ready, or not all its parcels at the hub at Start trip) goes on a
+        follow-up delivery the next day, or joins the customer's open delivery at that address. The customer pays
+        only the extra-shop fee for it (the Day 3 fee already counted only what was delivered); the shop is
+        charged the late-handover fee (3.7).
+      - **A refused parcel** goes back to its shop, which is charged the return charge (3.7).
+      *Done 2026-09-29:* **Visits.** The rider's stops are visits (`Application/Delivery/TripVisits`): every delivery
+      on the trip for the same customer (phone) in the same area is one stop, named by its first delivery's number,
+      with one fee: `DeliveryFeeCalculator.VisitFees` prices the visit as one delivery (from its dearest kind: shipped
+      now, then waiting or next day, then follow-up) and splits it over the deliveries so each `TripStop` records its
+      part. **At the door** (`Application/Delivery/Door/DoorHandler`, trip out): the rider ticks the orders the
+      customer refuses and checks the amount (a GET, `/Rider?stop=DG-…&refused=OD-…`: "Collect ৳1,260", fee on what
+      is taken + its COD); "Collected ৳X, hand over" posts the amount and is refused unless it equals what is due now
+      ("no fee, no handover"; 3.6 adds how it was paid). Taken orders `Delivered`, refused ones `Refused`, each delivery
+      `Delivered` (or `Cancelled` when nothing of it was taken); `TripStop.Outcome` (`Delivered`, `Refused`,
+      `NotHome`), `FeeCollected`, `CodCollected`, `CompletedOn`. **Nobody home:** orders back to `AtHub` (parcels with
+      the rider until scanned in, which shelves the delivery again), delivery `Locked`, planned again on another day for
+      free (the planner skips a delivery already on a trip today); at a delivery's second failed visit its orders are
+      `Refused` and it is `Cancelled`. The trip is `Finished` when every stop is done; the page shows collected and
+      still to collect. **Left behind:** at Start trip an order not ready of a delivery that goes out moves
+      (`Order.FollowUpIn`, `LeftBehindOn` recorded for 3.7, `AddedFee` unchanged, the customer is texted) to the
+      customer's open delivery to that address, or a new `FollowUp` delivery (`DeliveryGroupKind` 4: locked, next day,
+      first shop at the extra-shop fee, joinable), which takes over the freed shelf when its parcels are already there.
+      **Returns:** a refused parcel scanned in at a hub keeps `Refused` and is answered "Back to the shop Gadget BD";
+      the scan tab **Return to the shop** (`Order.ReturnToMerchant`) hands it back (`ReturnedToMerchant`). "My
+      deliveries" shows a handed-over delivery's collected fee. *Left:* returns are not on the pickup route sheet yet
+      and a return from another zone's hub has no shuttle back (staff carry it); no SMS for "nobody home" yet (3.6
+      sends texts at the door); the rider hands in the day's cash in 3.7; a visit's stops for deliveries in other
+      areas are not merged (by design, 4.7).
+- [x] **3.6a Door payment** (3.6 split in two with the owner, 2026-09-29). Collect fee + COD, cash or QR (bKash/Nagad
+      adapter, fake in MVP). SMS receipt.
+      *Done 2026-09-29:* schema `Payments`, table `Payment` (`Domain/Payments`): customer, trip, rider, the visit's first
+      delivery, `Purpose` (1 Door), `Method` (Cash, Bkash, Nagad), `Status` (Pending, Paid, Cancelled), `Fee` and `Cod`
+      kept apart for the ledger, the gateway's reference and payment link, `PaidOn`. Cash is paid when the rider records
+      it; a wallet payment is `Pending` until the gateway says it is paid. `Delivery.TripStop.PaymentId`: every stop of a
+      visit points at its payment, and `TripStop.Complete` refuses money without a paid payment ("no fee, no handover"
+      in the domain). `Application/Abstractions/IPaymentGateway` (`RequestAsync`, `IsPaidAsync`) with
+      `Infrastructure/Payments/FakePaymentGateway` and the dev page `/Dev/Payments` where a request is paid by hand.
+      `DoorHandler.RequestQrAsync` asks the wallet for exactly the amount due and shows the same QR on a second ask;
+      `HandOverAsync` takes the method: cash, or the QR shown once the gateway has the money (`door.qr.unpaid`, and
+      `door.qr.none` for a wallet with no QR). An unpaid QR is cancelled when the wallet, the amount or the outcome
+      changes; one the customer paid after all is never dropped (`door.qr.paid`: hand over what it paid for).
+      `PaymentReceived` → outbox `PaymentReceivedMessage` → SMS receipt: amount and method, delivery, fee and each order
+      handed over with its COD. Rider **Today**: "Cash ৳X collected, hand over", **bKash QR** / **Nagad QR**, the QR
+      with "Check payment and hand over", each done stop "Delivered, paid by bKash", and **Cash to hand in**.
+      *Left:* a wallet payment for orders then refused is not refunded (the rider must hand over what was paid for);
+      the customer's page does not say how a delivery was paid (the receipt does); the rider's cash hand-in at the hub
+      is 3.7; a real gateway's callback is not modelled (the rider checks); no phone-width screenshot of the QR yet.
+- [x] **3.6b Confirmation and advance payment.** Owner's answers (2026-09-29): an order waiting for its advance is
+      **not collected** from the shop until paid (the route sheet shows "Waiting for the advance" and skips it, and so
+      does the merchant's list); a customer with **10 accepted deliveries** never pays in advance (a tenant setting,
+      Dhaka and Chattogram 10). Advance payment, narrowed by the market review from the documentation's "new and
+      low-trust customers pay the fee in advance by payment link":
+      - **A new COD customer confirms with one tap** on an SMS link (opens "My deliveries"); the merchant is warned
+        when an order is still unconfirmed before its pickup.
+      - **The fee is paid in advance** (bKash payment link) only after a refusal or no-show (3.8), or when the
+        merchant asks for it on the order; never for a product already paid online; never for a customer with
+        enough accepted deliveries (tenant setting). The advance is the first shop's fee; extra shops are paid at
+        the door; it is kept when everything is refused.
+      *Done 2026-09-29:* `Domain/Customers/CustomerStanding` (accepted deliveries, failed visits) and `CustomerStep`
+      (`None`, `Confirm`, `PayInAdvance`) decide what one order waits for: nothing for a product paid online or a
+      customer with `Tenant.TrustedAfterDeliveries` accepted deliveries; the fee in advance after a failed visit or
+      refusal, or when the shop sets `feeInAdvance` on the order; otherwise a one-tap confirmation for a customer who
+      has never taken a delivery. `Order.CustomerStep`, `ConfirmedOn` and `CustomerToken` (the unguessable secret in the
+      SMS link, `UX_Order_CustomerToken`), `Confirm`, `AdvancePaid`, `WaitForAdvance`, `WaitsForCustomer` /
+      `WaitsForAdvance`; `Order.Collect` refuses an order waiting for its advance (`order.scan.advance`), so no parcel
+      travels to an unpaid door. `CustomerDirectory.StandingAsync` counts the customer's delivered deliveries, failed
+      stops and refused or returned orders **across every shop** (the merchant filter lifted, so one shop's refusal
+      protects the others without telling them why). `Payments.Payment` gains `Purpose` 2 `Advance` (wallet only, no
+      trip, rider or COD) and `DeliveryFeeCalculator.FirstShopFee` prices it: one advance covers the delivery, so
+      `DeliveryGrouping.MatchAdvanceAsync` makes an order joining a delivery wait for the same payment, or clears it
+      when the advance is already paid. `Application/Orders/ConfirmOrder/ConfirmOrderHandler` (find by token, confirm,
+      request the advance by bKash or Nagad, check it) with the anonymous page `/Customer/Order?token=…` (order, day,
+      COD, "Yes, send it", or the fee with wallet buttons, the QR and "I have paid"); an unknown or used-up token is a
+      404. The "placed" SMS asks instead of telling (`ICustomerLinks` + `Links:PortalUrlFormat`, so the outbox can build
+      a link without a request). Create Order and Get Order return `waitsFor`; the route sheet flags "Leave it: waiting
+      for the fee in advance" or "Not confirmed by the customer yet" (an unpaid order is not in the parcels to collect,
+      on the sheet or in the route list) and the merchant's list shows the same. New tenant setting
+      `TrustedAfterDeliveries` (nullable in SQL, DbUp `2026/006_TrustedAfterDeliveries` sets 10 for both launch
+      tenants; `TenantCatalog` will not serve a tenant without it).
+      *Tested:* build 0 errors, 0 warnings; 8 new domain tests (a first cash order confirms, a paid-online order and a
+      trusted customer wait for nothing, a failed visit or the shop's request asks for the advance, one delivery short
+      of the tenant's count still does; a waiting order gets a unique token, confirming is recorded once, an order
+      waiting for the advance is not collected and is not confirmed by tapping, paying lets it go; the advance is the
+      delivery's first-shop fee for each kind; an advance is wallet-only with no COD) and 4 new integration tests (a new
+      cash customer: `waitsFor` confirm, the SMS asks with the link, the sheet warns but still collects, confirming
+      clears it, an unknown token and another operator's are not found; a shop asking for the advance: the sheet says
+      "leave it" and counts 0 packages, the scan refuses it, cash and a plain confirmation are refused, the same link on
+      a second ask, "not received yet", switching wallet cancels the first request, a second shop's order joins and
+      waits with it, paying releases both, a later order waits for nothing; a refusal asks for the advance at every shop
+      of the operator while the same phone at another operator only confirms; the page confirms an order and pays an
+      advance, and a guessed token is a 404). `PickupRouteTests` now compares the list with what the sheet says to
+      collect, and the outbox tests order paid-online products so they still check the "joined" text. Mutation: letting
+      the collector take an unpaid order fails 1 domain and 1 integration test. 220 + 6 + 100 = 326 pass, none skipped.
+      The publish script was reviewed first (`Orders.Order` and `Platform.Tenant` rebuilt with their rows copied, no
+      data loss); both databases published, DbUp 006 ran. Live on dev: Nusrat Jahan 01819274071 Fashion House OD-100068
+      `confirm` ("Is your Fashion House order OD-100068 correct? … http://dhaka.localhost:5080/Customer/Order?token=…"),
+      Imran Hossain OD-100069 paid online `none` (normal "joined" text), Sabina Yasmin OD-100070 `payInAdvance` ("goes
+      out once the OneDrop delivery fee is paid"). The page confirmed OD-100068 ("your order is confirmed. We deliver it
+      on Thursday 1 October"); a guessed token 404. For OD-100070 the Mirpur sheet showed "Leave it: waiting for the fee
+      in advance" and the collect scan answered "OD-100070 waits for its delivery fee in advance. Leave it at the shop";
+      the page showed ৳60 with bKash and Nagad, the bKash QR, "We have not received the OD-100070 delivery fee yet"
+      before paying, then after paying on `/Dev/Payments` "the delivery fee is paid. Your order is on its way" — the
+      scan then answered "Collected" and the row holds a `Paid` ৳60 advance. Shirin Akhter (01819274051), whose parcel
+      was refused in the 3.5 live check, was asked for the advance on a **Fashion House** order (OD-100071) although the
+      refusal was Gadget BD's; Gadget BD's own OD-100072 (shop asked) shows "Waiting for the delivery fee in advance" on
+      its merchant page, Fashion House cannot see it, and the customer token 404s on the Chattogram host. No errors in
+      the app log.
+      **The advance comes off the door** (found while writing this entry: the door would otherwise have charged the fee
+      twice). `DoorHandler` nets each delivery's paid advance off its share of the visit's fee, so the stops record what
+      was actually collected and the rider's stop and door card agree; `DoorDue.PaidInAdvance` is shown as "Already paid
+      in advance". One more integration test covers it (an advance paid, a second shop joining, the door collecting the
+      extra-shop fee and the COD only, the stop recording ৳25/৳1,500 and the advance staying `Paid`); mutation: ignoring
+      the advance fails it. 220 + 6 + 101 = 327 pass. Live: Shirin Akhter's OD-100071 advance ৳60 paid by Nagad, Beauty
+      Shop OD-100073 joined DG-100043 at ৳25 needing nothing, the rider's stop and door both said ৳25 + ৳1,100 with
+      "Already paid in advance ৳60", cash ৳1,125 handed over, receipt "৳1,125 paid in cash … Delivery fee ৳25", rows:
+      advance ৳60 `Paid` + door ৳25/৳1,100, stop ৳25/৳1,100.
+      *Left:* a wallet advance is not refunded when everything is refused (it is kept, as the plan says); no "nobody
+      home" or "advance kept" texts; the customer's page for the advance is one order at a time; trust is worked out per
+      order from history, with no stored score (3.8); the customer's "My deliveries" does not show the advance.
+- [x] **3.7 Ledger and next-day settlement.** Split every payment per merchant; the settle job pays yesterday's
       COD to each merchant (fake bKash/bank). Rider end-of-day cash deposit and check. *Tests:* ledger balances;
       each merchant gets exactly its COD.
+      *Added by the market review:* the payout deducts the **return charge** per refused parcel and the
+      **late-handover fee** per order left behind (tenant settings; Dhaka ৳30–40 return charge, to confirm).
+      Merchants pay nothing for a delivered order, and COD handling stays free (Dhaka couriers charge 0–1%).
+      Next-day payout must not slip: Pathao pays daily.
+      *From 3.6a–3.6b:* a delivery's fee can now arrive in two payments (a `Purpose` `Advance` row before pickup and the
+      `Door` row at the door), and cash and wallet money are settled differently — the rider hands in only the cash
+      (`RiderToday.Cash`), while a wallet payment is already with the operator. The ledger reads `Payments.Payment` and
+      `Delivery.TripStop`, whose `FeeCollected` and `CodCollected` are what was collected at that door.
+      Owner's answers (2026-09-29): return charge Dhaka ৳30, Chattogram ৳35; late-handover fee Dhaka ৳25, Chattogram ৳30
+      (the extra-shop fee the customer pays for the second trip); charges a day's COD does not cover are carried to the
+      next payout; shops are paid the next day whether or not the rider's cash has been checked in.
+      *Done 2026-09-29:* **Ledger.** `Payments.LedgerEntry` (`Domain/Payments/LedgerEntry`, merchant-owned): one line per
+      order and kind (`UX_LedgerEntry_Order_Kind`), `Amount` positive when owed to the shop (`Cod`, from its `PaymentId`)
+      and negative when the shop owes it (`ReturnCharge`, `LateHandoverFee`), dated by the trip's delivery day. Written in
+      the same save as what caused it: `DoorHandler` adds each handed-over order's COD from the visit's payment and a
+      return charge for each order going back (refused, or nobody home at the re-attempt); `RiderDayHandler.StartAsync`
+      adds the late-handover fee for an order left behind that the shop had not handed over (still `Created`, not waiting
+      for the customer's advance, once per order) — not for a parcel already collected or on the shuttle, which is the
+      operator's delay. The delivery fee is not in the ledger: it is the operator's, in `Payments.Payment`. New tenant
+      settings `ReturnCharge` and `LateHandoverFee` (nullable in SQL, DbUp `2026/007_MerchantCharges`; `TenantCatalog`
+      does not serve a tenant without them). **Payouts.** `Payments.Settlement` (`Domain/Payments/Settlement`):
+      `Settlement.Of` takes every line of a shop not yet paid out up to a day, and is nothing when they come to ৳0 or
+      less (the lines wait, so a charge comes off the next COD). `SettleMerchantsJob` (tenant job, recurring
+      `settle-merchants`, `Jobs:SettleMerchants` every hour) pays each shop up to yesterday in the tenant's time zone,
+      saves the payout `Pending`, sends it through `IPayoutGateway` (key `{slug}-settlement-{id}`, so a retry never pays
+      twice) and marks it `Paid`; a payout the gateway failed is sent again on the next run. Two runs at once lose on the
+      lines' row versions. `FakePayoutGateway` sends to the shop's contact phone as its bKash number; `/Dev/Payments`
+      lists the payouts. **Cash hand-in.** `Delivery.Trip.CashExpected`, `CashReceived`, `CashReceivedOn`;
+      `Trip.HandInCash` once every stop is done, once; hub page **Cash** (`/Hub/Cash?hub=MIR`, `HubCashHandler`): each
+      rider's cash collected today (and earlier trips not handed in), a box to record what was received, "৳85 short";
+      the rider's **Today** shows "Cash handed in ৳2,000 of ৳2,085". **Merchant page** **Payouts** (`/Merchant/Payouts`,
+      `MerchantPayoutsHandler`): next payout so far (or "You owe, taken off your next COD"), the lines waiting, and the
+      latest 20 payouts with their lines. **Fixed from 3.6b:** a visit with nothing to pay (the advance covered the fee
+      and what is taken was paid online) crashed at the handover (`Payment.AtTheDoor` refuses ৳0); it now hands over
+      with no door payment.
+      *Tested:* build 0 errors, no new warnings; 9 new domain tests (COD owed for a delivered order from a paid payment,
+      not otherwise; return and late fee charged, only for an order going back or left behind, never ৳0; a payout is COD
+      less charges and takes every line; charges not covered wait and come off the next payout; a payout takes only the
+      shop's own lines not yet paid up to its day; paid once; cash handed in only once every stop is done, once, not
+      negative, shortfall recorded) and 5 new integration tests on hubs of their own (the door owes Fashion House and
+      Gadget BD their COD from the one payment, which the lines add up to exactly, and charges Beauty Shop's refused order
+      the return; an order the shop had not handed over pays the late fee and one half-scanned in does not; two shops of
+      the test's own: nothing paid while today lasts, next morning ৳970 (COD ৳1,000 less ৳30) sent once to the shop's
+      number with the settlement's key even when the job runs twice, the other shop owes ৳30 and is paid nothing, the day
+      after it gets ৳470; every payout equals its lines; the shop's page shows its payout and lines and Gadget BD's page
+      none of them; hub cash: refused while the rider is out, recorded on the page as "৳10 short", refused a second
+      time, the rider's page shows it, another operator 404; the ৳0 door hands over with no door payment), plus the
+      nobody-home test now checks the return charge at the second failure and the job test covers `settle-merchants`.
+      Mutations: payouts ignoring charges fail 2 domain and 1 integration test; the ৳0 door without the fix fails its
+      test with the old crash. 229 + 6 + 106 = 341 pass, none skipped. The publish script was reviewed first:
+      `Delivery.Trip` and `Platform.Tenant` rebuilt with their rows copied, the two new tables; both databases
+      published, DbUp 007 ran. Live on dev (settle job every minute): Laila Karim 01819274081 in Gulshan 1 with Fashion
+      House OD-100074 (COD ৳1,200), Gadget BD OD-100075 (৳800) and Beauty Shop OD-100076 (left at the shop) in DG-100045;
+      Rashed Khan 01819274082 in Banani with Fashion House OD-100077 (৳500) in DG-100046; made due by hand, scanned in at
+      GUL except OD-100076, planned onto Kamal Uddin's trip. Start trip: OD-100076 "not ready and follows"; DG-100045
+      "Collect ৳2,085" handed over in cash, DG-100046 refused (৳0), the old DG-100026 nobody home; trip done. Ledger:
+      Fashion House +৳1,200 and −৳30, Gadget BD +৳800 (both from payment 6, COD ৳2,000), Beauty Shop −৳25. Hub
+      **Cash** at GUL: ৳2,085 with Kamal Uddin; recorded ৳2,000 → "৳85 short of the ৳2,085 collected", a second record
+      "already been handed in", the rider's page "Cash handed in ৳2,000 of ৳2,085"; Chattogram hub staff 404, a merchant
+      access denied. Fashion House's page before paying: "Next payout, so far ৳1,170". The lines were then dated
+      yesterday by hand; the next job run "2 payouts, 1970.00 sent, 1 carried forward": ৳1,170 to Fashion House's number
+      and ৳800 to Gadget BD's (`dhaka-settlement-1`, `-2` on `/Dev/Payments`), Beauty Shop "You owe, taken off your next
+      COD ৳25"; the next run paid nothing more; Gadget BD's page shows none of Fashion House's orders; Chattogram's Fashion
+      House has no payouts. No errors in the app log.
+      *Left:* no merchant SMS or webhook when a payout is sent (4.2); the shop's bKash number is its contact phone (no
+      payout account field or screen yet); a shop that stops trading with a debt is never invoiced; no tenant admin page
+      of all payouts or of cash shortfalls over time (4.1); a trip whose rider never closes a stop cannot hand in its cash;
+      a second late handover of the same order is not charged again; COD of a wallet payment later reversed by the
+      gateway is not modelled; no phone-width screenshot of the Cash and Payouts pages.
 - [ ] **3.8 Trust score (simple).** Refusals and no-shows lower it; merchants' late handovers lower theirs.
       *Cut option:* a simple refusal counter.
+      *Added by the market review:* a customer's refusal or no-show switches on advance payment (3.6) at every shop
+      of the operator; a shop learns only "pays the fee in advance", never why or where. A shop late again and
+      again must bring its parcels to the hub.
 - [ ] **3.9 Week 3 demo run.** Group delivered, merchants settled.
 
 ---
@@ -279,6 +541,8 @@ next morning each merchant is settled.
 **Done when:** the final demo script below runs end to end.
 
 - [ ] **4.1 Dashboards (SignalR).** Live counts for admin and hub: open groups, parcels at hub, riders out.
+      *Added by the market review:* **packages per delivery per area, week by week** (the number the business
+      lives on), and a hub warning before the riders leave: "3 parcels for today's deliveries not scanned in yet".
 - [ ] **4.2 Merchant webhooks.** Order status changes posted to the merchant's URL through the outbox, signed.
 - [ ] **4.3 Tenant isolation test sweep.** Every endpoint and page: tenant A gets 404 for tenant B; merchant sees
       only its parcels.
@@ -287,7 +551,15 @@ next morning each merchant is settled.
 - [ ] **4.5 Docker and CI.** `docker-compose.yml` (app + SQL Server); GitHub Actions: build, publish the dacpac
       to a throwaway database, run all tests.
 - [ ] **4.6 Simulator.** `tools/Simulator` fills both tenants with fake merchants and orders for demos.
-- [ ] **4.7 README, diagrams, demo.** Final documentation and a recorded demo run.
+- [ ] **4.7 Combine deliveries and learn addresses** (market review). An order with the same phone and area as an
+      open delivery but another address match key asks the customer by SMS and on "My deliveries": "Same address as
+      your delivery DG-…? Combine / Keep separate". Combining merges the deliveries and recalculates the fee; the
+      other spelling is saved as an alias of the address, so the next order matches by itself. Deliveries in
+      different areas are never combined (home and office stay apart).
+- [ ] **4.8 The open delivery as a shopping window** (market review). The "joined" SMS and "My deliveries" say
+      "Your delivery is open until Tuesday: add from any OneDrop shop for +৳25" with the operator's partner shops.
+      The list shows every shop, never the ones this customer bought from.
+- [ ] **4.9 README, diagrams, demo.** Final documentation and a recorded demo run.
 
 ### Final demo script
 1. Log in to OneDrop Dhaka.
@@ -315,11 +587,12 @@ Payments stay fake in the MVP either way.
 | Every 5 seconds (`Jobs:OutboxInterval`) | Outbox sender (in-process dispatcher, not Hangfire) | 2 ✅ |
 | Every 5 minutes | Lock check (lock due groups) | 2 ✅ |
 | 02:00 | Recalculate trust and reliability scores | 3 |
-| 06:00 | Settle merchants (yesterday's COD) | 3 |
-| 08:00 | Plan delivery trips (Day 3 groups → riders) | 3 |
+| Every hour (`Jobs:SettleMerchants`) | Settle merchants: every shop's lines up to yesterday (tenant's day), paid out soon after the tenant's midnight instead of at 06:00; a failed payout is sent again the next hour (3.7) | 3 ✅ |
+| Every 15 minutes (`Jobs:PlanTrips`) | Plan delivery trips (deliveries due today → riders), instead of once at 08:00 (3.4) | 3 ✅ |
 | 13:00 | Build pickup routes per zone — not needed: the route sheet is worked out when opened (3.1) | 3 ✅ |
-| 14:00 | Pickup route runs (merchants → hub) | 3 |
-| 19:00 | Hub shuttle (zone → customer's hub) — no job: staff load it from the manifest (3.3) | 3 ✅ |
+| 11:00–13:30 | Pickup route runs (merchants → hub), staggered by zone, farthest first (DbUp 005, 3.4a) — no job: the route sheet | 3 ✅ |
+| About 14:30 | Hub shuttle (zone → customer's hub), right after scan-in, not 19:00 (market review) — no job: staff load it from the manifest (3.3) | 3 ✅ |
+| 17:00 | Riders leave; delivery 5–9 PM | 3 |
 | 23:59 | Groups lock (Day 2 deadline) | 2 |
 
 ## Must-pass tests (from the plan)
@@ -380,6 +653,53 @@ Payments stay fake in the MVP either way.
 | 2026-09-28 | The hub shuttle is a scan at each end (load, then receive), not the cut "transfer" button; a package on the shuttle has no `HubId` and a `ShuttleToHubId` | "Scan at every handover"; the manifest shows what is still to load and what is on its way, and a package is never at two hubs |
 | 2026-09-28 | No shuttle job and no shuttle time setting: the manifest is worked out when opened and staff load when the shuttle leaves | Same reasoning as the pickup sheet; a time would be a tenant setting with nothing yet reading it |
 | 2026-09-28 | An order stays `AtHub` while a package is on the shuttle; "every package in" means every package has been received at a hub (`ReceivedOn`) | The order status says the parcels are in the hub network; where each one is is on the package |
+| 2026-09-28 | A bike's limit is two numbers on the rider, `MaxParcels` and `MaxWeightGrams`, with no default | Bikes differ; parcels and weight are both what a bike cannot exceed, and both are already on every package |
+| 2026-09-28 | Trips are planned every 15 minutes from the start of delivery day, not once at 08:00; planning is repeatable and changes nothing already planned | Parcels still arrive on delivery day (next-day orders are collected at 2 PM that day); tenants live in different time zones, so a fixed hour would be one tenant's hour |
+| 2026-09-28 | A delivery is planned once at least one of its parcels is on its shelf; at Start trip only orders with every parcel here go out, and a delivery with nothing ready comes off the trip | "Merchant not ready → the group leaves without it"; a delivery must not wait all day for one late shop |
+| 2026-09-28 | One trip per rider a day; the planner fills riders in name order, late deliveries first, then area by area | One evening run (5–9 PM); area order keeps a rider's stops together without maps or geocoding |
+| 2026-09-28 | `TripStop.DeliveryDate` copies the trip's date so a unique index keeps a delivery on one trip a day; a failed attempt gets a new stop another day | The database settles two planners at once (job and button), as the shelf index does for scans |
+| 2026-09-28 | Riders sign in as staff on their tenant's subdomain; the rider row points at the login (`Rider.UserId`), not the login at the rider | Identity stays unchanged; a rider can exist before they have a login |
+| 2026-09-28 | **Market review:** OneDrop Dhaka's fast fee is ৳70 (DbUp 003); standard stays ৳60 + ৳25 | Dhaka couriers charge merchants ৳55–70 for delivery within 24 h of pickup, so a Facebook order usually reaches the door on Day 3 anyway: ৳60 for Day 3 is the market price. Fast is at the door the day after the order (same day from pickup), which couriers sell for about ৳105. At ৳60 fast cost the same as waiting, so nobody waited for other shops |
+| 2026-09-28 | Fast and Don't hold deliveries can be joined until the new order's pickup route has left on the delivery day; a new order joins the delivery that leaves soonest (3.4a) | A delivery travelling alone was lost density; a shop ordering the next morning still makes the evening trip |
+| 2026-09-28 | Ship now brings the day forward only as an upgrade: it adds the fast fee minus the base fee, and is free on Day 2 (3.4a) | A free Ship now would undo the fast price; on Day 2 it moves nothing |
+| 2026-09-28 | The fee includes a weight allowance per shop, with a fee per kg above it (tenant settings, 3.4a) | Every Dhaka courier prices by weight (Pathao ৳60 up to 500 g, ৳90 at 2 kg, +৳15 per kg); a flat fee would carry a 6 kg parcel at the price of a lipstick |
+| 2026-09-28 | Daily timetable: pickups 11:00–13:30 staggered by zone, shuttle about 14:30, riders out at 17:00 (3.4a) | With a 19:00 shuttle an order from another zone placed late on Day 2, or any fast order from another zone, missed its trip |
+| 2026-09-28 | A shop pays nothing for a delivered order, but pays a return charge for a refused parcel and a late-handover fee for an order left behind (3.7) | 20–30% of COD parcels come back in Bangladesh; the customer pays OneDrop only at the door, so a refusal earned nothing. Couriers charge merchants for failed deliveries too (Paperfly: one delivery charge) |
+| 2026-09-28 | An order left behind goes out the next day, or joins the customer's open delivery, at the extra-shop fee only (3.5) | The customer pays what was promised; the shop that was not ready pays for the second trip |
+| 2026-09-28 | Advance payment by risk, not for every new customer: one-tap SMS confirmation for a new COD customer; the first shop's fee in advance after a refusal or no-show, or when the merchant asks; never for a product paid online (3.6, 3.8) | Every customer is new at launch. Paying the delivery charge in advance by bKash is already normal with Facebook sellers and cuts fake orders, so it is acceptable when it targets risk; a refusal at one shop protects the others |
+| 2026-09-28 | Deliveries for the same phone in the same area on one trip are one stop and one fee (3.5); the customer is asked to combine deliveries whose addresses almost match, and the spelling is learnt (4.7) | A missed address match must never cost the customer ৳60 + ৳60 for one visit |
+| 2026-09-29 | A delivery group has a kind (`Waiting`, `NextDay`, `ShippedNow`); only next-day kinds take orders after they lock | Keeps the must-pass "an order on Day 3 starts a new group" while fast and shipped-now deliveries fill up; the kind also says who pays the fast difference |
+| 2026-09-29 | A new order joins the delivery that leaves soonest and can take it, also when it waits (a waiting order may go with a fast delivery tomorrow); a fast or Don't hold order joins the open group only when that arrives tomorrow | Density, and one door visit where two deliveries would arrive the same day; nothing ever arrives later than its speed promised |
+| 2026-09-29 | Joining after the lock is decided by the order's pickup route: its next run must fall on or before the delivery day | The route is the only link between the shop and the hub; a run on the delivery day reaches the hub by about 14:00, before the 17:00 trips |
+| 2026-09-29 | A fast delivery's first shop pays the fast fee, every other shop the extra-shop fee; Ship now that brings the day forward charges base + (fast − base), never less than base | One formula for every delivery; the fast price is not undone by joining or by Ship now |
+| 2026-09-29 | Weight: 2 kg per shop in a delivery, then per started kg (Dhaka ৳15, Chattogram ৳20; owner); "You save" leaves weight out | Couriers charge per kg too (Pathao +৳15), so weight is no saving and no loss against them |
+| 2026-09-29 | The new tenant settings are nullable in SQL; the application does not serve a tenant without them | The launch seed inserts tenants without them and must not be edited, so a NOT NULL column would break a fresh database; a skipped tenant is loud (log) and never gets another operator's value |
+| 2026-09-29 | Pickup routes staggered 11:00–13:30, farthest zones first (owner's times, DbUp 005) | Every parcel at its hub by about 14:00, shuttle about 14:30, riders at 17:00 |
+| 2026-09-29 | A rider's stop is a visit: every delivery on the trip for the same customer in the same area, one fee split over their stops | "One stop, one fee" from the market review; each stop keeps its own part for the ledger (3.7) |
+| 2026-09-29 | The rider checks the amount with a plain link and hands over only by confirming exactly that amount | "No fee, no handover" without JavaScript, and a mistaken tap changes nothing; a stale page cannot hand over at the wrong price |
+| 2026-09-29 | Nobody home: back to the hub (scanned in again) and out another day free; the second failed visit sends the orders back to their shops | The documented one free re-attempt; "scan at every handover" |
+| 2026-09-29 | An order left behind moves to the customer's open delivery or a `FollowUp` delivery the next day, first shop at the extra-shop fee; `LeftBehindOn` is recorded and `AddedFee` never changes | The customer pays what was promised; the merchant's fee stays what they were told; 3.7 decides the late-handover fee from the record |
+| 2026-09-29 | A refused order keeps `Refused` while its parcels come back through the hub, and becomes `ReturnedToMerchant` at a "Return to the shop" scan | The existing state machine, and a scan at every handover |
+| 2026-09-29 | 3.6 is split: 3.6a door payment and receipt, 3.6b confirmation and advance payment (owner) | Two changes, each tested and reviewed on its own |
+| 2026-09-29 | A wallet payment at the door is a gateway request for exactly the amount due, shown as a QR on the rider's phone; the rider hands over only once the gateway says it is paid. The MVP gateway is a fake paid by hand on `/Dev/Payments` (owner) | "No fee, no handover" without trusting a screenshot; a real bKash or Nagad gateway replaces the adapter |
+| 2026-09-29 | One payment per visit, fee and COD kept apart; every stop of the visit points at it; a stop that collects money must have a paid payment | The ledger (3.7) splits COD per shop and the fee per delivery from the stops; the domain enforces "no fee, no handover" |
+| 2026-09-29 | An unpaid QR is cancelled when the wallet, the amount or the outcome changes; one the customer has paid is never dropped, the rider must hand over what it paid for | No double charge, and no refunds to handle in the MVP |
+| 2026-09-29 | For 3.6b: an order waiting for its advance is not collected until paid; 10 accepted deliveries and a customer never pays in advance (tenant setting) (owner) | No parcel travels to an unpaid door; the two-way cost is what advance payment exists to avoid |
+| 2026-09-29 | What an order waits for is decided once, when it is placed, from the customer's record across every shop (`CustomerStanding`: accepted deliveries, failed visits and refused orders) and stored on the order (`CustomerStep`) | The shop is told what its order waits for at once and the answer never changes under it; the record is read with the merchant filter lifted, so one shop's refusal protects the others without telling them why |
+| 2026-09-29 | The SMS link's token is the only key to the confirmation page: no sign-in, an unknown or used-up token is a 404, and the page is the "placed" text rather than an extra SMS | A customer who never visits OneDrop must be able to answer with one tap; a token names no customer, so a guessed link tells nobody anything, and one message per order is what a new customer expects |
+| 2026-09-29 | One advance covers the delivery: an order joining a delivery whose advance is unpaid waits for the same payment, and one joining a paid delivery waits for nothing | The advance is the first shop's fee, which the delivery pays once; the extra shops are still paid at the door |
+| 2026-09-29 | A paid advance comes off the fee at the door, per delivery, and the stops record what was actually collected | The customer must never pay the delivery fee twice; 3.7's ledger adds the advance row and the door row to the delivery's fee |
+| 2026-09-29 | Customer links in SMS are built from `Links:PortalUrlFormat` and the tenant's slug, not from the current request | The outbox sends from a background job, which has no request; a link must still open the right operator's portal |
+| 2026-09-29 | Return charge Dhaka ৳30, Chattogram ৳35; late-handover fee Dhaka ৳25, Chattogram ৳30 (tenant settings, DbUp 007) (owner) | The low end of what couriers charge for a return; the late fee pays for the second trip at the extra-shop fee the customer pays for it |
+| 2026-09-29 | The ledger holds only what is owed to or by each shop, one line per order and kind, written in the same save as the door or the Start trip that caused it; the delivery fee stays in `Payments.Payment` | The payout is exactly the shop's lines, each traceable to an order and a payment; the fee is the operator's and needs no split |
+| 2026-09-29 | A payout takes every line of the shop not yet paid out up to yesterday; when they come to nothing or less it is not made and the lines wait (owner: carry forward) | A charge is never lost and never invoiced; the next day's COD pays it |
+| 2026-09-29 | Shops are paid the next day whatever the rider handed in; a shortfall shows on the hub's Cash page (owner) | Next-day payout must not slip (Pathao pays daily); a rider's shortfall is the operator's to chase, not the shop's |
+| 2026-09-29 | The return charge applies to every order going back to its shop: refused at the door or nobody home at the re-attempt | Both cost the same two-way trip; couriers charge merchants for failed deliveries too |
+| 2026-09-29 | The late-handover fee is charged only when the shop had not handed the order over (still `Created`, not waiting for the customer's advance), once per order | A parcel already collected or on the shuttle is late through the operator; an order held for the advance is not the shop's fault |
+| 2026-09-29 | The settle job runs every hour and pays up to yesterday in each tenant's own time zone, not once at 06:00 | Tenants live in different time zones; a failed payout is retried within the hour; the gateway's idempotency key stops a second transfer |
+| 2026-09-29 | The riders' cash is recorded on the trip once every stop is done (`CashExpected`, `CashReceived`), not in a table of its own | One trip per rider a day already; no more cash can come in once every stop is done |
+| 2026-09-29 | UI: every role has a home, hub pages are six numbered steps of the day behind "Hub today", every page opens with a folded "how this works" box; the hub is remembered in a host-only cookie written only after a page for it rendered | The owner could not tell where to click; a preference cookie never grants access, as each page still checks the hub is the operator's |
+| 2026-09-29 | The shop's **New order** form sends the API's `CreateOrderCommand` through the same handler, with an idempotency key per form; in Development the sign-in page lists the host's demo logins as one-press buttons | One path for price, grouping and confirmation; a double press saves one order; the demo can be played from the screens alone |
 
 ## Quick reference
 
@@ -396,6 +716,156 @@ Payments stay fake in the MVP either way.
 ## Daily log
 
 Newest first. One entry per working day: what was done, how it was tested, what is next.
+
+### 2026-09-29
+- **Decided with the owner:** weight allowance 2 kg per shop, then ৳15 per started kg in Dhaka and ৳20 in Chattogram;
+  the staggered pickup times proposed (Dhaka 11:00–13:30, Chattogram 11:00–13:00, farthest first).
+- **Done (task 3.4a):** `Domain/Grouping/DeliveryGroupKind`, `DeliveryGroup.Kind`, `CanTake`, `ShipNowBringsForward`;
+  `DeliveryFeeCalculator` (weight per shop, fast first shop, `shippedNow`, `ShipNowFee`), `FeeSchedule` and `FeeLine`
+  with weights; `Tenant.WeightAllowanceGrams` / `ExtraKgFee` (SQL nullable, `TenantCatalog` skips a tenant without
+  them); SQL `Grouping.DeliveryGroup.Kind` + `chk_DeliveryGroup_Kind`, `Platform.Tenant` columns and checks;
+  `Pre/003_DeliveryGroupKind`, DbUp `2026/004_WeightAllowance`, `2026/005_StaggeredPickupTimes`; `DeliveryGrouping`
+  (soonest delivery that can take the order, pickup route lookup, shared with the quote); quote `pickupPointId` and
+  `weightGrams`; Ship now `addedFee` and the "Deliver tomorrow for +৳10" button; rider stops and "My deliveries"
+  priced with weights and kind; shuttle manifest ordered by delivery day; "Next day" marks by the delivery's kind on
+  hub pages; README.
+- **Tested:** build 0 errors, no new warnings; 25 new domain tests (kinds; a next-day delivery takes an order whose
+  pickup falls by its delivery day, not after, and none without a route or once out; fast orders join the open group
+  only on Day 2; a locked waiting group takes nothing on Day 3; Ship now on Day 1 becomes `ShippedNow` and stays
+  joinable, on Day 2 moves nothing; each started kg at both tenants' prices, per shop across its orders, an order
+  taking its shop over the allowance, refused parcels not weighed, weight not in the saving; Ship now fee and never
+  cheaper; shops joining a fast delivery) and new integration tests (fake clock around the shops' real route times:
+  a second shop joins the fast delivery and the quote says +৳25 half an hour before its route leaves on the delivery
+  day, a third shop after its route opens a new group at ৳60; a fast order after the last run opens its own; a 3 kg
+  order at Dhaka ৳75 and Chattogram ৳90, the quote with `weightGrams` equal; "My deliveries" offers Ship now at +৳10
+  and the page shows the button, the message and ৳95). Five existing tests changed with the rules (a Don't hold order
+  now joins the fast delivery; the shipped delivery takes the next shop at +৳25; Ship now's ৳10; route times).
+  Mutation: dropping the pickup condition fails 2 domain and both new integration tests. 195 + 6 + 90 = 291 pass,
+  none skipped. `Pre/003` dry-run in a rolled-back transaction on dev (8 groups `NextDay`, 20 `Waiting`), then both
+  databases published: `Grouping.DeliveryGroup` and `Platform.Tenant` rebuilt with their rows, three scripts ran.
+  Live on dev: phone 01816420937 in Mirpur 10 — Fashion House fast quote and OD-100054 ৳70 (DG-100031, `NextDay`),
+  Gadget BD quoted +৳25 and OD-100055 ৳25 in DG-100031, Beauty Shop 3 kg quoted and charged ৳40 (+৳25 + ৳15) in
+  DG-100031; texts "arriving on Wed 30 Sep"; Chattogram 3 kg OD-100057 ৳90; weight 0 → 400; another shop's key and
+  Chattogram's key 404 on OD-100055. Phone 01816420939: Fashion House OD-100058 ৳60 + Beauty Shop OD-100059 ৳25 open
+  in DG-100033; signed in by SMS code, "My deliveries" showed ৳85 and "Deliver tomorrow for +৳10 … instead of
+  Thursday"; pressed → "closed … Wednesday 30 September. Its fee went up by ৳10", fee ৳95; then Gadget BD OD-100060
+  joined at ৳25 → ৳120, "You save ৳60". Hub "Pickup routes" shows the new times. No errors in the app log.
+- **Next:** task 3.5, delivery screen and attempts.
+- **Committed:** task 3.4a as `31a994f` on branch `day3` (created from `day2` at `d336812`), pushed to `origin/day3`.
+- **Done (task 3.5):** `Domain/Delivery/StopOutcome`, `TripStop.Complete` (outcome, fee and COD collected),
+  `Trip.Finish`; `DeliveryGroupKind.FollowUp` and `DeliveryGroup.FollowUp`; `Order.FollowUpIn`, `LeftBehindOn`,
+  `ReturnToMerchant`, refused orders received at a hub; `DeliveryFeeCalculator` takes the delivery's kind (FollowUp
+  first shop = extra-shop fee) and `VisitFees`; `FeeLine.Of`; SQL `Delivery.TripStop` (+ `Outcome`, `FeeCollected`,
+  `CodCollected`, `CompletedOn`, checks), `Orders.Order.LeftBehindOn`, `chk_DeliveryGroup_Kind` 1–4;
+  `Application/Delivery/TripVisits`, `Door/DoorHandler`; `RiderDayHandler` by visits, follow-ups at Start trip;
+  `HubScanHandler.ReturnAsync`; "My deliveries" shows the collected fee; rider page door actions; scan tab **Return to
+  the shop** and the "Back to the shop" answer.
+- **Tested:** build 0 errors, no new warnings; 12 new domain tests (a visit's fee: one delivery its own fee, two
+  deliveries ৳60 + ৳25, a shop in both paid once, follow-up at the extra-shop fee and the dearest kind first, a
+  delivery with everything refused adds nothing; follow-up delivery locked for tomorrow and joinable; an order left
+  behind keeps its `AddedFee`, records `LeftBehindOn` and raises one event, only a waiting order of the same customer;
+  refused parcel back at the hub then returned once, only a refused order; a stop done once and collecting only when
+  something was handed over; a trip finishes only when out) and 3 new integration tests on hubs of their own (one
+  door, one fee for a waiting and a fast delivery of the same phone with the address spelt two ways: ৳95, with Gadget
+  BD refused ৳60 + COD, a wrong amount refused and nothing changed, stops ৳60/৳1,500 and ৳0, trip finished, the
+  customer's page shows ৳60, the refused parcel back at the hub and returned, another operator has no trip; nobody
+  home twice: back at the hub, not re-planned the same day, shelved again, then after a day the second failure sends
+  it to the shop; the rider page: review "Collect ৳1,260", hand over by form, "Every stop is done"); the Start trip
+  test now expects the unready order in a `FollowUp` on the freed shelf. Mutation: accepting any amount fails the door
+  test. 207 + 6 + 93 = 306 pass, none skipped. Both databases published: `Delivery.TripStop` and `Orders.Order`
+  rebuilt with their rows, new checks. Live on dev (Mirpur hub, Rafiq Hasan's trip): Shirin Akhter 01819274051 with
+  Fashion House OD-100061 (COD ৳1,200) and Beauty Shop OD-100062 in DG-100034, Gadget BD fast OD-100063 (COD ৳800,
+  "Flat 2A, House 8, Road 3") in DG-100035; Mahbub Alam 01819274052 OD-100064 in DG-100036; made due, scanned in
+  except OD-100062, planned from the hub page. Before start Shirin was one stop, DG-100034 + DG-100035, ৳120; Start
+  trip: "3 deliveries and 3 orders … 1 delivery stays at the hub (DG-100029) … 1 order … follow", then ৳95. At the
+  door, Gadget BD refused: "Collect ৳1,260"; ৳1,000 refused ("The amount to collect is 1,260"); ৳1,260 → "Handed
+  over". Mahbub nobody home → "We try again on another day, free"; trip Finished, collected ৳1,260. OD-100062 moved
+  to follow-up DG-100037 (kind 4, tomorrow, `AddedFee` still ৳25), texted "arriving on Wed 30 Sep". Hub: OD-100063-1
+  "Back to the shop Gadget BD", Return → "Returned", again → already scanned, a delivered parcel refused;
+  OD-100064-1 back on MIR-03. The Dhaka rider's cookie on Chattogram → login, hub staff on `/Rider` → access denied.
+  No errors in the app log. Not done: a phone-width screenshot of the door screen. The message "1 order was not
+  ready and follow…" was corrected to "follows" afterwards (build checked into a scratch folder while the app was
+  running from Visual Studio).
+- **Next:** task 3.6, door payment.
+- **Decided with the owner:** 3.6 is split into 3.6a (door payment and receipt) and 3.6b (confirmation and advance
+  payment); a wallet payment is a gateway request the rider checks (fake gateway paid on `/Dev/Payments`); an order
+  waiting for its advance is not collected until paid; a customer with 10 accepted deliveries never pays in advance.
+- **Done (task 3.6a):** `Domain/Payments` (`Payment`, `DoorPayment`, `PaymentReceived`, method/status/purpose and
+  `DisplayName`); `TripStop.PaymentId` and `Payment`, `Complete` takes the payment; SQL schema `Payments`, table
+  `Payment` with its checks and two indexes, `Delivery.TripStop.PaymentId` + `FK_TripStop_Payment` + `IX_TripStop_Payment`;
+  EF mapping (`PaymentsConfiguration`, `Schemas.Payments`, `IAppDbContext.Payments`); `IPaymentGateway`,
+  `FakePaymentGateway` + `FakePaymentLog`; `DoorHandler` (`RequestQrAsync`, `HandOverAsync` with the method, unpaid QRs
+  dropped, nobody home drops them too); outbox `PaymentReceivedMessage` and the receipt in `CustomerTexts`; rider day
+  `Cash` and `PaidBy`; rider page wallet buttons, QR (`LabelQrCode.Svg(string)`), check and hand over; `/Dev/Payments`
+  and its layout link; styles.
+- **Tested:** build 0 errors, no new warnings; 4 new domain tests (cash paid at once with one receipt event; a wallet
+  payment pending, requested once, paid once, never cancelled after; a cancelled QR cannot be paid, cash has no
+  gateway, no zero or negative amounts; a stop with money needs a paid payment, a not-home stop none, a second delivery
+  of a paid visit links with ৳0) and 3 new integration tests on hubs of their own (bKash: the same QR on a second ask
+  and on the stop, "not arrived yet" and "no QR for Nagad" with nothing handed over, paid in the fake gateway, a
+  refusal then refused as already paid, handed over, one `Paid` payment linked from the stop, rider's cash ৳0, and the
+  receipt text; switching bKash → Nagad cancels the first, cash cancels the second, everything refused after a QR
+  cancels it and pays nothing, cash counted for the hub, QR for cash / unknown method / wrong amount refused; the page:
+  Nagad QR shown as SVG, check before paying stays at the door with the reason, then hands over). Existing door tests
+  pass the method; the page test checks "Cash to hand in". Mutation: handing over without asking the gateway fails 2
+  tests. 211 + 6 + 96 = 313 pass, none skipped. The publish script was reviewed first: the new schema and table,
+  `Delivery.TripStop` rebuilt with its rows copied (plus the usual check re-creates); both databases published. Live on
+  dev (app restarted): Rumana Haque 01819274061 with Fashion House OD-100065 (COD ৳1,200) and Gadget BD OD-100066
+  (COD ৳800) in DG-100038, Tanvir Ahmed 01819274062 with Beauty Shop OD-100067 (COD ৳650) in DG-100039; scanned in
+  (MIR-04, MIR-05), made due by hand (`OpenedOn` moved back too: `chk_DeliveryGroup_LocksAt`), planned from the hub
+  page onto Sumon Ali's trip, started. DG-100038 "Collect ৳2,085"; bKash QR shown; check before paying → "The bKash
+  payment of 2,085 has not arrived yet"; paid on `/Dev/Payments`; check → "Handed over. Collected ৳2,085 by bKash".
+  DG-100039 "Collect ৳710"; ৳500 refused back to the door; cash ৳710 → handed over; "Collected ৳2,795", "Cash to hand
+  in ৳710", "Every stop is done". Receipts on `/Dev/Sms`: "OneDrop receipt: ৳2,085 paid by bKash on Tue 29 Sep for
+  delivery DG-100038. Delivery fee ৳85. Fashion House OD-100065 ৳1,200, Gadget BD OD-100066 ৳800. Thank you." and the
+  cash one for ৳710. Database: two `Paid` payments (Fee/Cod 85/2,000 and 60/650, rider 2, tenant 1), each stop linked,
+  two receipt rows sent. The Dhaka rider's cookie on Chattogram 403; Chattogram's rider has no such stop. No errors in
+  the app log. Not done: a phone-width screenshot of the QR card.
+- **Next:** task 3.6b, confirmation and advance payment.
+- **Committed:** task 3.6b as `0587846` on `day3` (not pushed).
+- **Decided with the owner:** return charge Dhaka ৳30, Chattogram ৳35; late-handover fee Dhaka ৳25, Chattogram ৳30;
+  charges a day's COD does not cover carry to the next payout; shops are paid the next day even before the rider's cash
+  is checked in.
+- **Done (task 3.7):** `Domain/Payments/LedgerEntry` (+ `LedgerEntryKind`) and `Settlement` (+ `SettlementStatus`);
+  `Trip.HandInCash` and the cash columns; `Tenant.ReturnCharge` / `LateHandoverFee` and `TenantInfo`; SQL
+  `Payments.LedgerEntry`, `Payments.Settlement`, `Delivery.Trip` cash columns + `chk_Trip_Cash`, `Platform.Tenant`
+  columns + checks; DbUp `2026/007_MerchantCharges`; EF mapping; `IPayoutGateway`, `FakePayoutGateway` + `FakePayoutLog`;
+  ledger lines in `DoorHandler` (COD, return charge; also the ৳0 door fix) and `RiderDayHandler.StartAsync` (late fee);
+  `Application/Payments/SettleMerchants/SettleMerchantsJob` + recurring `settle-merchants`;
+  `Application/Delivery/HubCash/HubCashHandler`; `Application/Payments/MerchantPayouts/MerchantPayoutsHandler`; pages
+  `/Hub/Cash`, `/Merchant/Payouts` (+ `_PayoutLines`), nav "Cash" and "Payouts", payouts on `/Dev/Payments`, the rider's
+  "Cash handed in"; README.
+- **Tested:** see task 3.7 above: 9 new domain and 5 new integration tests, two mutations caught, 229 + 6 + 106 = 341
+  pass, none skipped; both databases published (DbUp 007); live on dev through the Gulshan hub (OD-100074–OD-100077,
+  DG-100045, DG-100046, Kamal Uddin's trip): ledger lines, "৳85 short" hand-in, payouts ৳1,170 and ৳800, Beauty Shop
+  owing ৳25 carried, no second payout, merchants and operators kept apart. No errors in the app log.
+- **Done (UI upgrade, owner's request: "people easily know where to click"):** no rule changed. Every role has a home:
+  `/` sends hub staff and tenant admins to the new **Hub today** (`/Hub`), platform admins to Operators. Header: the
+  role's pages with the current one marked, who is signed in and as what; signed out, "Track my delivery" and "Staff
+  sign in"; a **Demo mode** bar in Development linking the fake SMS inbox and wallet. **Hub today** lays out the
+  hub's day as six numbered steps (pick up, scan, shelves, shuttle, riders, cash), each with what is waiting and its
+  button, and a step bar on every hub page; the hub is chosen once in large tiles (`_HubPicker`) and remembered in a
+  host-only cookie (`Pages/Hub/RememberHub`, written only after a page for that hub rendered). Scan modes explain
+  themselves; every page has a folded "how this works" box. Landing: "Who are you?" cards and how a delivery works
+  (join days from the tenant). Shops: tiles, plain statuses (`Web/Display/Statuses`), "what to do with a new order",
+  API keys folded away, and **New order** (`/Merchant/NewOrder`), the carried-forward manual form: it sends the API's
+  `CreateOrderCommand` through the same handler with an idempotency key per form. Customers: a tracker per delivery
+  (shops joining, closed, collected, on the way, delivered) and "In a hurry?" for Ship now; the SMS order page shows
+  where the customer is. Riders: a three-step tracker (load the bike, door to door, hand in the cash) saying what to do
+  now, larger buttons, done stops dimmed. Sign-in: in Development the host's seeded logins as one-press buttons. A
+  **How it works** guide (`/Guide`, open to all) follows one delivery through nine steps with who and where, and the
+  demo login in Development. Fixed on the way: shops saw "Not confirmed by the customer yet" on delivered orders.
+- **Tested:** build 0 errors, no new warnings; 3 new integration tests (hub staff land on Hub today, which remembers
+  the hub, the step bar carries it, another operator 404 and a shop access denied; two shops type in orders for one
+  phone: one delivery at the base and extra-shop fee from the tenant, the new customer asked to confirm, a double
+  press saves once, a missing phone is refused and saves nothing, a shop does not see the other's order; the demo
+  sign-in lists only this operator's logins and the guide is open). 229 + 6 + 109 = 344 pass, none skipped. No schema
+  change. Live on dev: screenshots of landing, sign-in, Hub today (Mirpur: 56 parcels at shops, ৳1,125 with riders),
+  scan, shop orders and form, rider and customer pages; Gadget BD OD-100084 (৳60) and Beauty Shop OD-100085 (+৳25)
+  entered through the form for Salma Begum 01819274091 joined one delivery. No errors in the app log. Not done: a
+  phone-width check with device emulation.
+- **Committed:** task 3.7 and the UI upgrade together on `day3` (not pushed).
+- **Next:** task 3.8, trust score (simple).
 
 ### 2026-09-28
 - **Done:** connection strings moved out of the repository into git-ignored `appsettings.Local.json` /
@@ -629,6 +1099,55 @@ Newest first. One entry per working day: what was done, how it was tested, what 
   manifest and "not found" for a Dhaka label; anonymous → login. OD-100047 left on the shuttle to GUL. Screenshots
   at 390 px fine. No errors in the app log.
 - **Next:** task 3.4, riders and trips (the plan-trips job assigns Day 3 groups to riders; rider PWA screen).
+- **Done (task 3.4):** `Domain/Delivery` (`Rider`, `Trip`, `TripStop`, `TripStatus`, `TripLoad`, `TripPlanner`);
+  `Order.IsReadyAt`, `Order.HandToRider`; SQL schema `Delivery` with `Rider`, `Trip`, `TripStop`; EF mapping;
+  `Application/Delivery` (`DeliveryParcels`, `PlanTrips/TripPlanning` + `PlanTripsJob`, `HubTrips/HubTripsHandler`,
+  `RiderDay/RiderDayHandler`); recurring `plan-trips` (`Jobs:PlanTrips`, every 15 minutes); policy `Rider`; pages
+  `/Hub/Trips` and `/Rider` (landing page for riders), nav "Trips" and "Today", `rider.webmanifest` and
+  `Shared/_RiderApp`; demo riders in `DemoDataSeeder`; README logins.
+- **Tested:** build 0 errors, no new warnings; 16 new domain tests (bike limits on parcels and weight at the
+  boundary; the planner fills the first bike then the next, sends a heavy delivery to a bike with weight to spare,
+  counts what a bike already carries, lets a too-big delivery wait while smaller ones go, takes late deliveries first
+  and neighbours together, plans nothing without bikes; a trip takes only a closed delivery of its hub, starts once,
+  is cancelled only when still planned after its day; hand-over only when every parcel is at the hub, packages leave
+  it) and 5 new integration tests, each on a hub, zone and area of its own (two riders' bikes filled in order with
+  one delivery left for lack of room, one with no parcel here left waiting, a not-due delivery not listed, and a second
+  run changing nothing — shown to fail with the "parcel on its shelf" rule removed; the rider's stops with fee, COD,
+  labels and readiness, Start trip taking out 2 deliveries and 2 orders and leaving one with nothing ready on its
+  shelf, a second start refused, the hub page counting what was taken; a trip left planned yesterday cancelled and its
+  delivery planned today; Chattogram finds neither the hub's trips nor the rider; the pages for hub staff and rider,
+  with access denied the other way round and the login page for anonymous), plus the Hangfire round-trip test now
+  covers every recurring job. The integration run caught a race that has been latent since 3.2: the pickup route test
+  compares the route list with the sheet while the hub scan tests open an Uttara shop; the two classes now share an
+  xUnit collection. 170 + 6 + 86 = 262 pass, none skipped (integration twice in a row). The publish script was
+  reviewed first: the new schema, three tables and their indexes only (plus the usual `chk_Tenant_GroupJoinDays`
+  re-create); both databases published. Live on dev (plan-trips every minute): Farhana Akter (01893456120,
+  Mirpur 10) with Fashion House OD-100049 (2 parcels, COD ৳1,500) and Gadget BD OD-100050 (COD ৳800), and Nasir
+  Uddin (01893456121, Pallabi) with Beauty Shop OD-100051 (fast, COD ৳650); OD-100049 and OD-100051 scanned in at
+  MIR (MIR-02, MIR-03), OD-100050 left at the shop; DG-100027 and DG-100028 made due today by hand. The job logged
+  "dhaka Planned 2", Chattogram 0. Trips page: Rafiq Hasan 4 of 30 parcels, DG-100027 2 of 3 here, DG-100028 1 of 1;
+  Sumon Ali no trip; DG-100012 and DG-100020 (earlier hand-moved deliveries) waiting with no parcel here. Rafiq's
+  Today: two stops with landmark and phone, ৳85 + ৳2,300 and ৳60 + ৳650, ৳3,095 in all, Gadget BD "Not at the hub yet" (now "Not all here yet").
+  Start trip → "2 deliveries and 2 orders"; OD-100049 and OD-100051 `OutForDelivery` with packages off the hub and
+  history "Out with the rider" by the rider's login, both deliveries `Dispatched` with shelves freed, OD-100050 still
+  `Created`; the page then listed Fashion House only at ৳60 + ৳1,500; a second start "This trip has already left".
+  A new delivery DG-100029 (OD-100052, 1 of 2 parcels on the reused shelf MIR-02) went to Sumon Ali, as Rafiq was
+  out; the hub page showed Rafiq "Out, parcels taken 2 of 3". Chattogram hub staff 404 on MIR's trips; the rider is
+  refused the hub pages and hub staff and a merchant the rider page; anonymous → login; Chattogram's rider sees no
+  deliveries. Screenshots at 390 px (DevTools mobile emulation): no sideways scroll on either page; the live check
+  led to the out-trip counts, the amber "Not all here yet" and the button spacing. No errors in the app log.
+- **Next:** task 3.5, delivery screen and attempts.
+- **Committed:** task 3.4 as `cbd47c1` on `day2`, pushed; pull request #1 merged 3.1–3.3 into `main`.
+- **Done (market review):** Dhaka couriers' prices compared (Pathao, Steadfast, RedX, Paperfly; see Project-Context
+  §1); DbUp `2026/003_DhakaFastDeliveryFee` raises OneDrop Dhaka's fast fee from ৳60 to ৳70; the unit test's copy of
+  the Dhaka prices follows it. The review's other changes are planned: new task 3.4a (fast deliveries can be joined,
+  Ship now as an upgrade, weight allowance, daily timetable), additions to 3.5–3.8, 4.1, new 4.7 and 4.8 (README
+  and demo move to 4.9). The list of dev test orders in Project-Context is shortened (the log keeps the detail).
+- **Tested:** build 0 errors, no new warnings; 170 + 6 + 86 = 262 pass, none skipped. Both databases published: the
+  one DbUp script only (plus the usual `chk_Tenant_GroupJoinDays` re-create). Live (app restarted; a running app
+  picks up new prices within 5 minutes, the tenant catalog's cache): Dhaka quotes fast ৳70, standard ৳60, Don't hold ৳60; Chattogram fast ৳80; a fast order
+  OD-100053 (Fashion House, Banani) was charged ৳70. No errors in the app log.
+- **Next:** task 3.4a, market pricing.
 
 ### 2026-09-27
 - **Done:** Week 1 complete (tasks 1.1–1.6).

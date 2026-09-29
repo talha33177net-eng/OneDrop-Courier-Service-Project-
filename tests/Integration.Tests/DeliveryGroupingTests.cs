@@ -77,7 +77,7 @@ public class DeliveryGroupingTests(WebAppFactory factory)
     }
 
     [Fact]
-    public async Task Deliver_fast_and_Dont_hold_travel_alone_beside_the_open_group()
+    public async Task Deliver_fast_opens_a_next_day_delivery_beside_the_open_group_and_later_orders_join_the_sooner_one()
     {
         WebAppFactory.RequireDatabase();
         var phone = NewPhone();
@@ -87,11 +87,14 @@ public class DeliveryGroupingTests(WebAppFactory factory)
         var food = await CreateAsync(WebAppFactory.DhakaBeauty, NewOrder(phone) with { DoNotHold = true });
         var later = await CreateAsync(WebAppFactory.DhakaGadget, NewOrder(phone));
 
+        // The fast delivery leaves tomorrow and the Mirpur route still runs by then (whatever the time of day), so
+        // the Don't hold order and the waiting one go with it rather than wait for the open group's Day 3
         var groups = await GroupsOfAsync(combined, fast, food, later);
-        Assert.Equal(3, groups.Distinct().Count());
-        Assert.Equal(groups[0], groups[3]);
+        Assert.Equal(2, groups.Distinct().Count());
         Assert.Equal(DeliveryGroupStatus.Open, groups[0].Status);
-        Assert.All([groups[1], groups[2]], alone => Assert.Equal(DeliveryGroupStatus.Locked, alone.Status));
+        Assert.Equal((DeliveryGroupStatus.Locked, DeliveryGroupKind.NextDay), (groups[1].Status, groups[1].Kind));
+        Assert.Equal(groups[1], groups[2]);
+        Assert.Equal(groups[1], groups[3]);
     }
 
     [Fact]
@@ -175,9 +178,19 @@ public class DeliveryGroupingTests(WebAppFactory factory)
             .Where(o => o.DeliveryGroupId == group.Id)
             .Select(o => o.MerchantId)
             .SingleAsync(cancellation);
-        var otherShop = await db.Merchants.Where(m => m.Id != inGroup).Select(m => m.Id).FirstAsync(cancellation);
+        var otherShop = await db.PickupPoints
+            .Where(p => p.MerchantId != inGroup && p.IsDefault)
+            .Select(p => new { p.MerchantId, p.Id })
+            .FirstAsync(cancellation);
         var grouping = new DeliveryGrouping(db, tenantContext, clock);
-        var request = new QuoteRequest(otherShop, address.CustomerId, address.Id, DeliverySpeed.Combine, false);
+        var request = new QuoteRequest(
+            otherShop.MerchantId,
+            address.CustomerId,
+            address.Id,
+            otherShop.Id,
+            DeliverySpeed.Combine,
+            DoNotHold: false,
+            WeightGrams: 1000);
 
         clock.SetUtcNow(Day3.AddSeconds(-1));
         var lastSecondOfDay2 = await grouping.QuoteAsync(request, cancellation);
@@ -293,7 +306,11 @@ public class DeliveryGroupingTests(WebAppFactory factory)
         var numbers = orders.Select(o => o.Number).ToArray();
         var rows = await db.Orders
             .Where(o => numbers.Contains(o.Number))
-            .Select(o => new { o.Number, Group = new GroupRow(o.DeliveryGroup!.Number, o.DeliveryGroup.Status) })
+            .Select(o => new
+            {
+                o.Number,
+                Group = new GroupRow(o.DeliveryGroup!.Number, o.DeliveryGroup.Status, o.DeliveryGroup.Kind)
+            })
             .ToDictionaryAsync(r => r.Number, r => r.Group, TestContext.Current.CancellationToken);
 
         return [.. numbers.Select(number => rows[number])];
@@ -330,7 +347,7 @@ public class DeliveryGroupingTests(WebAppFactory factory)
             800);
     }
 
-    private sealed record GroupRow(string Number, DeliveryGroupStatus Status);
+    private sealed record GroupRow(string Number, DeliveryGroupStatus Status, DeliveryGroupKind Kind);
 
     private sealed record OrderRequest(CustomerBody Customer, AddressBody Address, PackageBody[] Packages, decimal CodAmount)
     {

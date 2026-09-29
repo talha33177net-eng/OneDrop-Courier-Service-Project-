@@ -3,9 +3,11 @@
 @using Application.Grouping.CustomerDeliveries
 @using Domain.Grouping
 @using Domain.Orders
+@using Web.Display
 @{
     ViewData["Title"] = "My deliveries";
     var deliveries = Model.Deliveries;
+    string[] stages = ["Shops joining", "Closed", "Collected", "On the way", "Delivered"];
 }
 
 @section Head {
@@ -15,9 +17,19 @@
 <h1>My deliveries</h1>
 <p class="lead">Orders from every shop that chose OneDrop for you. Orders to the same address travel together.</p>
 
+<details class="help">
+    <summary>How your deliveries work</summary>
+    <ol>
+        <li>Your first OneDrop order opens a delivery to that address.</li>
+        <li>Until its last day to join, orders from other shops ride along for only +৳@deliveries.ExtraShopFee.ToString("N0") each.</li>
+        <li>Then it closes, the shops' parcels are collected, and one rider brings them all on the delivery day.</li>
+        <li>Pay the delivery fee and any cash on delivery at the door, in cash or by bKash or Nagad.</li>
+    </ol>
+</details>
+
 @if (Model.Message is not null)
 {
-    <p class="notice">@Model.Message</p>
+    <p class="notice notice-ok">@Model.Message</p>
 }
 
 @if (deliveries.OnTheWay.Count == 0)
@@ -30,9 +42,10 @@
 @foreach (var delivery in deliveries.OnTheWay)
 {
     var open = delivery.Status == DeliveryGroupStatus.Open;
+    var stage = Stage(delivery);
     <article class="card delivery">
         <div class="delivery-head">
-            <span class="pill @(open ? "pill-open" : null)">@StatusText(delivery.Status)</span>
+            <span class="pill @(open ? "pill-open" : null)">@Statuses.Delivery(delivery.Status)</span>
             <span class="muted">@delivery.Number</span>
         </div>
         <h2>@Arrival(delivery)</h2>
@@ -45,6 +58,16 @@
             }
         </p>
 
+        @if (stage > 0)
+        {
+            <ol class="tracker" aria-label="Progress">
+                @for (var step = 1; step <= stages.Length; step++)
+                {
+                    <li class="@(step < stage ? "done" : step == stage ? "now" : null)" aria-current="@(step == stage ? "step" : null)">@stages[step - 1]</li>
+                }
+            </ol>
+        }
+
         <ul class="lines">
             @foreach (var order in delivery.Orders)
             {
@@ -53,13 +76,13 @@
                         <strong>@order.Shop</strong>
                         <span class="muted">@order.Number · @(order.Packages == 1 ? "1 package" : $"{order.Packages} packages")</span>
                     </div>
-                    <span class="status">@OrderText(order.Status)</span>
+                    <span class="@Statuses.OrderClass(order.Status)">@Statuses.Order(order.Status)</span>
                 </li>
             }
         </ul>
 
         <div class="collected">
-            <span>Packages collected</span>
+            <span>Packages collected from the shops</span>
             <strong>@delivery.PackagesCollected of @delivery.Packages</strong>
         </div>
         <progress max="@Math.Max(delivery.Packages, 1)" value="@delivery.PackagesCollected">@delivery.PackagesCollected of @delivery.Packages</progress>
@@ -92,10 +115,21 @@
                 Buying from another shop before then? Choose OneDrop at checkout: it adds only
                 ৳@deliveries.ExtraShopFee.ToString("N0") to this delivery.
             </p>
-            <form method="post" asp-page-handler="ShipNow">
+            <form method="post" asp-page-handler="ShipNow" class="ship-now">
+                <strong>In a hurry?</strong>
                 <input type="hidden" name="number" value="@delivery.Number" />
-                <button class="button" type="submit">Ship now</button>
-                <span class="muted">Don't wait for more shops: we deliver tomorrow.</span>
+                @if (delivery.ShipNowFee > 0)
+                {
+                    <span class="muted">Don't wait for more shops: we deliver tomorrow instead of @delivery.DeliveryDay.ToString("dddd").</span>
+                    <br />
+                    <button class="button" type="submit">Deliver tomorrow for +৳@delivery.ShipNowFee.Value.ToString("N0")</button>
+                }
+                else
+                {
+                    <span class="muted">Don't wait for more shops: no one else can join, and we still deliver tomorrow.</span>
+                    <br />
+                    <button class="button" type="submit">Ship now</button>
+                }
             </form>
         }
     </article>
@@ -113,7 +147,7 @@
                         <strong>@delivery.DeliveryDay.ToString("d MMMM")</strong>
                         <span class="muted">@delivery.Number · @string.Join(", ", delivery.Shops.DefaultIfEmpty("no shops"))</span>
                     </div>
-                    <span class="status">@StatusText(delivery.Status)@(delivery.Fee > 0 ? $" · ৳{delivery.Fee:N0}" : null)</span>
+                    <span class="status @(delivery.Status == DeliveryGroupStatus.Delivered ? "status-done" : "status-quiet")">@Statuses.Delivery(delivery.Status)@(delivery.Fee > 0 ? $" · ৳{delivery.Fee:N0}" : null)</span>
                 </li>
             }
         </ul>
@@ -121,18 +155,6 @@
 }
 
 @functions {
-    private static string StatusText(DeliveryGroupStatus status)
-    {
-        return status switch
-        {
-            DeliveryGroupStatus.Open => "Waiting for more shops",
-            DeliveryGroupStatus.Locked => "Closed",
-            DeliveryGroupStatus.Dispatched => "Out for delivery",
-            DeliveryGroupStatus.Delivered => "Delivered",
-            _ => "Cancelled"
-        };
-    }
-
     private static string Arrival(CustomerDelivery delivery)
     {
         return delivery.Status == DeliveryGroupStatus.Dispatched
@@ -140,18 +162,16 @@
             : $"Arriving {delivery.DeliveryDay:dddd d MMMM}";
     }
 
-    private static string OrderText(OrderStatus status)
+    /// <summary>Where the delivery is on the tracker (1 to 5), or 0 when it has none (cancelled).</summary>
+    private static int Stage(CustomerDelivery delivery)
     {
-        return status switch
+        return delivery.Status switch
         {
-            OrderStatus.Created => "Waiting for pickup",
-            OrderStatus.PickedUp => "Picked up",
-            OrderStatus.AtHub => "At the hub",
-            OrderStatus.OutForDelivery => "Out for delivery",
-            OrderStatus.Delivered => "Delivered",
-            OrderStatus.Refused => "Refused",
-            OrderStatus.ReturnedToMerchant => "Returned to the shop",
-            _ => "Cancelled"
+            DeliveryGroupStatus.Open => 1,
+            DeliveryGroupStatus.Locked => delivery.PackagesCollected < delivery.Packages ? 2 : 3,
+            DeliveryGroupStatus.Dispatched => 4,
+            DeliveryGroupStatus.Delivered => 5,
+            _ => 0
         };
     }
 }

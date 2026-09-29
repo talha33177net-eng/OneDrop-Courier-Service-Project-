@@ -16,9 +16,18 @@
     </div>
     @if (Model.Sheet.Labels.Count > 0)
     {
-        <button type="button" class="button secondary" onclick="window.print()">Print</button>
+        <button type="button" class="button" onclick="window.print()">Print labels</button>
     }
 </div>
+
+<details class="help no-print">
+    <summary>How to label your parcels</summary>
+    <ol>
+        <li>Press <strong>Print labels</strong>. Each parcel has its own label; an order with 2 parcels has 2.</li>
+        <li>Stick each label on its parcel so the QR code is flat and visible.</li>
+        <li>Hand the parcels to the OneDrop collector. The big letters on the top are the hub it goes to.</li>
+    </ol>
+</details>
 
 @if (Model.Sheet.Labels.Count == 0)
 {

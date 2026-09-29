@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Application.Abstractions;
 using Infrastructure.Identity;
 using Infrastructure.MultiTenancy;
+using Infrastructure.Payments;
 using Infrastructure.Persistence;
 using Infrastructure.Seeding;
 using Infrastructure.Sms;
@@ -24,6 +25,7 @@ public static class DependencyInjection
         services.AddScoped<ITenantContext>(provider => provider.GetRequiredService<TenantContext>());
         services.AddSingleton<ITenantCatalog, TenantCatalog>();
         services.AddScoped<ICurrentUser, CurrentUser>();
+        services.AddScoped<ICustomerLinks, CustomerLinks>();
 
         services.AddScoped<TenantSaveInterceptor>();
         // Read from the final configuration when the context is built, not at registration, so every source -
@@ -43,6 +45,10 @@ public static class DependencyInjection
 
         services.AddSingleton<SmsLog>();
         services.AddSingleton<ISmsSender, FakeSmsSender>();
+        services.AddSingleton<FakePaymentLog>();
+        services.AddSingleton<IPaymentGateway, FakePaymentGateway>();
+        services.AddSingleton<FakePayoutLog>();
+        services.AddSingleton<IPayoutGateway, FakePayoutGateway>();
 
         services.AddSingleton<DemoDataSeeder>();
 

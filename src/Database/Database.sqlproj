@@ -32,12 +32,14 @@
   </PropertyGroup>
   <ItemGroup>
     <Build Include="Security/Customers.sql" />
+    <Build Include="Security/Delivery.sql" />
     <Build Include="Security/Grouping.sql" />
     <Build Include="Security/Identity.sql" />
     <Build Include="Security/Merchants.sql" />
     <Build Include="Security/Network.sql" />
     <Build Include="Security/Notifications.sql" />
     <Build Include="Security/Orders.sql" />
+    <Build Include="Security/Payments.sql" />
     <Build Include="Security/Platform.sql" />
     <Build Include="Platform/Tables/Tenant.sql" />
     <Build Include="Identity/Tables/Role.sql" />
@@ -64,6 +66,12 @@
     <Build Include="Grouping/Sequences/DeliveryGroupNumber.sql" />
     <Build Include="Grouping/Tables/DeliveryGroup.sql" />
     <Build Include="Notifications/Tables/OutboxMessage.sql" />
+    <Build Include="Delivery/Tables/Rider.sql" />
+    <Build Include="Delivery/Tables/Trip.sql" />
+    <Build Include="Delivery/Tables/TripStop.sql" />
+    <Build Include="Payments/Tables/Payment.sql" />
+    <Build Include="Payments/Tables/LedgerEntry.sql" />
+    <Build Include="Payments/Tables/Settlement.sql" />
   </ItemGroup>
   <ItemGroup>
     <PostDeploy Include="Script.PostDeployment.sql" />
@@ -91,5 +99,9 @@
     <Folder Include="Grouping\Tables\" />
     <Folder Include="Notifications\" />
     <Folder Include="Notifications\Tables\" />
+    <Folder Include="Delivery\" />
+    <Folder Include="Delivery\Tables\" />
+    <Folder Include="Payments\" />
+    <Folder Include="Payments\Tables\" />
   </ItemGroup>
 </Project>

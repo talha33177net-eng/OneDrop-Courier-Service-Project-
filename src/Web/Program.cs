@@ -10,6 +10,7 @@ using Infrastructure.Jobs;
 using Infrastructure.Seeding;
 using Web.Authentication;
 using Web.MultiTenancy;
+using Web.Pages.Hub;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -66,8 +67,12 @@ builder.Services.AddRazorPages(options =>
 {
     options.Conventions.AuthorizeFolder("/Merchant", Policies.MerchantPortal);
     options.Conventions.AuthorizeFolder("/Customer", Policies.CustomerPortal);
+    // The SMS link is the key: the customer opens their order without signing in, and the token names no customer
+    options.Conventions.AllowAnonymousToPage("/Customer/Order");
     options.Conventions.AuthorizeFolder("/Platform", Policies.PlatformAdmin);
     options.Conventions.AuthorizeFolder("/Hub", Policies.Operations);
+    options.Conventions.AddFolderApplicationModelConvention("/Hub", model => model.Filters.Add(new RememberHub()));
+    options.Conventions.AuthorizeFolder("/Rider", Policies.Rider);
 });
 
 var app = builder.Build();

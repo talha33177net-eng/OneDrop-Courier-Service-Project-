@@ -29,7 +29,8 @@ public class IndexModel(CustomerDeliveriesHandler deliveries, ShipNowHandler shi
     {
         var shipped = await shipNow.HandleAsync(number, cancellationToken);
         Message = shipped.IsSuccess
-            ? $"Delivery {shipped.Value.Number} is closed. We deliver it on {shipped.Value.DeliveryDate:dddd d MMMM}."
+            ? $"Delivery {shipped.Value.Number} is closed. We deliver it on {shipped.Value.DeliveryDate:dddd d MMMM}." +
+                (shipped.Value.AddedFee > 0 ? $" Its fee went up by ৳{shipped.Value.AddedFee:N0}." : "")
             : shipped.Error!.Message;
 
         return RedirectToPage();

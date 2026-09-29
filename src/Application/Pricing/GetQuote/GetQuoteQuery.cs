@@ -22,6 +22,15 @@ public sealed record GetQuoteQuery
     public DeliverySpeed Speed { get; init; } = DeliverySpeed.Combine;
 
     public bool DoNotHold { get; init; }
+
+    /// <summary>The shop's pickup point, as for Create Order; the default one when not given.</summary>
+    public long? PickupPointId { get; init; }
+
+    /// <summary>
+    /// The order's weight in grams, all packages. Without it the quote leaves out any fee for weight above the
+    /// shop's allowance, which Create Order then adds.
+    /// </summary>
+    public int? WeightGrams { get; init; }
 }
 
 /// <param name="Fee">What the order would add to the customer's delivery fee: the same amount Create Order returns.</param>

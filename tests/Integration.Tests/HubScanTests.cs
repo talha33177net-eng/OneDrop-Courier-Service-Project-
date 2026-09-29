@@ -19,6 +19,7 @@ namespace Integration.Tests;
 /// Task 3.2: collecting at the shop, scanning in at the hub and shelving each delivery. The customers here live in
 /// Uttara, so their deliveries leave from the Uttara hub, where no other test class shelves anything.
 /// </summary>
+[Collection("Uttara pickups")]
 public partial class HubScanTests(WebAppFactory factory)
 {
     private const string Password = "OneDrop#2026";

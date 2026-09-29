@@ -15,7 +15,7 @@ progress and daily log live in [Plans/Implementation-Plan.md](Plans/Implementati
 |---|---|---|
 | 1 — Foundation | Solution, tenancy (catalog, resolvers, filters, save guard), domain + database, Identity with roles and phone OTP, seeded tenants/zones/hubs, merchant API key + Create Order | **Done** |
 | 2 — Grouping core | Customer matching, delivery groups + 3-day rule, quote (৳60 / +৳25), lock job + Ship now, outbox + fake SMS, customer group page | **Done** |
-| 3 — Operations & money | Pickup routes + QR labels, hub scan/shelves/shuttle, rider trips, door payment, ledger + settlement | In progress (3.1 done) |
+| 3 — Operations & money | Pickup routes + QR labels, hub scan/shelves/shuttle, rider trips, market pricing (joinable fast deliveries, Ship now as an upgrade, weight allowance, staggered pickups), door payment, confirmation and advance payment, ledger + settlement | In progress (3.1–3.6b done) |
 | 4 — Polish & proof | SignalR dashboards, webhooks, Row-Level Security, Docker, CI, simulator | |
 
 ## Run it
@@ -53,8 +53,8 @@ Tenants are subdomains. Browsers resolve `*.localhost` to your machine, so no ho
 | Address | What |
 |---|---|
 | http://localhost:5080 | Platform (OneDrop company) |
-| http://dhaka.localhost:5080 | OneDrop Dhaka — 7 zones, 5 hubs, ৳60 + ৳25 |
-| http://chattogram.localhost:5080 | OneDrop Chattogram — 5 zones, 2 hubs, ৳70 + ৳30 |
+| http://dhaka.localhost:5080 | OneDrop Dhaka — 7 zones, 5 hubs, ৳60 + ৳25, fast ৳70 |
+| http://chattogram.localhost:5080 | OneDrop Chattogram — 5 zones, 2 hubs, ৳70 + ৳30, fast ৳80 |
 
 ### Demo logins (Development only, password `OneDrop#2026`)
 
@@ -62,9 +62,10 @@ Tenants are subdomains. Browsers resolve `*.localhost` to your machine, so no ho
 |---|---|---|
 | `admin@onedrop.test` | localhost | Platform admin |
 | `admin@dhaka.onedrop.test` / `admin@chattogram.onedrop.test` | tenant | Tenant admin |
-| `hub@dhaka.onedrop.test` / `hub@chattogram.onedrop.test` | tenant | Hub staff (**Pickup routes**: route sheets per zone; **Scan**: collect, receive and load the shuttle; **Shelves**; **Shuttle** manifest) |
-| `fashion@`, `gadget@`, `beauty@` + `dhaka.onedrop.test` / `chattogram.onedrop.test` | tenant | Merchant (orders, printable QR labels) |
-| Any mobile number via **Customer sign in** | tenant | Customer (code appears on **SMS outbox**) |
+| `hub@dhaka.onedrop.test` / `hub@chattogram.onedrop.test` | tenant | Hub staff (**Pickup routes**: route sheets per zone; **Scan**: collect, receive, load the shuttle and return to the shop; **Shelves**; **Shuttle** manifest; **Trips**: today's riders and deliveries, Plan trips now; **Cash**: record each rider's cash handed in) |
+| `rider@dhaka.onedrop.test` (Mirpur, 30 parcels / 25 kg), `rider2@dhaka.onedrop.test` (Mirpur, 12 / 15 kg), `rider3@dhaka.onedrop.test` (Gulshan), `rider@chattogram.onedrop.test` (Agrabad) | tenant | Rider (**Today**: stops, what to collect, Start trip; at each door: refused orders, check the amount, hand over for cash or after a bKash / Nagad QR is paid (the fake wallet is paid on **Wallet payments**), or nobody home; cash to hand in) |
+| `fashion@`, `gadget@`, `beauty@` + `dhaka.onedrop.test` / `chattogram.onedrop.test` | tenant | Merchant (orders, printable QR labels; **Payouts**: COD owed, charges, payouts sent the next day, listed on **Wallet payments**) |
+| Any mobile number via **Customer sign in** | tenant | Customer (code appears on **SMS outbox**; a first cash order is confirmed, or its fee paid in advance, through the link in its text) |
 
 ### Demo merchant API keys (Development only)
 
@@ -96,10 +97,10 @@ curl http://localhost:5080/api/v1/orders \
 
 | Endpoint | |
 |---|---|
-| `POST /api/v1/orders` | 201 with the order number; a retry with the same `Idempotency-Key` returns 200 and the same order, a different body with that key 409 |
+| `POST /api/v1/orders` | 201 with the order number and `fee`; `waitsFor` says what the order waits for from the customer (`none`, `confirm`, or `payInAdvance` when the shop sends `"feeInAdvance": true`, after a refusal, or a no-show). A retry with the same `Idempotency-Key` returns 200 and the same order, a different body with that key 409 |
 | `GET /api/v1/orders/{number}` | The caller's own order; anyone else's is 404 |
 | `GET /api/v1/areas` | The area list an address must pick from |
-| `GET /api/v1/quote?phone=&area=&line1=` | The delivery fee for the checkout: `{ fee, currency, joinsDelivery }` (৳60 for a new delivery, +৳25 when one is already on its way) |
+| `GET /api/v1/quote?phone=&area=&line1=` | The delivery fee for the checkout: `{ fee, currency, joinsDelivery }` (৳60 for a new delivery, +৳25 when one is already on its way, the fast fee for `speed=fast`). Optional `weightGrams` adds each started kg above the shop's allowance (Dhaka 2 kg, then ৳15); optional `pickupPointId` (default: the shop's default point) |
 
 Background jobs run on Hangfire in the web app; the dashboard is at http://localhost:5080/jobs (platform admin).
 
