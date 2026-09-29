@@ -70,6 +70,8 @@
     <Build Include="Delivery/Tables/Trip.sql" />
     <Build Include="Delivery/Tables/TripStop.sql" />
     <Build Include="Payments/Tables/Payment.sql" />
+    <Build Include="Payments/Tables/LedgerEntry.sql" />
+    <Build Include="Payments/Tables/Settlement.sql" />
   </ItemGroup>
   <ItemGroup>
     <PostDeploy Include="Script.PostDeployment.sql" />

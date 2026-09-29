@@ -8,35 +8,37 @@
 
 @if (Model.Current is null)
 {
-    <h1>Trips</h1>
-    <p class="lead">Which hub's trips?</p>
-    <div class="card">
-        <ul class="hub-list">
-            @foreach (var hub in Model.Hubs)
-            {
-                <li><a asp-page="/Hub/Trips" asp-route-hub="@hub.Code">@hub.Name <span class="muted">@hub.Code</span></a></li>
-            }
-        </ul>
-    </div>
+    <partial name="_HubPicker" model='new Web.Pages.Hub.HubPicker("/Hub/Trips", "Riders and trips", "Which hub are you working at?", Model.Hubs)' />
     return;
 }
 
-<div class="sheet-head">
+<div class="page-head">
     <div>
-        <h1>@Model.Current.Name trips</h1>
+        <p class="eyebrow">Step 5 · @Model.Current.Name · @today.Day.ToString("dddd d MMMM")</p>
+        <h1>Send the riders out</h1>
         <p class="lead">
-            @today.Day.ToString("dddd d MMMM"). Closed deliveries due today go on a rider's bike once a parcel is on
-            their shelf, up to what each bike carries.
+            Closed deliveries due today go on a rider's bike once a parcel is on their shelf, up to what each bike
+            carries. This happens by itself every 15 minutes.
         </p>
     </div>
-    <form method="post" asp-page-handler="Plan" asp-route-hub="@Model.Current.Code" class="no-print sheet-action">
+    <form method="post" asp-page-handler="Plan" asp-route-hub="@Model.Current.Code" class="no-print">
         <button class="button" type="submit">Plan trips now</button>
     </form>
 </div>
 
+<details class="help">
+    <summary>How a rider's day goes</summary>
+    <ol>
+        <li>Press <strong>Plan trips now</strong> (or wait for it to happen by itself). Each rider gets their deliveries.</li>
+        <li>The rider signs in on their phone, opens <strong>Today's trip</strong>, takes each delivery off its shelf and starts the trip.</li>
+        <li>At each door the rider collects the fee and cash on delivery, and hands the parcels over.</li>
+        <li>Back at the hub, count their cash on <a asp-page="/Hub/Cash" asp-route-hub="@Model.Current.Code">Riders' cash</a>.</li>
+    </ol>
+</details>
+
 @if (Model.Message is not null)
 {
-    <p class="notice">@Model.Message</p>
+    <p class="notice notice-ok">@Model.Message</p>
 }
 
 @if (today.Riders.Count == 0)

@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Application.Delivery.PlanTrips;
 using Application.Grouping.LockDueGroups;
 using Application.Notifications.SendOutbox;
+using Application.Payments.SettleMerchants;
 
 namespace Infrastructure.Jobs;
 
@@ -20,7 +21,7 @@ public static class JobsSetup
 {
     public static IServiceCollection AddJobs(this IServiceCollection services, bool runServer)
     {
-        services.AddSingleton(new TenantJobRegistry(typeof(LockDueGroupsJob), typeof(SendOutboxJob), typeof(PlanTripsJob)));
+        services.AddSingleton(new TenantJobRegistry(typeof(LockDueGroupsJob), typeof(SendOutboxJob), typeof(PlanTripsJob), typeof(SettleMerchantsJob)));
         services.AddScoped<TenantJobRunner>();
         // The connection string is read when Hangfire first opens a connection, from the final configuration
         services.AddHangfire((provider, configuration) => configuration
@@ -56,5 +57,9 @@ public static class JobsSetup
             "plan-trips",
             runner => runner.EnqueueForEveryTenantAsync(nameof(PlanTripsJob), CancellationToken.None),
             configuration["Jobs:PlanTrips"] ?? throw new InvalidOperationException("Jobs:PlanTrips is not set."));
+        recurring.AddOrUpdate<TenantJobRunner>(
+            "settle-merchants",
+            runner => runner.EnqueueForEveryTenantAsync(nameof(SettleMerchantsJob), CancellationToken.None),
+            configuration["Jobs:SettleMerchants"] ?? throw new InvalidOperationException("Jobs:SettleMerchants is not set."));
     }
 }

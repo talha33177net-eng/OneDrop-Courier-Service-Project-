@@ -10,6 +10,7 @@ using Infrastructure.Jobs;
 using Infrastructure.Seeding;
 using Web.Authentication;
 using Web.MultiTenancy;
+using Web.Pages.Hub;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -70,6 +71,7 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AllowAnonymousToPage("/Customer/Order");
     options.Conventions.AuthorizeFolder("/Platform", Policies.PlatformAdmin);
     options.Conventions.AuthorizeFolder("/Hub", Policies.Operations);
+    options.Conventions.AddFolderApplicationModelConvention("/Hub", model => model.Filters.Add(new RememberHub()));
     options.Conventions.AuthorizeFolder("/Rider", Policies.Rider);
 });
 

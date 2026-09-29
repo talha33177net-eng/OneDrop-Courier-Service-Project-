@@ -11,6 +11,9 @@
 --             launch tenants, and the application does not serve a tenant that has not set them.
 -- 2026-09-29: TrustedAfterDeliveries (task 3.6b): accepted deliveries after which a customer never pays the fee in
 --             advance. Nullable for the same reason; DbUp 2026/006 sets it for the launch tenants.
+-- 2026-09-29: ReturnCharge and LateHandoverFee (task 3.7): what a shop pays for an order that comes back to it and for
+--             one a rider had to leave behind, taken off its payout. Nullable for the same reason; DbUp 2026/007 sets
+--             them for the launch tenants.
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Platform].[Tenant] (
     [Id]                     BIGINT          IDENTITY (1, 1) NOT NULL,
@@ -30,6 +33,9 @@ CREATE TABLE [Platform].[Tenant] (
     [ExtraKgFee]             DECIMAL (10, 2) NULL,
     -- Accepted deliveries after which a customer never pays the delivery fee in advance
     [TrustedAfterDeliveries] INT             NULL,
+    -- What a shop pays for an order that comes back to it, and for one a rider had to leave behind
+    [ReturnCharge]           DECIMAL (10, 2) NULL,
+    [LateHandoverFee]        DECIMAL (10, 2) NULL,
     [Archived]               BIT             DEFAULT ((0)) NOT NULL,
     [UpdatedId]              BIGINT          NULL,
     [UpdatedOn]              DATETIME2 (7)   DEFAULT (getutcdate()) NOT NULL,
@@ -39,7 +45,9 @@ CREATE TABLE [Platform].[Tenant] (
     CONSTRAINT [chk_Tenant_GroupJoinDays] CHECK ([GroupJoinDays] BETWEEN 1 AND 7),
     CONSTRAINT [chk_Tenant_WeightAllowanceGrams] CHECK ([WeightAllowanceGrams] >= (0)),
     CONSTRAINT [chk_Tenant_ExtraKgFee] CHECK ([ExtraKgFee] >= (0)),
-    CONSTRAINT [chk_Tenant_TrustedAfterDeliveries] CHECK ([TrustedAfterDeliveries] >= (1))
+    CONSTRAINT [chk_Tenant_TrustedAfterDeliveries] CHECK ([TrustedAfterDeliveries] >= (1)),
+    CONSTRAINT [chk_Tenant_ReturnCharge] CHECK ([ReturnCharge] >= (0)),
+    CONSTRAINT [chk_Tenant_LateHandoverFee] CHECK ([LateHandoverFee] >= (0))
 );
 
 

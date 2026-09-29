@@ -58,6 +58,10 @@ public interface IAppDbContext
 
     DbSet<Payment> Payments { get; }
 
+    DbSet<LedgerEntry> LedgerEntries { get; }
+
+    DbSet<Settlement> Settlements { get; }
+
     EntityEntry<TEntity> Entry<TEntity>(TEntity entity)
         where TEntity : class;
 

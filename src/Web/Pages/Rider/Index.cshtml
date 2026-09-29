@@ -42,6 +42,39 @@
     return;
 }
 
+@{
+    var step = today.Status switch
+    {
+        TripStatus.Planned => 1,
+        TripStatus.Out => 2,
+        _ => today.CashHandedIn is null ? 3 : 4
+    };
+}
+<section class="card no-print">
+    <ol class="tracker" aria-label="Your day">
+        <li class="@(step > 1 ? "done" : "now")">Load your bike</li>
+        <li class="@(step > 2 ? "done" : step == 2 ? "now" : null)">Door to door</li>
+        <li class="@(step > 3 ? "done" : step == 3 ? "now" : null)">Hand in the cash</li>
+    </ol>
+    <p>
+        @switch (step)
+        {
+            case 1:
+                <text><strong>Now:</strong> take each delivery below off its shelf (the shelf number is on the right), then press the orange button to leave.</text>
+                break;
+            case 2:
+                <text><strong>Now:</strong> go to the stops in order. At each door press <strong>At the door</strong>, tick anything the customer refuses, collect the amount shown, then hand over.</text>
+                break;
+            case 3:
+                <text><strong>Now:</strong> go back to the hub with the money and any parcels left, and hand in the cash to the hub staff.</text>
+                break;
+            default:
+                <text><strong>All done for today.</strong> Thank you.</text>
+                break;
+        }
+    </p>
+</section>
+
 @if (Model.Due is { } due)
 {
     <section class="card door-due" id="door">
@@ -151,10 +184,26 @@
                 <dt>Collected</dt>
                 <dd>৳@today.Collected.ToString("N0")</dd>
             </div>
-            <div>
-                <dt>Cash to hand in</dt>
-                <dd>৳@today.Cash.ToString("N0")</dd>
-            </div>
+            @if (today.CashHandedIn is { } handedIn)
+            {
+                <div>
+                    <dt>Cash handed in</dt>
+                    <dd>
+                        ৳@handedIn.ToString("N0")
+                        @if (handedIn < today.Cash)
+                        {
+                            <text>of ৳@today.Cash.ToString("N0")</text>
+                        }
+                    </dd>
+                </div>
+            }
+            else
+            {
+                <div>
+                    <dt>Cash to hand in</dt>
+                    <dd>৳@today.Cash.ToString("N0")</dd>
+                </div>
+            }
         }
         <div class="total">
             <dt>Still to collect</dt>
@@ -164,7 +213,7 @@
     @if (today.Status == TripStatus.Planned)
     {
         <form method="post" asp-page-handler="Start" class="start-trip">
-            <button class="button" type="submit">Start trip</button>
+            <button class="button big" type="submit">Start trip</button>
             <span class="muted">Take every delivery from its shelf first. Anything not on its shelf stays at the hub.</span>
         </form>
     }
@@ -181,7 +230,7 @@
 @foreach (var stop in today.Stops)
 {
     var atTheDoor = today.Status == TripStatus.Out && stop.Outcome is null;
-    <section class="card stop">
+    <section class="card stop @(stop.Outcome is null ? null : "stop-done")">
         <div class="stop-head">
             <span class="stop-number">@stop.Number</span>
             <div>
@@ -247,7 +296,7 @@
             </dl>
             @if (atTheDoor)
             {
-                <button class="button" type="submit">At the door</button>
+                <button class="button big" type="submit">At the door</button>
                 <span class="muted">Tick what the customer refuses, then check the amount.</span>
             }
         </form>

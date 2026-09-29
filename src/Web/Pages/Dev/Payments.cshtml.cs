@@ -6,11 +6,15 @@ namespace Web.Pages.Dev;
 
 /// <summary>
 /// Development only: the wallet payments the fake gateway was asked for. Pressing Pay plays the customer paying in
-/// the bKash or Nagad app, so the rider's "Check payment" goes through.
+/// the bKash or Nagad app, so the rider's "Check payment" goes through. Below, the payouts the fake payout gateway sent
+/// to shops.
 /// </summary>
-public class PaymentsModel(FakePaymentLog log, TimeProvider time, IWebHostEnvironment environment) : PageModel
+public class PaymentsModel(FakePaymentLog log, FakePayoutLog payouts, TimeProvider time, IWebHostEnvironment environment)
+    : PageModel
 {
     public IReadOnlyList<FakePaymentRequest> Requests { get; private set; } = [];
+
+    public IReadOnlyList<FakePayout> Payouts { get; private set; } = [];
 
     public IActionResult OnGet()
     {
@@ -20,6 +24,7 @@ public class PaymentsModel(FakePaymentLog log, TimeProvider time, IWebHostEnviro
         }
 
         Requests = log.Recent;
+        Payouts = payouts.Recent;
 
         return Page();
     }

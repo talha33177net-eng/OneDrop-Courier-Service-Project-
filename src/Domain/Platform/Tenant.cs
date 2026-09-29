@@ -56,5 +56,14 @@ public class Tenant : AuditedEntity, IArchivable
     /// </summary>
     public int? TrustedAfterDeliveries { get; private set; }
 
+    /// <summary>
+    /// What a shop pays when its order comes back (refused at the door, or nobody home at the re-attempt), taken off
+    /// its payout. Nullable only because the column came after the launch seed; a tenant without it is not served.
+    /// </summary>
+    public decimal? ReturnCharge { get; private set; }
+
+    /// <summary>What a shop pays when a rider has to leave its order behind because the shop had not handed it over.</summary>
+    public decimal? LateHandoverFee { get; private set; }
+
     public bool Archived { get; private set; }
 }

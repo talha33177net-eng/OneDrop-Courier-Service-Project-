@@ -37,6 +37,16 @@ public class IndexModel(
             return RedirectToPage("/Rider/Index");
         }
 
+        if (User.IsInRole(Roles.HubStaff) || User.IsInRole(Roles.TenantAdmin))
+        {
+            return RedirectToPage("/Hub/Index");
+        }
+
+        if (User.IsInRole(Roles.PlatformAdmin))
+        {
+            return RedirectToPage("/Platform/Tenants");
+        }
+
         if (Tenant is null)
         {
             var tenants = await catalog.ListAsync(cancellationToken);

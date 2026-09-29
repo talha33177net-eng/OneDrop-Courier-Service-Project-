@@ -6,55 +6,119 @@
 
 @if (Model.Tenant is null)
 {
-    <h1>Multiple shops. One delivery.</h1>
-    <p class="lead">The OneDrop platform. Each operator runs on its own address with its own customers, hubs and prices.</p>
+    <section class="hero">
+        <p class="eyebrow">OneDrop platform</p>
+        <h1>Multiple shops. One delivery.</h1>
+        <p class="lead">
+            Orders from different online shops to the same customer travel together, so the customer pays one delivery
+            instead of three. Each operator below runs on its own address with its own customers, hubs and prices.
+        </p>
+        <a class="button" asp-page="/Guide">How it works</a>
+        <a class="button ghost" asp-page="/Account/Login">Platform admin sign in</a>
+    </section>
 
+    <h2 class="section-title">Choose an operator</h2>
     <div class="cards">
         @foreach (var (tenant, url) in Model.Tenants)
         {
-            <div class="card">
+            <div class="card role-card">
                 <h2>@tenant.Name</h2>
                 <p class="muted">
                     ৳@tenant.BaseDeliveryFee.ToString("0") for the first shop,
-                    +৳@tenant.ExtraShopFee.ToString("0") per extra shop
+                    +৳@tenant.ExtraShopFee.ToString("0") for each extra shop
                 </p>
-                <a class="button" href="@url">Open @tenant.Slug</a>
+                <a class="button" href="@url">Open @tenant.Name</a>
             </div>
         }
     </div>
 
     @if (Model.Tenants.Count == 0)
     {
-        <p class="notice">No tenants yet. Run <code>./tools/db/publish.ps1</code> to create the database and the launch tenants.</p>
+        <p class="notice">No operators yet. Run <code>./tools/db/publish.ps1</code> to create the database and the launch operators.</p>
     }
 }
 else
 {
-    <h1>@Model.Tenant.Name</h1>
-    <p class="lead">
-        Orders from different shops to the same customer travel together.
-        ৳@Model.Tenant.BaseDeliveryFee.ToString("0") for the first shop,
-        +৳@Model.Tenant.ExtraShopFee.ToString("0") for each extra shop.
-    </p>
+    var tenant = Model.Tenant;
+    var first = tenant.BaseDeliveryFee;
+    var extra = tenant.ExtraShopFee;
+    <section class="hero">
+        <p class="eyebrow">@tenant.Name</p>
+        <h1>Multiple shops. One delivery.</h1>
+        <p class="lead">
+            Bought from several online shops? Choose OneDrop at each checkout and everything arrives together, in one
+            delivery, for one fee.
+        </p>
+        <div class="price-strip">
+            <span>First shop ৳@first.ToString("0")</span>
+            <span>Each extra shop +৳@extra.ToString("0")</span>
+            <span>3 shops ৳@((first + 2 * extra).ToString("0")) instead of ৳@((3 * first).ToString("0"))</span>
+        </div>
+        @if (User.Identity?.IsAuthenticated != true)
+        {
+            <a class="button" asp-page="/Account/PhoneLogin">Track my delivery</a>
+        }
+        <a class="button ghost" asp-page="/Guide">How it works</a>
+    </section>
 
     @if (User.Identity?.IsAuthenticated != true)
     {
+        <h2 class="section-title">Who are you?</h2>
         <div class="cards">
-            <div class="card">
-                <h2>Customers</h2>
-                <p class="muted">Follow your deliveries. We send a code to your phone.</p>
-                <a class="button" asp-page="/Account/PhoneLogin">Sign in with phone</a>
+            <div class="card role-card">
+                <div class="role-icon" aria-hidden="true">🛍️</div>
+                <h2>Customer</h2>
+                <p class="muted">See your deliveries, which shops are in them, when they arrive and what to pay at the door. We text you a code; no password.</p>
+                <a class="button" asp-page="/Account/PhoneLogin">Track my delivery</a>
             </div>
-            <div class="card">
-                <h2>Merchants and staff</h2>
-                <p class="muted">Merchant dashboard, hub and admin tools.</p>
+            <div class="card role-card">
+                <div class="role-icon" aria-hidden="true">🏪</div>
+                <h2>Shop</h2>
+                <p class="muted">See your orders, print parcel labels for the pickup, and follow the cash on delivery paid to you each day.</p>
+                <a class="button secondary" asp-page="/Account/Login">Shop sign in</a>
+            </div>
+            <div class="card role-card">
+                <div class="role-icon" aria-hidden="true">🏭</div>
+                <h2>Hub staff</h2>
+                <p class="muted">Run the hub's day: pickups, scanning parcels onto shelves, the shuttle, sending riders out and counting cash.</p>
                 <a class="button secondary" asp-page="/Account/Login">Staff sign in</a>
+            </div>
+            <div class="card role-card">
+                <div class="role-icon" aria-hidden="true">🛵</div>
+                <h2>Rider</h2>
+                <p class="muted">Your stops for today in order, what to collect at each door, and the cash to hand in.</p>
+                <a class="button secondary" asp-page="/Account/Login">Rider sign in</a>
             </div>
         </div>
     }
 
-    <div class="card">
-        <h2>Network</h2>
+    <h2 class="section-title">How a delivery works</h2>
+    <ol class="flow">
+        <li class="flow-step">
+            <span class="step-no">1</span>
+            <div class="flow-body">
+                <h3>Order from any shop</h3>
+                <p>Choose OneDrop at checkout. Orders to the same phone and address join one delivery.</p>
+            </div>
+        </li>
+        <li class="flow-step">
+            <span class="step-no">2</span>
+            <div class="flow-body">
+                <h3>Other shops can join for @tenant.GroupJoinDays @(tenant.GroupJoinDays == 1 ? "day" : "days")</h3>
+                <p>Buy somewhere else in those days and it rides along for +৳@extra.ToString("0"). In a hurry? Close it early and it comes the next day.</p>
+            </div>
+        </li>
+        <li class="flow-step">
+            <span class="step-no">3</span>
+            <div class="flow-body">
+                <h3>Everything arrives together the day after</h3>
+                <p>One rider, one door visit, in the evening. Pay the delivery fee and any cash on delivery at the door, in cash or by bKash or Nagad.</p>
+            </div>
+        </li>
+    </ol>
+
+    <details class="help">
+        <summary>Where we deliver</summary>
         <div class="table-wrap">
             <table>
                 <thead>
@@ -68,5 +132,5 @@ else
                 </tbody>
             </table>
         </div>
-    </div>
+    </details>
 }

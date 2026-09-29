@@ -13,6 +13,7 @@ using Application.Abstractions;
 using Application.Delivery.PlanTrips;
 using Application.Grouping;
 using Application.Grouping.LockDueGroups;
+using Application.Payments.SettleMerchants;
 using Domain.Customers;
 using Domain.Grouping;
 using Domain.Orders;
@@ -194,13 +195,17 @@ public class LockDueGroupsJobTests(WebAppFactory factory)
         }
 
         Assert.Equal(
-            [("lock-due-groups", configuration["Jobs:LockDueGroups"]), ("plan-trips", configuration["Jobs:PlanTrips"])],
+            [
+                ("lock-due-groups", configuration["Jobs:LockDueGroups"]),
+                ("plan-trips", configuration["Jobs:PlanTrips"]),
+                ("settle-merchants", configuration["Jobs:SettleMerchants"])
+            ],
             recurring.Jobs.Select(job => (job.Key, (string?)job.Value.Cron)).OrderBy(job => job.Key));
         Assert.All(
             [.. recurring.Jobs.Values.Select(scheduled => scheduled.Job), .. client.Jobs],
             job => Assert.Equal(job.Method, InvocationData.SerializeJob(job).DeserializeJob().Method));
         Assert.Equal(
-            [nameof(LockDueGroupsJob), nameof(PlanTripsJob)],
+            [nameof(LockDueGroupsJob), nameof(PlanTripsJob), nameof(SettleMerchantsJob)],
             client.Jobs.Select(job => (string)job.Args[0]).Distinct().Order());
         Assert.Equal(typeof(PlanTripsJob), factory.Services.GetRequiredService<TenantJobRegistry>().Find(nameof(PlanTripsJob)));
     }

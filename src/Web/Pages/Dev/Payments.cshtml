@@ -50,3 +50,31 @@
         </table>
     }
 </div>
+
+<h2 class="section-title">Payouts to shops</h2>
+<div class="card table-wrap">
+    @if (Model.Payouts.Count == 0)
+    {
+        <p class="muted">No payouts sent yet. The settle job pays each shop yesterday's lines.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr><th>Sent (UTC)</th><th>To bKash</th><th>Amount</th><th>Payout</th><th>Reference</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var payout in Model.Payouts)
+                {
+                    <tr>
+                        <td>@payout.SentOn.ToString("d MMM HH:mm:ss")</td>
+                        <td>@payout.Account</td>
+                        <td>৳@payout.Amount.ToString("N0")</td>
+                        <td>@payout.Key</td>
+                        <td>@payout.Reference</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>

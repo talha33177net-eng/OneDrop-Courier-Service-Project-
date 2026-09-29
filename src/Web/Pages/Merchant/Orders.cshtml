@@ -1,25 +1,67 @@
 @page
 @using Domain.Orders
 @using Domain.Customers
+@using Web.Display
 @model Web.Pages.Merchant.OrdersModel
 @{
     ViewData["Title"] = "My orders";
+    var orders = Model.Orders;
+    var waiting = orders.Count(order => order.Status == OrderStatus.Created);
+    var moving = orders.Count(order => order.Status is OrderStatus.PickedUp or OrderStatus.AtHub or OrderStatus.OutForDelivery);
+    var delivered = orders.Count(order => order.Status == OrderStatus.Delivered);
+    var back = orders.Count(order => order.Status is OrderStatus.Refused or OrderStatus.ReturnedToMerchant);
 }
 
-<h1>@Model.MerchantName</h1>
-<p class="lead">Your OneDrop orders. Delivery costs you nothing; the customer pays the fee on delivery day.</p>
-
-<div class="card">
-    <div class="sheet-head">
-        <h2>Orders</h2>
-        @if (Model.Orders.Any(order => order.Status == OrderStatus.Created))
+<div class="page-head">
+    <div>
+        <p class="eyebrow">Shop</p>
+        <h1>@Model.MerchantName</h1>
+        <p class="lead">Your OneDrop orders. Delivery costs you nothing; the customer pays the fee on delivery day.</p>
+    </div>
+    <div class="actions">
+        <a class="button @(waiting > 0 ? "ghost" : null)" asp-page="/Merchant/NewOrder">New order</a>
+        @if (waiting > 0)
         {
-            <a class="button secondary" asp-page="/Merchant/Labels">Print labels for the pickup</a>
+            <a class="button" asp-page="/Merchant/Labels">Print labels for the pickup</a>
         }
     </div>
-    @if (Model.Orders.Count == 0)
+</div>
+
+<div class="tiles">
+    <div class="tile @(waiting > 0 ? "tile-warn" : null)">
+        <div class="tile-number">@waiting</div>
+        <div class="tile-label">waiting for pickup</div>
+    </div>
+    <div class="tile">
+        <div class="tile-number">@moving</div>
+        <div class="tile-label">on the way to the customer</div>
+    </div>
+    <div class="tile tile-good">
+        <div class="tile-number">@delivered</div>
+        <div class="tile-label">delivered</div>
+    </div>
+    <div class="tile">
+        <div class="tile-number">@back</div>
+        <div class="tile-label">refused or returned</div>
+    </div>
+</div>
+
+<details class="help" open="@(orders.Count == 0)">
+    <summary>What to do with a new order</summary>
+    <ol>
+        <li>Your website sends the order to OneDrop by itself, or you type it in with <a asp-page="/Merchant/NewOrder">New order</a>. It appears here as <span class="status status-waiting">Waiting for pickup</span>.</li>
+        <li>Press <strong>Print labels for the pickup</strong> and stick one label on each parcel.</li>
+        <li>Hand the parcels to the OneDrop collector when the pickup van comes to your shop.</li>
+        <li>OneDrop delivers them together with the customer's other shops and collects your cash on delivery.</li>
+        <li>The cash is paid to your bKash the next day: see <a asp-page="/Merchant/Payouts">Payouts</a>.</li>
+    </ol>
+</details>
+
+<div class="card">
+    <h2>Orders</h2>
+    @if (orders.Count == 0)
     {
-        <p class="muted">No orders yet. Send one with <code>POST /api/v1/orders</code> (see the API keys below).</p>
+        <p class="muted">No orders yet. They appear here as soon as your website sends one, or <a asp-page="/Merchant/NewOrder">type one in</a>.</p>
     }
     else
     {
@@ -39,7 +81,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var order in Model.Orders)
+                    @foreach (var order in orders)
                     {
                         <tr>
                             <td><strong>@order.Number</strong></td>
@@ -47,20 +89,21 @@
                             <td>@order.Recipient</td>
                             <td>@order.Area</td>
                             <td>
-                                <span class="status">@order.Status</span>
-                                @if (order.Waits == CustomerStep.Confirm)
+                                <span class="@Statuses.OrderClass(order.Status)">@Statuses.Order(order.Status)</span>
+                                @* What the customer still owes only matters while the parcel waits at the shop *@
+                                @if (order.Status == OrderStatus.Created && order.Waits == CustomerStep.Confirm)
                                 {
                                     <span class="status status-waiting">Not confirmed by the customer yet</span>
                                 }
-                                else if (order.Waits == CustomerStep.PayInAdvance)
+                                else if (order.Status == OrderStatus.Created && order.Waits == CustomerStep.PayInAdvance)
                                 {
                                     <span class="status status-waiting">Waiting for the delivery fee in advance</span>
                                 }
                             </td>
                             <td class="num">@order.Packages</td>
                             <td class="num">৳@order.Cod.ToString("N0")</td>
-                            <td>@order.Created.ToString("yyyy-MM-dd HH:mm")</td>
-                            <td><a asp-page="/Merchant/Labels" asp-route-order="@order.Number">Labels</a></td>
+                            <td>@order.Created.ToString("d MMM HH:mm")</td>
+                            <td><a class="button ghost compact" asp-page="/Merchant/Labels" asp-route-order="@order.Number">Labels</a></td>
                         </tr>
                     }
                 </tbody>
@@ -69,10 +112,13 @@
     }
 </div>
 
-<div class="card">
-    <h2>API keys</h2>
-    <p class="muted">Send the full key in the <code>X-Api-Key</code> header. Only the prefix is stored in clear.</p>
-    <div class="table-wrap">
+<details class="help">
+    <summary>For your website developer: API keys</summary>
+    <p>
+        Your website sends orders with <code>POST /api/v1/orders</code> and the full key in the <code>X-Api-Key</code>
+        header. Only the start of each key is stored in clear.
+    </p>
+    <div class="table-wrap card">
         <table>
             <thead>
                 <tr><th>Name</th><th>Prefix</th><th>Last used (UTC)</th><th>Status</th></tr>
@@ -83,11 +129,11 @@
                     <tr>
                         <td>@key.Name</td>
                         <td><code>od_@(key.Prefix)_…</code></td>
-                        <td>@(key.LastUsed?.ToString("yyyy-MM-dd HH:mm") ?? "Never")</td>
+                        <td>@(key.LastUsed?.ToString("d MMM HH:mm") ?? "Never")</td>
                         <td>@(key.Active ? "Active" : "Revoked")</td>
                     </tr>
                 }
             </tbody>
         </table>
     </div>
-</div>
+</details>

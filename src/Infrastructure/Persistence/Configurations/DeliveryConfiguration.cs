@@ -29,6 +29,9 @@ public class TripConfiguration : IEntityTypeConfiguration<Trip>
     public void Configure(EntityTypeBuilder<Trip> builder)
     {
         builder.MapTenantOwned(Schemas.Delivery);
+        builder.Property(t => t.CashExpected).HasPrecision(12, 2);
+        builder.Property(t => t.CashReceived).HasPrecision(12, 2);
+        builder.Ignore(t => t.CashShort);
         builder.Property(t => t.RowVersion).IsRowVersion();
         builder.HasOne<Rider>().WithMany().HasForeignKey(t => t.RiderId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Hub>().WithMany().HasForeignKey(t => t.HubId).OnDelete(DeleteBehavior.Restrict);

@@ -47,20 +47,18 @@ public class TenantCatalog(IServiceScopeFactory scopeFactory, IMemoryCache cache
 
             // A setting added after the launch seed is nullable in the table; a tenant that has not stated it is not
             // served rather than given another operator's value
-            foreach (var unset in tenants.Where(t =>
-                t.WeightAllowanceGrams is null || t.ExtraKgFee is null || t.TrustedAfterDeliveries is null))
+            foreach (var unset in tenants.Where(t => !IsComplete(t)))
             {
                 logger.LogWarning(
-                    "Tenant {Slug} has no weight allowance, extra kg fee or trusted-after count set and is not served",
+                    "Tenant {Slug} has no weight allowance, extra kg fee, trusted-after count, return charge or " +
+                        "late-handover fee set and is not served",
                     unset.Slug);
             }
 
             return (IReadOnlyList<TenantInfo>)
             [
                 .. tenants
-                    .Where(t => t.WeightAllowanceGrams is not null &&
-                        t.ExtraKgFee is not null &&
-                        t.TrustedAfterDeliveries is not null)
+                    .Where(IsComplete)
                     .Select(t => new TenantInfo(
                         t.Id,
                         t.Name,
@@ -74,8 +72,20 @@ public class TenantCatalog(IServiceScopeFactory scopeFactory, IMemoryCache cache
                         t.GroupJoinDays,
                         t.WeightAllowanceGrams!.Value,
                         t.ExtraKgFee!.Value,
-                        t.TrustedAfterDeliveries!.Value))
+                        t.TrustedAfterDeliveries!.Value,
+                        t.ReturnCharge!.Value,
+                        t.LateHandoverFee!.Value))
             ];
         }) ?? [];
+    }
+
+    /// <summary>Every setting added after the launch seed, nullable in the table, has been stated.</summary>
+    private static bool IsComplete(Domain.Platform.Tenant tenant)
+    {
+        return tenant.WeightAllowanceGrams is not null &&
+            tenant.ExtraKgFee is not null &&
+            tenant.TrustedAfterDeliveries is not null &&
+            tenant.ReturnCharge is not null &&
+            tenant.LateHandoverFee is not null;
     }
 }

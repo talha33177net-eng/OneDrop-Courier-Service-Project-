@@ -1,0 +1,19 @@
+@model Web.Pages.Hub.HubPicker
+@* The first question on every hub page until staff pick a hub; after that the step bar remembers it *@
+
+<p class="eyebrow">First, choose your hub</p>
+<h1>@Model.Title</h1>
+<p class="lead">@Model.Question You only choose once: every hub page then opens on it, and you can switch from "Hub today".</p>
+<div class="hub-grid">
+    @foreach (var hub in Model.Hubs)
+    {
+        <a asp-page="@Model.Page" asp-route-hub="@hub.Code" asp-route-mode="@Model.Mode">
+            <span class="hub-code">@hub.Code</span>
+            <strong>@hub.Name</strong>
+        </a>
+    }
+</div>
+@if (Model.Hubs.Count == 0)
+{
+    <div class="card"><p class="muted">This operator has no hubs yet.</p></div>
+}

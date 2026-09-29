@@ -4,8 +4,18 @@
     ViewData["Title"] = "Pickup routes";
 }
 
-<h1>Pickup routes</h1>
-<p class="lead">Each zone's daily run collects the parcels waiting at its merchants and brings them to the hub.</p>
+<p class="eyebrow">Step 1</p>
+<h1>Pick up from the shops</h1>
+<p class="lead">Each zone's daily run collects the parcels waiting at its shops and brings them to the hub.</p>
+
+<details class="help">
+    <summary>How a pickup run works</summary>
+    <ol>
+        <li>Open the zone's <strong>Route sheet</strong> and print it (or take it on a phone). It lists every shop with parcels.</li>
+        <li>At each shop, scan every parcel on the scan page with <strong>Collect at the shop</strong>. Leave any marked "Leave it".</li>
+        <li>Back at the hub, scan them in with <strong>Receive at the hub</strong> (step 2).</li>
+    </ol>
+</details>
 
 <div class="card">
     @if (Model.Routes.Count == 0)
@@ -37,7 +47,7 @@
                             <td class="num">@route.Stops</td>
                             <td class="num">@route.Orders</td>
                             <td class="num">@route.Packages</td>
-                            <td><a asp-page="/Hub/RouteSheet" asp-route-id="@route.Id">Route sheet</a></td>
+                            <td><a class="button ghost compact" asp-page="/Hub/RouteSheet" asp-route-id="@route.Id">Route sheet</a></td>
                         </tr>
                     }
                 </tbody>

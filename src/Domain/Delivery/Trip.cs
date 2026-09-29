@@ -26,6 +26,17 @@ public class Trip : TenantEntity
     /// <summary>When the rider took the parcels out (UTC).</summary>
     public DateTime? StartedOn { get; private set; }
 
+    /// <summary>The cash the rider collected on the trip, as counted when they handed it in at the hub.</summary>
+    public decimal? CashExpected { get; private set; }
+
+    /// <summary>The cash hub staff received from the rider; null until handed in.</summary>
+    public decimal? CashReceived { get; private set; }
+
+    public DateTime? CashReceivedOn { get; private set; }
+
+    /// <summary>What the rider handed in less than they collected; negative when they handed in more.</summary>
+    public decimal? CashShort => CashExpected - CashReceived;
+
     public byte[] RowVersion { get; private set; } = [];
 
     /// <summary>A trip that is no longer planned takes no more deliveries.</summary>
@@ -103,6 +114,38 @@ public class Trip : TenantEntity
         Status = TripStatus.Finished;
 
         return true;
+    }
+
+    /// <summary>
+    /// Hub staff counted the cash the rider brought back: <paramref name="expected"/> is what the rider collected in
+    /// cash on the trip, <paramref name="received"/> what was handed in. Once, and only when every stop is done, so no
+    /// more cash can come in after it. A shortfall is recorded, not refused: the hub follows it up.
+    /// </summary>
+    public Result HandInCash(decimal expected, decimal received, DateTime now)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(expected);
+        if (received < 0)
+        {
+            return Error.Validation("trip.cash.amount", "Enter the cash received; it cannot be negative.");
+        }
+
+        if (CashReceivedOn is not null)
+        {
+            return Error.Conflict("trip.cash.done", "This trip's cash has already been handed in.");
+        }
+
+        if (Status != TripStatus.Finished)
+        {
+            return Error.Conflict(
+                "trip.cash.notBack",
+                "The rider still has stops to do. Hand the cash in once every stop is done.");
+        }
+
+        CashExpected = expected;
+        CashReceived = received;
+        CashReceivedOn = now;
+
+        return Result.Success();
     }
 
     /// <summary>

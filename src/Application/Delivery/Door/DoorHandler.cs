@@ -48,7 +48,8 @@ public sealed record DoorResult(StopOutcome Outcome, decimal Collected, bool Bac
 /// Nagad, which the gateway confirms after the customer scans the QR on the rider's phone. A payment keeps the fee and
 /// the COD apart, and the SMS receipt follows it through the outbox. A refused order goes back to its shop. Nobody
 /// home: the deliveries go back to the hub and out again on another day for free; nobody home a second time and their
-/// orders go back to the shops.
+/// orders go back to the shops. The ledger follows the door: each order handed over owes its shop its COD, and each
+/// order going back charges its shop the tenant's return charge, both paid out or taken off at the next settlement.
 /// </summary>
 public class DoorHandler(IAppDbContext db, ITenantContext tenantContext, IPaymentGateway gateway, TimeProvider time)
 {
@@ -151,7 +152,9 @@ public class DoorHandler(IAppDbContext db, ITenantContext tenantContext, IPaymen
         var now = time.GetUtcNow().UtcDateTime;
         var anyTaken = due.Taking.Count > 0;
         Payment? payment = null;
-        if (anyTaken)
+
+        // Nothing to pay when the fee was paid in advance for a product paid online
+        if (anyTaken && due.Total > 0)
         {
             var paid = await PayAsync(door, due, method, now, cancellationToken);
             if (paid.IsFailure)
@@ -174,9 +177,21 @@ public class DoorHandler(IAppDbContext db, ITenantContext tenantContext, IPaymen
             var taking = Out(delivery).Where(order => !refused.Contains(order.Number)).ToList();
             foreach (var order in Out(delivery).ToList())
             {
-                order.MoveTo(
-                    refused.Contains(order.Number) ? OrderStatus.Refused : OrderStatus.Delivered,
-                    refused.Contains(order.Number) ? "Refused at the door; goes back to the shop" : "Handed to the customer");
+                if (refused.Contains(order.Number))
+                {
+                    order.MoveTo(OrderStatus.Refused, "Refused at the door; goes back to the shop");
+                    ChargeReturn(door, order);
+                }
+                else
+                {
+                    order.MoveTo(OrderStatus.Delivered, "Handed to the customer");
+
+                    // The shop's COD, owed to it from the payment it came in with
+                    if (order.CodAmount > 0)
+                    {
+                        db.LedgerEntries.Add(LedgerEntry.Cod(order, payment!, door.Trip.DeliveryDate));
+                    }
+                }
             }
 
             delivery.Group.MoveTo(taking.Count > 0 ? DeliveryGroupStatus.Delivered : DeliveryGroupStatus.Cancelled, now);
@@ -239,6 +254,10 @@ public class DoorHandler(IAppDbContext db, ITenantContext tenantContext, IPaymen
                     again
                         ? "Nobody home at the re-attempt; goes back to the shop"
                         : "Nobody home; back to the hub for the free re-attempt");
+                if (again)
+                {
+                    ChargeReturn(door, order);
+                }
             }
 
             delivery.Group.MoveTo(again ? DeliveryGroupStatus.Cancelled : DeliveryGroupStatus.Locked, now);
@@ -439,6 +458,15 @@ public class DoorHandler(IAppDbContext db, ITenantContext tenantContext, IPaymen
         }
 
         return Result.Success();
+    }
+
+    /// <summary>The order goes back to its shop, which pays the tenant's return charge out of its next payout.</summary>
+    private void ChargeReturn(OpenDoor door, Order order)
+    {
+        if (Tenant.ReturnCharge > 0)
+        {
+            db.LedgerEntries.Add(LedgerEntry.ReturnCharge(order, Tenant.ReturnCharge, door.Trip.DeliveryDate));
+        }
     }
 
     private static DoorPayment PaymentFor(OpenDoor door, PaymentMethod method, DoorDue due)

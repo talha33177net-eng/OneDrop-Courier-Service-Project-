@@ -107,6 +107,7 @@ public partial class TripTests
         Assert.Equal([new StopRow(StopOutcome.NotHome, 0, 0)], await StopsOfAsync(delivery));
         Assert.Equal(new TripPlanningResult(0, 0), replanned);
         Assert.NotNull(back.Value.Shelf);
+        Assert.Empty(await LedgerOfAsync(order));
 
         // The re-attempt on another day: today's trip becomes yesterday's
         await using (var scope = await ScopeAsync("dhaka"))
@@ -128,6 +129,10 @@ public partial class TripTests
         Assert.Equal(new DoorResult(StopOutcome.NotHome, 0, BackToShop: true), second.Value);
         Assert.Equal([OrderStatus.Refused], await StatusesAsync(order));
         Assert.Equal(DeliveryGroupStatus.Cancelled, (await GroupOfAsync(order)).Status);
+
+        // Going back to the shop costs the shop the return charge
+        var dhaka = await TenantAsync("dhaka");
+        Assert.Equal([(LedgerEntryKind.ReturnCharge, -dhaka.ReturnCharge)], (await LedgerOfAsync(order)).Select(line => (line.Kind, line.Amount)));
     }
 
     [Fact]

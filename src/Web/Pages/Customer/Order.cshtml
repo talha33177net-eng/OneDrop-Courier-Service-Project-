@@ -12,14 +12,20 @@
     <partial name="_CustomerApp" />
 }
 
-<h1>Your order</h1>
+<section class="card narrow center">
+    <p class="eyebrow">@order.Shop · @order.Number</p>
+    <h1>@(order.Done ? "All set" : order.Step == CustomerStep.Confirm ? "Is this your order?" : "Pay the delivery fee")</h1>
+    <ol class="tracker" aria-label="Progress">
+        <li class="done">Ordered</li>
+        <li class="@(order.Done ? "done" : "now")">@(order.Step == CustomerStep.Confirm ? "You confirm" : "You pay the fee")</li>
+        <li class="@(order.Done ? "now" : null)">Shop sends it</li>
+        <li>Delivered</li>
+    </ol>
 
-@if (Model.Problem is not null)
-{
-    <p class="notice notice-problem">@Model.Problem</p>
-}
-
-<section class="card">
+    @if (Model.Problem is not null)
+    {
+        <p class="notice notice-problem">@Model.Problem</p>
+    }
     <dl class="money">
         <div>
             <dt>Shop</dt>

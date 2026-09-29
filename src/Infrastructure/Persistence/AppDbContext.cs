@@ -77,6 +77,10 @@ public class AppDbContext(
 
     public DbSet<Payment> Payments => Set<Payment>();
 
+    public DbSet<LedgerEntry> LedgerEntries => Set<LedgerEntry>();
+
+    public DbSet<Settlement> Settlements => Set<Settlement>();
+
     /// <summary>Read by the tenant filter at query time. Null means "no tenant", which matches no row.</summary>
     public long? CurrentTenantId => tenantContext.TenantId;
 

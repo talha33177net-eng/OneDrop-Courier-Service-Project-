@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Application.Auth.PhoneLogin;
 using Application.Customers;
 using Application.Delivery.Door;
+using Application.Delivery.HubCash;
 using Application.Delivery.HubTrips;
 using Application.Delivery.PlanTrips;
 using Application.Delivery.RiderDay;
@@ -18,6 +19,8 @@ using Application.Orders.ConfirmOrder;
 using Application.Orders.CreateOrder;
 using Application.Orders.GetOrder;
 using Application.Orders.PackageLabels;
+using Application.Payments.MerchantPayouts;
+using Application.Payments.SettleMerchants;
 using Application.Pricing.GetQuote;
 
 namespace Application;
@@ -48,6 +51,9 @@ public static class DependencyInjection
         services.AddScoped<HubTripsHandler>();
         services.AddScoped<RiderDayHandler>();
         services.AddScoped<DoorHandler>();
+        services.AddScoped<HubCashHandler>();
+        services.AddScoped<SettleMerchantsJob>();
+        services.AddScoped<MerchantPayoutsHandler>();
         services.AddScoped<PhoneLoginService>();
 
         return services;

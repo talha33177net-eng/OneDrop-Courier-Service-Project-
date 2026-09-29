@@ -46,7 +46,8 @@ public sealed record RiderStop(
 /// <summary>
 /// The rider's day: their trip for today (none yet while <see cref="Status"/> is null) and its stops, neighbours
 /// together, against the bike's limit. <see cref="Cash"/> is the cash collected so far, which the rider hands in at
-/// the hub (the rest was paid by bKash or Nagad).
+/// the hub (the rest was paid by bKash or Nagad); <see cref="CashHandedIn"/> is what hub staff received from them, null
+/// until then.
 /// </summary>
 public sealed record RiderToday(
     string Rider,
@@ -55,7 +56,8 @@ public sealed record RiderToday(
     TripStatus? Status,
     TripLoad Limit,
     IReadOnlyList<RiderStop> Stops,
-    decimal Cash = 0)
+    decimal Cash = 0,
+    decimal? CashHandedIn = null)
 {
     /// <summary>What the stops still to do will collect.</summary>
     public decimal ToCollect => Stops.Where(stop => stop.Outcome is null).Sum(stop => stop.ToCollect);
@@ -131,7 +133,8 @@ public class RiderDayHandler(IAppDbContext db, ITenantContext tenantContext, Tim
             trip.Status,
             rider.Limit,
             [.. visits.Select((visit, index) => Describe(visit, index + 1))],
-            paid.Values.Where(p => p.Method == PaymentMethod.Cash).Sum(p => p.Amount));
+            paid.Values.Where(p => p.Method == PaymentMethod.Cash).Sum(p => p.Amount),
+            trip.CashReceived);
 
         RiderStop Describe(Visit visit, int number)
         {
@@ -252,7 +255,14 @@ public class RiderDayHandler(IAppDbContext db, ITenantContext tenantContext, Tim
             var later = await LaterDeliveryAsync(group, now, (tenant, timeZone), cancellationToken);
             foreach (var order in notReady)
             {
+                // The shop pays for the second trip when it had not handed the order over, once per order; not when
+                // the parcel was already with us, nor when it waited at the shop for the customer's advance
+                var shopLate = order.Status == OrderStatus.Created && !order.WaitsForAdvance && order.LeftBehindOn is null;
                 order.FollowUpIn(later, now);
+                if (shopLate && tenant.LateHandoverFee > 0)
+                {
+                    db.LedgerEntries.Add(LedgerEntry.LateHandoverFee(order, tenant.LateHandoverFee, trip.DeliveryDate));
+                }
             }
 
             ordersFollowing += notReady.Count;

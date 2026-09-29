@@ -13,32 +13,35 @@
 
 @if (Model.Current is null)
 {
-    <h1>Scan parcels</h1>
-    <p class="lead">Which hub are you working for?</p>
-    <div class="card">
-        <ul class="hub-list">
-            @foreach (var hub in Model.Hubs)
-            {
-                <li><a asp-page="/Hub/Scan" asp-route-hub="@hub.Code">@hub.Name <span class="muted">@hub.Code</span></a></li>
-            }
-        </ul>
-    </div>
+    <partial name="_HubPicker" model='new HubPicker("/Hub/Scan", "Scan parcels", "Which hub are you working at?", Model.Hubs, Model.Mode == ScanMode.Receive ? null : Model.Mode.ToString())' />
     return;
 }
 
-<div class="sheet-head">
-    <h1>Scan at @Model.Current.Name</h1>
-    <span>
-        <a asp-page="/Hub/Shelves" asp-route-hub="@Model.Current.Code">Shelves</a> ·
-        <a asp-page="/Hub/Shuttle" asp-route-hub="@Model.Current.Code">Shuttle</a>
-    </span>
+<div class="page-head">
+    <div>
+        <p class="eyebrow">Step 2 · @Model.Current.Name</p>
+        <h1>Scan parcels</h1>
+        <p class="lead">First choose what you are doing, then scan each label. The answer appears below in big letters.</p>
+    </div>
 </div>
 
-<nav class="tabs">
-    <a asp-page="/Hub/Scan" asp-route-hub="@Model.Current.Code" class="@Tab(ScanMode.Receive)">Receive</a>
-    <a asp-page="/Hub/Scan" asp-route-hub="@Model.Current.Code" asp-route-mode="@ScanMode.Load" class="@Tab(ScanMode.Load)">Load the shuttle</a>
-    <a asp-page="/Hub/Scan" asp-route-hub="@Model.Current.Code" asp-route-mode="@ScanMode.Collect" class="@Tab(ScanMode.Collect)">Collect at the shop</a>
-    <a asp-page="/Hub/Scan" asp-route-hub="@Model.Current.Code" asp-route-mode="@ScanMode.Return" class="@Tab(ScanMode.Return)">Return to the shop</a>
+<nav class="tabs" aria-label="What are you doing?">
+    <a asp-page="/Hub/Scan" asp-route-hub="@Model.Current.Code" class="@Tab(ScanMode.Receive)">
+        Receive at the hub
+        <small>Parcels arriving here. Tells you the shelf.</small>
+    </a>
+    <a asp-page="/Hub/Scan" asp-route-hub="@Model.Current.Code" asp-route-mode="@ScanMode.Collect" class="@Tab(ScanMode.Collect)">
+        Collect at the shop
+        <small>On the pickup route, as you take them.</small>
+    </a>
+    <a asp-page="/Hub/Scan" asp-route-hub="@Model.Current.Code" asp-route-mode="@ScanMode.Load" class="@Tab(ScanMode.Load)">
+        Load the shuttle
+        <small>Parcels leaving for another hub.</small>
+    </a>
+    <a asp-page="/Hub/Scan" asp-route-hub="@Model.Current.Code" asp-route-mode="@ScanMode.Return" class="@Tab(ScanMode.Return)">
+        Return to the shop
+        <small>Refused parcels handed back.</small>
+    </a>
 </nav>
 
 <form method="post" class="card scan-form" asp-route-hub="@Model.Current.Code" asp-route-mode="@Model.Mode">
@@ -52,7 +55,11 @@
         <input asp-for="Label" type="text" placeholder="OD-100001-1" autocomplete="off" autocapitalize="characters" autofocus />
         <button class="button" type="submit">Scan</button>
     </div>
-    <button type="button" class="button secondary" id="camera" hidden>Use the camera</button>
+    <p class="muted">
+        A hand scanner types the label and presses Enter for you. No scanner? Type the code printed under the QR code,
+        for example <code>OD-100001-1</code>.
+    </p>
+    <button type="button" class="button secondary" id="camera" hidden>Use the phone camera</button>
     <video id="preview" playsinline muted hidden></video>
 </form>
 

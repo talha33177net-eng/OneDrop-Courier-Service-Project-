@@ -47,6 +47,8 @@ public static class DependencyInjection
         services.AddSingleton<ISmsSender, FakeSmsSender>();
         services.AddSingleton<FakePaymentLog>();
         services.AddSingleton<IPaymentGateway, FakePaymentGateway>();
+        services.AddSingleton<FakePayoutLog>();
+        services.AddSingleton<IPayoutGateway, FakePayoutGateway>();
 
         services.AddSingleton<DemoDataSeeder>();
 
