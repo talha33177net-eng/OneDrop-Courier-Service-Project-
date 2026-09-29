@@ -12,7 +12,8 @@ public sealed record CustomerDeliveryOrder(string Number, string Shop, OrderStat
 /// <summary>
 /// One delivery as its customer sees it: every shop in it, and the fee recalculated on what is still to be
 /// delivered. <see cref="DeliveryDay"/> is in the tenant's time zone; while the delivery is open, other shops can
-/// join until the end of the day before.
+/// join until the end of the day before. <see cref="ShipNowFee"/> is what Ship now would add to the fee (the fast
+/// difference when it brings the day forward, 0 on the last day to join); null when the delivery is not open.
 /// </summary>
 public sealed record CustomerDelivery(
     string Number,
@@ -21,7 +22,8 @@ public sealed record CustomerDelivery(
     DateOnly DeliveryDay,
     IReadOnlyList<CustomerDeliveryOrder> Orders,
     decimal Fee,
-    decimal Savings)
+    decimal Savings,
+    decimal? ShipNowFee)
 {
     public DateOnly LastDayToJoin => DeliveryDay.AddDays(-1);
 
@@ -52,7 +54,7 @@ public sealed record CustomerDeliveries(
 /// "My deliveries" for the signed-in customer, in the tenant's time zone and at its prices. The customer sees every
 /// shop in their own deliveries; merchants never see a delivery at all.
 /// </summary>
-public class CustomerDeliveriesHandler(IAppDbContext db, ITenantContext tenantContext)
+public class CustomerDeliveriesHandler(IAppDbContext db, ITenantContext tenantContext, TimeProvider time)
 {
     public const int EarlierShown = 10;
 
@@ -63,6 +65,7 @@ public class CustomerDeliveriesHandler(IAppDbContext db, ITenantContext tenantCo
         var tenant = tenantContext.Tenant ?? throw new InvalidOperationException("Deliveries need a tenant.");
         var timeZone = TimeZoneInfo.FindSystemTimeZoneById(tenant.TimeZone);
         var fees = new DeliveryFeeCalculator(tenant.Fees);
+        var now = time.GetUtcNow().UtcDateTime;
 
         var deliveries =
             from delivery in db.DeliveryGroups
@@ -75,6 +78,7 @@ public class CustomerDeliveriesHandler(IAppDbContext db, ITenantContext tenantCo
                 Number = delivery.Number,
                 Status = delivery.Status,
                 LocksAt = delivery.LocksAt,
+                Group = delivery,
                 Address = address.Line1 + ", " + area.Name
             };
         var onTheWay = await deliveries
@@ -100,7 +104,7 @@ public class CustomerDeliveriesHandler(IAppDbContext db, ITenantContext tenantCo
             select new
             {
                 order.DeliveryGroupId,
-                Line = new FeeLine(order.MerchantId, order.Speed, order.Status),
+                Line = new FeeLine(order.MerchantId, order.Speed, order.Status, order.Packages.Sum(p => p.WeightGrams)),
                 Shown = new CustomerDeliveryOrder(order.Number, merchant.Name, order.Status, order.Packages.Count, order.CodAmount)
             })
             .AsNoTracking()
@@ -113,6 +117,10 @@ public class CustomerDeliveriesHandler(IAppDbContext db, ITenantContext tenantCo
         {
             var inDelivery = orders[delivery.Id].ToList();
             var lines = inDelivery.Select(order => order.Line).ToList();
+            var shippedNow = delivery.Group.Kind == DeliveryGroupKind.ShippedNow;
+            decimal? shipNowFee = !delivery.Group.CanJoin(now) ? null
+                : delivery.Group.ShipNowBringsForward(now, timeZone) ? fees.ShipNowFee
+                : 0;
 
             // Delivery day starts at LocksAt
             return new CustomerDelivery(
@@ -121,8 +129,9 @@ public class CustomerDeliveriesHandler(IAppDbContext db, ITenantContext tenantCo
                 delivery.Address,
                 DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(delivery.LocksAt, timeZone)),
                 [.. inDelivery.Select(order => order.Shown)],
-                fees.GroupFee(lines),
-                fees.Savings(lines));
+                fees.GroupFee(lines, shippedNow),
+                fees.Savings(lines, shippedNow),
+                shipNowFee);
         }
     }
 
@@ -136,6 +145,8 @@ public class CustomerDeliveriesHandler(IAppDbContext db, ITenantContext tenantCo
         public DeliveryGroupStatus Status { get; init; }
 
         public DateTime LocksAt { get; init; }
+
+        public DeliveryGroup Group { get; init; } = null!;
 
         public string Address { get; init; } = "";
     }

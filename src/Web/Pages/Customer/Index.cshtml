@@ -94,8 +94,16 @@
             </p>
             <form method="post" asp-page-handler="ShipNow">
                 <input type="hidden" name="number" value="@delivery.Number" />
-                <button class="button" type="submit">Ship now</button>
-                <span class="muted">Don't wait for more shops: we deliver tomorrow.</span>
+                @if (delivery.ShipNowFee > 0)
+                {
+                    <button class="button" type="submit">Deliver tomorrow for +৳@delivery.ShipNowFee.Value.ToString("N0")</button>
+                    <span class="muted">Don't wait for more shops: we deliver tomorrow instead of @delivery.DeliveryDay.ToString("dddd").</span>
+                }
+                else
+                {
+                    <button class="button" type="submit">Ship now</button>
+                    <span class="muted">Don't wait for more shops: no one else can join, and we still deliver tomorrow.</span>
+                }
             </form>
         }
     </article>

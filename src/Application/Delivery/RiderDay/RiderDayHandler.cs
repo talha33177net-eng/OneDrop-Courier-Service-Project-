@@ -98,6 +98,7 @@ public class RiderDayHandler(IAppDbContext db, ITenantContext tenantContext, Tim
                 GroupId = g.Id,
                 g.Number,
                 g.Status,
+                g.Kind,
                 g.Shelf,
                 customer.Phone,
                 customer.Name,
@@ -158,7 +159,13 @@ public class RiderDayHandler(IAppDbContext db, ITenantContext tenantContext, Tim
                                 [.. row.Order.Packages.OrderBy(p => p.Sequence).Select(p => new PackageLabel(row.Order.Number, p.Sequence).ToString())],
                                 row.Order.IsReadyAt(hub.Id)))
                         ],
-                        fees.GroupFee(taken.Select(row => new FeeLine(row.Order.MerchantId, row.Order.Speed, row.Order.Status))),
+                        fees.GroupFee(
+                            taken.Select(row => new FeeLine(
+                                row.Order.MerchantId,
+                                row.Order.Speed,
+                                row.Order.Status,
+                                row.Order.TotalWeightGrams)),
+                            stop.Kind == DeliveryGroupKind.ShippedNow),
                         taken.Sum(row => row.Order.CodAmount));
                 })
             ]);

@@ -47,8 +47,8 @@ public sealed record ShelfRow(
 }
 
 /// <summary>
-/// A parcel on the shuttle manifest. <see cref="Urgent"/> parcels (Deliver fast, Don't hold) must not miss tonight's
-/// run.
+/// A parcel on the shuttle manifest. <see cref="Urgent"/> parcels travel in a next-day delivery (Deliver fast,
+/// Don't hold, Ship now, or an order that joined one) and must not miss the next run.
 /// </summary>
 public sealed record ShuttleParcel(string Label, string Merchant, string Delivery, DateOnly DeliveryDay, bool Urgent);
 
@@ -144,8 +144,8 @@ public class HubScanHandler(IAppDbContext db, ITenantContext tenantContext, Time
 
     /// <summary>
     /// The hub's shuttle manifest: the parcels here to load, by the hub they go to, and the parcels on their way
-    /// here. Parcels of cancelled, refused or returned orders do not travel. Next-day parcels come first. Null for a
-    /// hub that is not this operator's.
+    /// here. Parcels of cancelled, refused or returned orders do not travel. Parcels for the soonest delivery day
+    /// (today's trips) come first, next-day deliveries first within a day. Null for a hub that is not this operator's.
     /// </summary>
     public async Task<ShuttleManifest?> ShuttleAsync(string hubCode, CancellationToken cancellationToken = default)
     {
@@ -170,7 +170,7 @@ public class HubScanHandler(IAppDbContext db, ITenantContext tenantContext, Time
                 Merchant = merchant.Name,
                 Delivery = g.Number,
                 g.LocksAt,
-                Urgent = order.Speed == DeliverySpeed.Fast || order.DoNotHold,
+                Urgent = g.Kind != DeliveryGroupKind.Waiting,
                 OnTheWay = package.ShuttleToHubId == hub.Id,
                 ToHub = to.Code,
                 ToHubName = to.Name
@@ -181,8 +181,8 @@ public class HubScanHandler(IAppDbContext db, ITenantContext tenantContext, Time
         var timeZone = TenantTimeZone();
         var parcels = rows
             .Where(row => Order.IsForDelivery(row.Status))
-            .OrderByDescending(row => row.Urgent)
-            .ThenBy(row => row.LocksAt)
+            .OrderBy(row => row.LocksAt)
+            .ThenByDescending(row => row.Urgent)
             .ThenBy(row => row.Number)
             .ThenBy(row => row.Sequence)
             .Select(row => (
@@ -331,7 +331,7 @@ public class HubScanHandler(IAppDbContext db, ITenantContext tenantContext, Time
             order.Packages.Count(p => p.ReceivedOn is not null),
             order.Status,
             outcome == ScanOutcome.AlreadyRecorded,
-            order.Speed == DeliverySpeed.Fast || order.DoNotHold,
+            group.Kind != DeliveryGroupKind.Waiting,
             group.Number,
             group.Status,
             LocalDay(group.LocksAt, TenantTimeZone()),

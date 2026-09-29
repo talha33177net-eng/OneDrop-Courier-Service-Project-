@@ -9,6 +9,8 @@
 -- Date: 2026-09-28
 -- Updated: 2026-09-28 - Added Shelf: the group's shelf number at its hub (MIR-07) from the first parcel scanned in
 --          until a rider takes it; UX_DeliveryGroup_Hub_Shelf keeps a shelf to one group (task 3.2)
+-- Updated: 2026-09-29 - Added Kind, a TINYINT enum (Domain.Grouping.DeliveryGroupKind): waiting, next day, or
+--          brought forward by Ship now. A next-day delivery takes orders after it locks (task 3.4a)
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Grouping].[DeliveryGroup] (
     [Id]         BIGINT        IDENTITY (1, 1) NOT NULL,
@@ -18,6 +20,7 @@ CREATE TABLE [Grouping].[DeliveryGroup] (
     [HubId]      BIGINT        NOT NULL,
     [Number]     NVARCHAR (20) CONSTRAINT [DF_DeliveryGroup_Number] DEFAULT (concat(N'DG-', NEXT VALUE FOR [Grouping].[DeliveryGroupNumber])) NOT NULL,
     [Status]     TINYINT       NOT NULL,
+    [Kind]       TINYINT       NOT NULL,
     [OpenedOn]   DATETIME2 (7) NOT NULL,
     [LocksAt]    DATETIME2 (7) NOT NULL,
     [LockedOn]   DATETIME2 (7) NULL,
@@ -33,7 +36,8 @@ CREATE TABLE [Grouping].[DeliveryGroup] (
     CONSTRAINT [FK_DeliveryGroup_Hub] FOREIGN KEY ([HubId]) REFERENCES [Network].[Hub] ([Id]),
     CONSTRAINT [FK_DeliveryGroup_User] FOREIGN KEY ([UpdatedId]) REFERENCES [Identity].[User] ([Id]),
     CONSTRAINT [chk_DeliveryGroup_LocksAt] CHECK ([LocksAt] > [OpenedOn]),
-    CONSTRAINT [chk_DeliveryGroup_Shelf] CHECK ([Shelf] > (0))
+    CONSTRAINT [chk_DeliveryGroup_Shelf] CHECK ([Shelf] > (0)),
+    CONSTRAINT [chk_DeliveryGroup_Kind] CHECK ([Kind] BETWEEN 1 AND 3)
 );
 
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
@@ -74,7 +75,13 @@ public partial class PickupRouteTests(WebAppFactory factory)
         Assert.Equal(
             ["Agrabad", "Chawkbazar", "Halishahar", "Nasirabad", "Panchlaish"],
             chattogram.Select(route => route.Zone));
-        Assert.All(dhaka.Concat(chattogram), route => Assert.Equal(new TimeOnly(14, 0), route.PickupTime));
+        // Staggered by DbUp 005, farthest zones first, every parcel at its hub by about 14:00
+        Assert.Equal(
+            ["13:00", "13:00", "13:30", "11:30", "12:30", "12:00", "11:00"],
+            dhaka.Select(route => route.PickupTime.ToString("HH:mm", CultureInfo.InvariantCulture)));
+        Assert.Equal(
+            ["12:30", "12:00", "11:00", "11:30", "13:00"],
+            chattogram.Select(route => route.PickupTime.ToString("HH:mm", CultureInfo.InvariantCulture)));
         Assert.Null(dhakaRouteFromChattogram);
     }
 

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
+using Domain.Grouping;
 using Domain.Orders;
 
 namespace Application.Network.PickupRoutes;
@@ -19,8 +20,8 @@ public sealed record PickupRouteSummary(
     int Packages);
 
 /// <summary>
-/// One waiting order at a stop. Deliver fast and Don't hold orders are <see cref="Urgent"/>: they leave the hub the
-/// next day and must not miss this run.
+/// One waiting order at a stop. Orders in a next-day delivery (Deliver fast, Don't hold, Ship now, or one that joined
+/// such a delivery) are <see cref="Urgent"/>: they must not miss this run.
 /// </summary>
 public sealed record PickupStopOrder(string Number, int Packages, bool Urgent)
 {
@@ -124,6 +125,7 @@ public class PickupRoutesHandler(IAppDbContext db, ITenantContext tenantContext,
             join point in db.PickupPoints on order.PickupPointId equals point.Id
             join area in db.Areas on point.AreaId equals area.Id
             join merchant in db.Merchants on order.MerchantId equals merchant.Id
+            join g in db.DeliveryGroups on order.DeliveryGroupId equals g.Id
             where order.Status == OrderStatus.Created && area.ZoneId == route.ZoneId
             orderby merchant.Name, point.Id, order.Id
             select new
@@ -136,7 +138,7 @@ public class PickupRoutesHandler(IAppDbContext db, ITenantContext tenantContext,
                 Order = new PickupStopOrder(
                     order.Number,
                     order.Packages.Count,
-                    order.Speed == DeliverySpeed.Fast || order.DoNotHold)
+                    g.Kind != DeliveryGroupKind.Waiting)
             })
             .AsNoTracking()
             .ToListAsync(cancellationToken);

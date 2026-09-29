@@ -19,7 +19,8 @@ public sealed record NewDeliveryGroup(
 /// orders placed before <see cref="LocksAt"/> join it, and it is delivered on the day that starts at
 /// <see cref="LocksAt"/>. The deadline is fixed when the group opens and never moves later; only Ship now brings
 /// it forward. Only one group per customer and address can be <see cref="DeliveryGroupStatus.Open"/> (unique
-/// index in the database).
+/// index in the database). A next-day delivery (<see cref="Kind"/>) also takes orders after it has locked, while their
+/// parcels can still reach the hub by its delivery day (<see cref="CanTake"/>).
 /// Merchants never see a group: it would tell them where else the customer shopped.
 /// </summary>
 public class DeliveryGroup : TenantEntity
@@ -54,6 +55,9 @@ public class DeliveryGroup : TenantEntity
     public string Number { get; private set; } = null!;
 
     public DeliveryGroupStatus Status { get; private set; }
+
+    /// <summary>Whether the delivery waits for the join days, goes out the next day, or was brought forward by Ship now.</summary>
+    public DeliveryGroupKind Kind { get; private set; }
 
     /// <summary>When the first order arrived (UTC). Day 1 is this moment's date in the tenant's time zone.</summary>
     public DateTime OpenedOn { get; private set; }
@@ -90,17 +94,17 @@ public class DeliveryGroup : TenantEntity
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(spec.JoinDays, 1, nameof(spec.JoinDays));
 
-        return Create(spec, spec.JoinDays, DeliveryGroupStatus.Open);
+        return Create(spec, spec.JoinDays, DeliveryGroupStatus.Open, DeliveryGroupKind.Waiting);
     }
 
     /// <summary>
-    /// A group for one order that does not wait (Deliver fast, or Don't hold): locked at once, so nothing else
-    /// joins it and it never blocks the customer's open group, and delivered the next day in the tenant's time
-    /// zone. The tenant's join days do not apply.
+    /// A group for an order that does not wait (Deliver fast, or Don't hold): locked at once, so it never blocks the
+    /// customer's open group, and delivered the next day in the tenant's time zone. The tenant's join days do not
+    /// apply. Other orders can still join it (<see cref="CanTake"/>).
     /// </summary>
     public static DeliveryGroup OpenAlone(NewDeliveryGroup spec)
     {
-        var group = Create(spec, 1, DeliveryGroupStatus.Locked);
+        var group = Create(spec, 1, DeliveryGroupStatus.Locked, DeliveryGroupKind.NextDay);
         group.LockedOn = spec.OpenedOn;
 
         return group;
@@ -113,8 +117,11 @@ public class DeliveryGroup : TenantEntity
 
     /// <summary>
     /// Ship now: the customer stops waiting for more shops. The group locks at <paramref name="now"/> and is
-    /// delivered the next day in the tenant's time zone instead of on Day 3. A group already past its deadline
-    /// is locked as due and keeps its delivery day. A group that is no longer open cannot be sent early.
+    /// delivered the next day in the tenant's time zone instead of on Day 3; when that brings the day forward
+    /// (<see cref="ShipNowBringsForward"/>) it becomes <see cref="DeliveryGroupKind.ShippedNow"/> and the customer
+    /// pays the fast difference. On the last day to join it moves nothing and stays a waiting delivery. A group
+    /// already past its deadline is locked as due and keeps its delivery day. A group that is no longer open cannot
+    /// be sent early.
     /// </summary>
     public Result ShipNow(DateTime now, TimeZoneInfo timeZone)
     {
@@ -128,6 +135,11 @@ public class DeliveryGroup : TenantEntity
             return Result.Success();
         }
 
+        if (ShipNowBringsForward(now, timeZone))
+        {
+            Kind = DeliveryGroupKind.ShippedNow;
+        }
+
         Status = DeliveryGroupStatus.Locked;
         LockedOn = now;
 
@@ -138,10 +150,41 @@ public class DeliveryGroup : TenantEntity
         return Result.Success();
     }
 
-    /// <summary>True while an order placed at <paramref name="now"/> (UTC) may join this group.</summary>
+    /// <summary>
+    /// True when Ship now at <paramref name="now"/> would deliver an open group earlier than its delivery day.
+    /// </summary>
+    public bool ShipNowBringsForward(DateTime now, TimeZoneInfo timeZone)
+    {
+        return CanJoin(now) && StartOfDay(now, timeZone, daysAhead: 1) < LocksAt;
+    }
+
+    /// <summary>True while an order placed at <paramref name="now"/> (UTC) may join this open group.</summary>
     public bool CanJoin(DateTime now)
     {
         return Status == DeliveryGroupStatus.Open && now < LocksAt;
+    }
+
+    /// <summary>
+    /// True when a new order placed at <paramref name="now"/>, collected by the pickup run leaving at
+    /// <paramref name="pickup"/> (UTC; null when its zone has no route), can travel in this delivery. An open group
+    /// takes it before its deadline. A next-day delivery that has locked but not left the hub takes it while the
+    /// pickup falls on or before its delivery day, so the parcels reach the hub before the riders leave. An order
+    /// that must not wait (<paramref name="waits"/> false: Deliver fast, Don't hold) only joins a delivery that
+    /// arrives by the next day.
+    /// </summary>
+    public bool CanTake(DateTime now, DateTime? pickup, bool waits, TimeZoneInfo timeZone)
+    {
+        var inTime = waits || LocksAt <= StartOfDay(now, timeZone, daysAhead: 1);
+        if (CanJoin(now))
+        {
+            return inTime;
+        }
+
+        return Status == DeliveryGroupStatus.Locked &&
+            Kind != DeliveryGroupKind.Waiting &&
+            pickup is { } run &&
+            StartOfDay(run, timeZone, daysAhead: 0) <= LocksAt &&
+            inTime;
     }
 
     /// <summary>
@@ -209,7 +252,11 @@ public class DeliveryGroup : TenantEntity
         Shelf = shelf;
     }
 
-    private static DeliveryGroup Create(NewDeliveryGroup spec, int daysBeforeDelivery, DeliveryGroupStatus status)
+    private static DeliveryGroup Create(
+        NewDeliveryGroup spec,
+        int daysBeforeDelivery,
+        DeliveryGroupStatus status,
+        DeliveryGroupKind kind)
     {
         if (spec.OpenedOn.Kind != DateTimeKind.Utc)
         {
@@ -222,6 +269,7 @@ public class DeliveryGroup : TenantEntity
             AddressId = spec.AddressId,
             HubId = spec.HubId,
             Status = status,
+            Kind = kind,
             OpenedOn = spec.OpenedOn,
             LocksAt = StartOfDay(spec.OpenedOn, spec.TimeZone, daysBeforeDelivery)
         };

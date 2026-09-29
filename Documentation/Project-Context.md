@@ -99,7 +99,7 @@ The user supplied two PDFs (not stored in the repo): *OneDrop Implementation Pla
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
-| 3 | Operations and money | Group delivered, merchants settled | 🔄 3.1–3.4 done, next 3.4a (market pricing) |
+| 3 | Operations and money | Group delivered, merchants settled | 🔄 3.1–3.4a done, next 3.5 (delivery screen) |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
 Task-level detail, the cut list, the job schedule, must-pass tests and the daily log are in
@@ -107,7 +107,7 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 
 ---
 
-## 3. What exists today (Weeks 1 and 2, tasks 3.1–3.4)
+## 3. What exists today (Weeks 1 and 2, tasks 3.1–3.4a)
 
 ### Solution layout (`Courier.sln`)
 | Project | Path | Contents |
@@ -118,7 +118,7 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 | Web | `src/Web` | Razor Pages portals (merchant, customer, hub, platform), `Labels/LabelQrCode` (QRCoder), `Api/V1` (orders, quote, areas by API key; deliveries by customer cookie), `Authentication/ApiKeyAuthenticationHandler`, `MultiTenancy` middleware, `Program.cs` |
 | Database | `src/Database` | SQL project (Microsoft.Build.Sql 2.1.0) → `Database.dacpac`. Owns the schema |
 | Database Update | `src/Database Update` | DbUp console (`dbup.exe`): data migrations in `Scripts/<Year>/`, data-loss scripts in `Scripts/Pre/` |
-| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 170 + 6 + 86 = **262 tests, all passing** |
+| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 195 + 6 + 90 = **291 tests, all passing** |
 | Tools | `tools/db/publish.ps1` | Deploys a database: `dbup pre` → dacpac publish → `dbup` |
 
 ### Features that work
@@ -126,8 +126,12 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   creates the customer by phone and the address by match key, resolves area → zone → hub, saves order + packages
   + first status in one save. Same key + same body → 200 with the same order; same key + other body → 409.
 - **Grouping on create** (`Application/Grouping/DeliveryGrouping`): in the same save the order joins the
-  customer's open group for that address or opens one (window = the tenant's `GroupJoinDays` in its time zone).
-  Deliver fast and Don't hold orders get their own group, locked at once for next-day delivery. An open group
+  customer's delivery to that address that leaves soonest and can still take it (`DeliveryGroup.CanTake`): the open
+  group (window = the tenant's `GroupJoinDays` in its time zone), or a locked next-day delivery (`Kind` `NextDay` or
+  `ShippedNow`, not yet out) while the order's pickup route next runs on or before its delivery day. Otherwise a
+  waiting order opens a group and a Deliver fast or Don't hold order a next-day delivery (locked at once, delivered
+  tomorrow); a fast or Don't hold order joins the open group only when that arrives tomorrow. A locked `Waiting`
+  group takes nothing, so an order on Day 3 starts a new group. An open group
   past its deadline is locked on the spot. Two orders opening the same group at once: the unique index refuses
   one, which then joins the winner's group. The response never shows the group (merchant privacy).
 - `GET /api/v1/orders/{number}` (own orders only; others 404), `GET /api/v1/areas`.
@@ -135,11 +139,15 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   at `/Dev/Sms` in Development.
 - Pages: landing (platform or tenant), merchant order list + API key list, customer "My deliveries", platform
   tenant list (the only cross-tenant page).
-- **Pricing** (`Domain/Pricing/DeliveryFeeCalculator`, the tenant's prices): group fee = base + extra × (distinct
-  shops − 1), counting only orders not cancelled, refused or returned; Deliver fast = the fast fee; Don't hold
-  alone = the base fee. Each order stores `AddedFee` (base, extra, or 0 for a shop already in the group), and
+- **Pricing** (`Domain/Pricing/DeliveryFeeCalculator`, the tenant's prices): group fee = first shop + extra ×
+  (distinct shops − 1) + each started kg a shop's orders weigh above `WeightAllowanceGrams` × `ExtraKgFee`, counting
+  only orders not cancelled, refused or returned. The first shop costs the fast fee when a Deliver fast order is in
+  the delivery, base + `ShipNowFee` (fast − base) when Ship now brought it forward (`Kind` `ShippedNow`), else the
+  base fee (Don't hold alone = base). Each order stores `AddedFee` (what it added: base or fast, extra, the fast
+  difference, kilograms, or 0 for a shop already in the delivery), and
   Create Order / Get Order return it as `fee`. The group total is never shown to a merchant.
-- **Checkout quote** `GET /api/v1/quote?phone=&area=&line1=` (optional `areaId`, `line2`, `speed`, `doNotHold`):
+- **Checkout quote** `GET /api/v1/quote?phone=&area=&line1=` (optional `areaId`, `line2`, `speed`, `doNotHold`,
+  `pickupPointId` (default point), `weightGrams`):
   `{ fee, currency, joinsDelivery }`, the fee Create Order would give the same order now (৳60, +৳25, or 0 for a
   shop already in the delivery). Read only: creates no customer or address. `DeliveryGrouping.QuoteAsync` picks
   the group the same way Create Order does and shares its fee query.
@@ -149,9 +157,12 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   implements `ITenantJob`, is added to `TenantJobRegistry` and gets a recurring entry in `JobsSetup.ScheduleJobs`.
   Dashboard: http://localhost:5080/jobs (platform admin). `Jobs:Server` = false runs no server (integration tests).
 - **Ship now** (`Application/Grouping/ShipNow`, `DeliveryGroup.ShipNow`): the signed-in customer closes an open
-  delivery; it locks at once and is delivered the **next day** (`LocksAt` = the next tenant midnight). From the
-  "My deliveries" page (each open delivery with its shops, last day to join, delivery day and a button) or
-  `POST /api/v1/deliveries/{number}/ship-now` with the customer's sign-in cookie → `{ number, deliveryDate }`;
+  delivery; it locks at once and is delivered the **next day** (`LocksAt` = the next tenant midnight). When that
+  brings the day forward (Day 1) the delivery becomes `ShippedNow` and costs the fast difference (Dhaka +৳10; the
+  button reads "Deliver tomorrow for +৳10"); on the last day to join it is free and stays `Waiting`. A shipped-now
+  delivery still takes other shops' orders like a fast one. From the "My deliveries" page (each open delivery with
+  its shops, last day to join, delivery day and a button) or `POST /api/v1/deliveries/{number}/ship-now` with the
+  customer's sign-in cookie → `{ number, deliveryDate, addedFee }`;
   a closed delivery is 409, anyone else's is 404. The sign-in cookie answers `/api` with 401/403, not a redirect.
 - **Outbox and SMS** (`Application/Notifications`): entities raise domain events (`Order.PlaceIn` →
   `OrderPlacedInDelivery`; `LockIfDue` / `ShipNow` → `DeliveryGroupLocked`). `AppDbContext.SaveChangesAsync`
@@ -200,7 +211,7 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   collect (fee on what is taken + COD). **Start trip** hands over every order with all parcels on the shelf
   (`Order.HandToRider` → `OutForDelivery`, packages off the hub), dispatches its delivery and frees the shelf; a
   delivery with nothing ready comes off the trip and stays `Locked`.
-- **Not yet:** the delivery screen and attempts (3.5), a screen to add riders or change a bike's limit, a screen to change route times, Ship now by SMS "reply 1" (needs an inbound SMS gateway), a screen for failed outbox messages,
+- **Not yet:** the delivery screen and attempts (3.5), a screen to add riders or change a bike's limit, a screen to change route times or weight settings, Ship now by SMS "reply 1" (needs an inbound SMS gateway), a screen for failed outbox messages,
   merchant screens to create API keys or enter orders manually, tenant admin screens.
 
 ### Database
@@ -214,13 +225,19 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   (`Scripts/Pre/002_PriceExistingOrders` priced the orders saved before 2.3). `Package.HubId`/`ReceivedOn` say
   where a parcel was last scanned in (null on the shuttle, when `ShuttleToHubId` says where it is going);
   `DeliveryGroup.Shelf` is unique per hub while set (`UX_DeliveryGroup_Hub_Shelf`).
-- `Platform.Tenant` settings (fees, `GroupJoinDays`, time zone, currency, SMS sender) have **no defaults**, in
-  SQL or C#: every tenant states its own. No business value is hard-coded anywhere.
+- `Platform.Tenant` settings (fees, `GroupJoinDays`, time zone, currency, SMS sender, `WeightAllowanceGrams`,
+  `ExtraKgFee`) have **no defaults**, in SQL or C#: every tenant states its own. No business value is hard-coded
+  anywhere. The two weight settings are nullable in SQL (the launch seed 001 inserts tenants without them);
+  `TenantCatalog` does not serve a tenant that has not set them. `Grouping.DeliveryGroup.Kind` (TINYINT, 1 Waiting,
+  2 NextDay, 3 ShippedNow) was filled in for existing groups by `Scripts/Pre/003_DeliveryGroupKind`.
 - Every tenant table: `TenantId` + FK + index; housekeeping columns `Archived`, `UpdatedId`, `UpdatedOn`, `Created`.
 - Seeded by DbUp `2026/001_SeedLaunchTenants.sql`: **OneDrop Dhaka** (id 1, slug `dhaka`, 7 zones on 5 hubs,
   32 areas, ৳60 + ৳25, fast ৳70 since `2026/003_DhakaFastDeliveryFee.sql`) and **OneDrop Chattogram** (id 2, slug
   `chattogram`, 5 zones on 2 hubs, 14 areas, ৳70 + ৳30, fast ৳80). `2026/002_SeedPickupRoutes.sql` gives every
-  launch zone a 2 PM pickup route. Roles are seeded by `Script.PostDeployment.sql`.
+  launch zone a pickup route, staggered by `2026/005_StaggeredPickupTimes.sql` (Dhaka Uttara 11:00, Mirpur 11:30,
+  Motijheel 12:00, Mohammadpur 12:30, Dhanmondi and Banani 13:00, Gulshan 13:30; Chattogram Halishahar 11:00,
+  Nasirabad 11:30, Chawkbazar 12:00, Agrabad 12:30, Panchlaish 13:00). `2026/004_WeightAllowance.sql`: 2 kg per
+  shop, then ৳15 (Dhaka) or ৳20 (Chattogram) per started kg. Roles are seeded by `Script.PostDeployment.sql`.
 - Dev data in `OneDrop`: merchants 1–3 (Dhaka: Fashion House, Gadget BD, Beauty Shop) and 4–6 (Chattogram, same
   names); demo riders Rafiq Hasan (`rider@dhaka`, MIR, 30 parcels / 25 kg), Sumon Ali (`rider2@dhaka`, MIR, 12 /
   15 kg), Kamal Uddin (`rider3@dhaka`, GUL), Jamal Chowdhury (`rider@chattogram`, AGR). Orders OD-100001 onwards
@@ -253,7 +270,7 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 | Secrets only in git-ignored `*.Local.json` files | The repository must never contain the database password |
 | GitHub repo private | Chosen by the user; can be made public later for a portfolio |
 | **No hard-coded business values**: prices, join days, time zone and the rest come from the tenant's settings | Owner rule (2026-09-28). Each operator has its own; a default would silently give a new one Dhaka's |
-| Deliver fast / Don't hold → own group, `Locked` at once, `LocksAt` = next midnight | They never wait, so they must not take the customer's one `Open` slot |
+| Deliver fast / Don't hold → own group, `Locked` at once, `LocksAt` = next midnight (a `NextDay` delivery other orders can still join, 3.4a) | They never wait, so they must not take the customer's one `Open` slot |
 | The merchant API never returns group data | A merchant must not learn the customer also bought elsewhere |
 | Create Order returns only this order's `fee` (base, +extra or 0, stored as `Order.AddedFee`), never a group total | Owner's choice (2026-09-28): the total would show how many other shops are in the delivery |
 | The quote is read only, answers with the same fee Create Order would give, and says only `joinsDelivery` about the group | A checkout can call it for every visitor without creating customers; the "+৳25" is the product's promise and tells no more than the fee |
@@ -283,7 +300,8 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 | `TripStop.DeliveryDate` copies the trip's date for `UX_TripStop_DeliveryGroup_DeliveryDate` | The database settles the job and the button planning at once |
 | `Rider.UserId` points at the login (riders sign in as staff on their subdomain) | Identity unchanged; a rider can exist before a login |
 | **Market review (2026-09-28):** Dhaka's fast fee ৳70; standard stays ৳60 + ৳25 | Couriers charge ৳55–70 for delivery within 24 h of pickup, which for a Facebook order is usually Day 3 anyway; fast is same day from pickup (about ৳105 at couriers). At ৳60 fast undercut waiting |
-| Planned from the review (3.4a): fast and Don't hold deliveries can be joined until the new order's pickup route leaves on the delivery day; Ship now adds the fast difference when it brings the day forward; a weight allowance per shop; pickups 11:00–13:30, shuttle about 14:30, riders 17:00 | Density; a free Ship now would undo the fast price; every courier prices by weight; a 19:00 shuttle missed the Day 3 trip |
+| From the review, done in 3.4a: fast, Don't hold and shipped-now deliveries (`DeliveryGroup.Kind`) take orders until the new order's pickup route has run on the delivery day; a new order joins the delivery that leaves soonest; Ship now adds the fast difference when it brings the day forward; 2 kg per shop, then per started kg (Dhaka ৳15, Chattogram ৳20); pickups 11:00–13:30, shuttle about 14:30, riders 17:00 | Density; a free Ship now would undo the fast price; every courier prices by weight; a 19:00 shuttle missed the Day 3 trip. A locked `Waiting` group takes nothing, so "an order on Day 3 starts a new group" still holds |
+| New tenant settings are nullable in SQL when the launch seed cannot set them; the application refuses to serve a tenant without them | A NOT NULL column would break DbUp 001 on a fresh database, and a seed script is never edited after it has run |
 | Planned from the review (3.5–3.8): shops pay a return charge per refused parcel and a late-handover fee per order left behind; the order left behind goes out next day at the extra-shop fee; advance payment only by risk (refusal, no-show, merchant's request), after a one-tap confirmation for new COD customers; one stop and one fee for the same phone and area on a trip | 20–30% of COD parcels come back and OneDrop earns only at the door; every customer is new at launch; a missed address match must never cost ৳60 + ৳60 |
 
 ---
@@ -351,6 +369,7 @@ git push                                          # main tracks origin/main
 | `*.localhost` subdomains work in browsers; for curl use `--resolve dhaka.localhost:5080:127.0.0.1` or a `Host` header | — |
 | Microsoft.Build.Sql 2.2.0 breaks builds inside Visual Studio | Stay on 2.1.0 (same as DCN) |
 | SqlPackage blocks NULL → NOT NULL on any table with rows, even when no row is NULL | Backfill **and** `ALTER COLUMN` in a guarded `Scripts/Pre` script (drop the column's index and FK first; the publish recreates them) |
+| A new NOT NULL column on `Platform.Tenant` breaks a fresh database: DbUp `001_SeedLaunchTenants` inserts tenants without it and must not be edited | Make the setting nullable in SQL, set it for the launch tenants in a new DbUp script, and have `TenantCatalog` skip (and log) a tenant without it |
 | `sqlcmd` runs with `QUOTED_IDENTIFIER OFF`; statements touching a filtered index fail | Pass `-I` when running scripts by hand (DbUp's connection already has it on) |
 | Detaching an added principal that a tracked order still points at throws (required relationship severed) | Re-point the order (`PlaceIn` + `Entry(order).DetectChanges()`) before detaching |
 | A running `dotnet run --project src/Web` locks `src/Web/bin`; builds then silently keep the old DLLs for tests | Stop the app before rebuilding or running the test suites |

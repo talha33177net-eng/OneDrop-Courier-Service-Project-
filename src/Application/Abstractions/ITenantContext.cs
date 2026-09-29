@@ -13,10 +13,12 @@ public sealed record TenantInfo(
     decimal BaseDeliveryFee,
     decimal ExtraShopFee,
     decimal FastDeliveryFee,
-    int GroupJoinDays)
+    int GroupJoinDays,
+    int WeightAllowanceGrams,
+    decimal ExtraKgFee)
 {
     /// <summary>The tenant's prices, for <see cref="DeliveryFeeCalculator"/>.</summary>
-    public FeeSchedule Fees => new(BaseDeliveryFee, ExtraShopFee, FastDeliveryFee);
+    public FeeSchedule Fees => new(BaseDeliveryFee, ExtraShopFee, FastDeliveryFee, WeightAllowanceGrams, ExtraKgFee);
 }
 
 /// <summary>

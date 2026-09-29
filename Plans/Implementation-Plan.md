@@ -13,10 +13,10 @@ The one place to see where we are and what comes next. Built from the two projec
 
 | | |
 |---|---|
-| Current week | **Week 3 — Operations and money** (4 of 10) |
-| Next task | 3.4a Market pricing (fast deliveries can be joined, Ship now as an upgrade, weight allowance, daily timetable), then 3.5 |
-| Last session | 2026-09-28 — Bangladesh market review ([Project-Context §1](../Documentation/Project-Context.md#the-bangladesh-market)): Dhaka's fast fee raised to ৳70 (DbUp 003); the other changes it led to are written into 3.4a–3.8 and Week 4 below. Task 3.4 committed as `cbd47c1`; 3.1–3.3 merged into `main` by pull request #1; 3.4 not yet in `main` |
-| Blockers | None. The link to ras-x2 was intermittently slow on 2026-09-28 (a sqlpackage stall, one login timeout); a rerun passed |
+| Current week | **Week 3 — Operations and money** (5 of 10) |
+| Next task | 3.5 Delivery screen and attempts (with the market review's additions: one stop one fee, orders left behind, refused parcels) |
+| Last session | 2026-09-29 — task 3.4a market pricing done, tested and committed on branch `day3` (from `day2` at `d336812`), pushed. 3.4, the market review and 3.4a are not yet in `main` |
+| Blockers | None |
 
 ---
 
@@ -46,10 +46,10 @@ A task is **not done** until all of these pass. Record the result in the daily l
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
-| 3 | Operations and money | Group delivered, merchants settled | 🔄 4 of 10 |
+| 3 | Operations and money | Group delivered, merchants settled | 🔄 5 of 10 |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
-Tests today: **262 passing** (170 domain, 6 architecture, 86 integration).
+Tests today: **291 passing** (195 domain, 6 architecture, 90 integration).
 
 ---
 
@@ -287,7 +287,7 @@ next morning each merchant is settled.
       could land on the trip that just left (it goes out on the next day's trip); parcels are handed over without a
       scan per parcel; what happens to an order left behind when its delivery went out (a later delivery at +৳25)
       is 3.5; no customer SMS for "out for delivery" yet (3.6 sends the receipt).
-- [ ] **3.4a Market pricing** (added by the market review of 2026-09-28, see the decisions log).
+- [x] **3.4a Market pricing** (added by the market review of 2026-09-28, see the decisions log).
       - **Fast and Don't hold deliveries can be joined.** A delivery leaving tomorrow takes the customer's other
         orders to the same address while the new order's pickup route still runs before that day's trips (its next
         run falls on the delivery day, `PickupRoute.NextPickup`). A new order joins the delivery that leaves soonest
@@ -305,6 +305,32 @@ next morning each merchant is settled.
       *Tests:* a second shop joins a fast delivery before its pickup route leaves on the delivery day and opens a
       new one after; the quote says the same; Ship now on Day 1 adds the difference and on Day 2 nothing; a 3 kg
       shop pays one extra kg in Dhaka and Chattogram uses its own settings.
+      *Done 2026-09-29:* `Grouping.DeliveryGroup.Kind` (`DeliveryGroupKind`: `Waiting`, `NextDay` for a group opened by
+      a Deliver fast or Don't hold order, `ShippedNow` for one brought forward by Ship now; `Pre/003` filled it in for
+      existing groups, sent-early ones as `Waiting` so nobody is charged afterwards). `DeliveryGroup.CanTake(now,
+      pickup, waits)`: an open group before its deadline; a locked `NextDay`/`ShippedNow` delivery not yet out while
+      the order's pickup (`PickupRoute.NextPickup` of its pickup point's zone) falls on or before its delivery day; an
+      order that must not wait (fast, Don't hold) only a delivery arriving by tomorrow, so on Day 2 it also joins the
+      open group. `DeliveryGrouping` puts the order in the candidate that leaves soonest (lowest `LocksAt`, then id),
+      else opens a group or a next-day delivery; the quote chooses the same way and now takes the pickup point
+      (default point when not given). A locked `Waiting` group still takes nothing, so an order on Day 3 starts a new
+      group. **Fee:** the first shop costs the fast fee when a fast order is in the delivery, base + `ShipNowFee`
+      (fast − base, never negative) when shipped now, else the base fee; + extra-shop fee per other shop; + each
+      started kg a shop's orders weigh above `Tenant.WeightAllowanceGrams`, at `Tenant.ExtraKgFee`. "You save" leaves
+      the weight out (separate couriers charge it too). Dhaka 2 kg + ৳15, Chattogram 2 kg + ৳20 (DbUp
+      `2026/004_WeightAllowance`, owner's values); the columns are **nullable** in SQL because the launch seed (001)
+      inserts tenants without them and must not be edited, and `TenantCatalog` does not serve a tenant without them
+      (warning in the log). **Ship now:** `ShipNowBringsForward` → the delivery becomes `ShippedNow`; the API returns
+      `addedFee`; "My deliveries" shows "Deliver tomorrow for +৳10" (free "Ship now" on Day 2). Rider stops and the
+      customer page price by the same calculator with weights and kind. **Timetable:** DbUp
+      `2026/005_StaggeredPickupTimes` (owner's times): Dhaka Uttara 11:00, Mirpur 11:30, Motijheel 12:00, Mohammadpur
+      12:30, Dhanmondi and Banani 13:00, Gulshan 13:30; Chattogram Halishahar 11:00, Nasirabad 11:30, Chawkbazar
+      12:00, Agrabad 12:30, Panchlaish 13:00. The shuttle manifest lists the soonest delivery day first, then next-day
+      deliveries; the manifest, route sheet and scan answer mark "Next day" by the delivery's kind (so an order that
+      joined a fast delivery is marked), while the merchant's labels keep the order's own flag (merchant privacy).
+      *Left:* an order joining a next-day delivery at the moment its rider presses Start trip is left behind with it
+      (3.5 sends orders left behind the next day); an order for a delivery due today whose parcels arrive after the
+      riders left is 3.5's too; no screen yet to change weight settings or route times (SQL only).
 - [ ] **3.5 Delivery screen and attempts.** Handover only after the fee is paid ("no fee, no handover"); refuse
       one parcel (fee counts accepted shops only); not home = one free re-attempt, then return.
       *Added by the market review:*
@@ -394,7 +420,7 @@ Payments stay fake in the MVP either way.
 | 06:00 | Settle merchants (yesterday's COD) | 3 |
 | Every 15 minutes (`Jobs:PlanTrips`) | Plan delivery trips (deliveries due today → riders), instead of once at 08:00 (3.4) | 3 ✅ |
 | 13:00 | Build pickup routes per zone — not needed: the route sheet is worked out when opened (3.1) | 3 ✅ |
-| 11:00–13:30 | Pickup route runs (merchants → hub), staggered by zone, farthest first; 14:00 until 3.4a moves them | 3 |
+| 11:00–13:30 | Pickup route runs (merchants → hub), staggered by zone, farthest first (DbUp 005, 3.4a) — no job: the route sheet | 3 ✅ |
 | About 14:30 | Hub shuttle (zone → customer's hub), right after scan-in, not 19:00 (market review) — no job: staff load it from the manifest (3.3) | 3 ✅ |
 | 17:00 | Riders leave; delivery 5–9 PM | 3 |
 | 23:59 | Groups lock (Day 2 deadline) | 2 |
@@ -472,6 +498,13 @@ Payments stay fake in the MVP either way.
 | 2026-09-28 | An order left behind goes out the next day, or joins the customer's open delivery, at the extra-shop fee only (3.5) | The customer pays what was promised; the shop that was not ready pays for the second trip |
 | 2026-09-28 | Advance payment by risk, not for every new customer: one-tap SMS confirmation for a new COD customer; the first shop's fee in advance after a refusal or no-show, or when the merchant asks; never for a product paid online (3.6, 3.8) | Every customer is new at launch. Paying the delivery charge in advance by bKash is already normal with Facebook sellers and cuts fake orders, so it is acceptable when it targets risk; a refusal at one shop protects the others |
 | 2026-09-28 | Deliveries for the same phone in the same area on one trip are one stop and one fee (3.5); the customer is asked to combine deliveries whose addresses almost match, and the spelling is learnt (4.7) | A missed address match must never cost the customer ৳60 + ৳60 for one visit |
+| 2026-09-29 | A delivery group has a kind (`Waiting`, `NextDay`, `ShippedNow`); only next-day kinds take orders after they lock | Keeps the must-pass "an order on Day 3 starts a new group" while fast and shipped-now deliveries fill up; the kind also says who pays the fast difference |
+| 2026-09-29 | A new order joins the delivery that leaves soonest and can take it, also when it waits (a waiting order may go with a fast delivery tomorrow); a fast or Don't hold order joins the open group only when that arrives tomorrow | Density, and one door visit where two deliveries would arrive the same day; nothing ever arrives later than its speed promised |
+| 2026-09-29 | Joining after the lock is decided by the order's pickup route: its next run must fall on or before the delivery day | The route is the only link between the shop and the hub; a run on the delivery day reaches the hub by about 14:00, before the 17:00 trips |
+| 2026-09-29 | A fast delivery's first shop pays the fast fee, every other shop the extra-shop fee; Ship now that brings the day forward charges base + (fast − base), never less than base | One formula for every delivery; the fast price is not undone by joining or by Ship now |
+| 2026-09-29 | Weight: 2 kg per shop in a delivery, then per started kg (Dhaka ৳15, Chattogram ৳20; owner); "You save" leaves weight out | Couriers charge per kg too (Pathao +৳15), so weight is no saving and no loss against them |
+| 2026-09-29 | The new tenant settings are nullable in SQL; the application does not serve a tenant without them | The launch seed inserts tenants without them and must not be edited, so a NOT NULL column would break a fresh database; a skipped tenant is loud (log) and never gets another operator's value |
+| 2026-09-29 | Pickup routes staggered 11:00–13:30, farthest zones first (owner's times, DbUp 005) | Every parcel at its hub by about 14:00, shuttle about 14:30, riders at 17:00 |
 
 ## Quick reference
 
@@ -488,6 +521,41 @@ Payments stay fake in the MVP either way.
 ## Daily log
 
 Newest first. One entry per working day: what was done, how it was tested, what is next.
+
+### 2026-09-29
+- **Decided with the owner:** weight allowance 2 kg per shop, then ৳15 per started kg in Dhaka and ৳20 in Chattogram;
+  the staggered pickup times proposed (Dhaka 11:00–13:30, Chattogram 11:00–13:00, farthest first).
+- **Done (task 3.4a):** `Domain/Grouping/DeliveryGroupKind`, `DeliveryGroup.Kind`, `CanTake`, `ShipNowBringsForward`;
+  `DeliveryFeeCalculator` (weight per shop, fast first shop, `shippedNow`, `ShipNowFee`), `FeeSchedule` and `FeeLine`
+  with weights; `Tenant.WeightAllowanceGrams` / `ExtraKgFee` (SQL nullable, `TenantCatalog` skips a tenant without
+  them); SQL `Grouping.DeliveryGroup.Kind` + `chk_DeliveryGroup_Kind`, `Platform.Tenant` columns and checks;
+  `Pre/003_DeliveryGroupKind`, DbUp `2026/004_WeightAllowance`, `2026/005_StaggeredPickupTimes`; `DeliveryGrouping`
+  (soonest delivery that can take the order, pickup route lookup, shared with the quote); quote `pickupPointId` and
+  `weightGrams`; Ship now `addedFee` and the "Deliver tomorrow for +৳10" button; rider stops and "My deliveries"
+  priced with weights and kind; shuttle manifest ordered by delivery day; "Next day" marks by the delivery's kind on
+  hub pages; README.
+- **Tested:** build 0 errors, no new warnings; 25 new domain tests (kinds; a next-day delivery takes an order whose
+  pickup falls by its delivery day, not after, and none without a route or once out; fast orders join the open group
+  only on Day 2; a locked waiting group takes nothing on Day 3; Ship now on Day 1 becomes `ShippedNow` and stays
+  joinable, on Day 2 moves nothing; each started kg at both tenants' prices, per shop across its orders, an order
+  taking its shop over the allowance, refused parcels not weighed, weight not in the saving; Ship now fee and never
+  cheaper; shops joining a fast delivery) and new integration tests (fake clock around the shops' real route times:
+  a second shop joins the fast delivery and the quote says +৳25 half an hour before its route leaves on the delivery
+  day, a third shop after its route opens a new group at ৳60; a fast order after the last run opens its own; a 3 kg
+  order at Dhaka ৳75 and Chattogram ৳90, the quote with `weightGrams` equal; "My deliveries" offers Ship now at +৳10
+  and the page shows the button, the message and ৳95). Five existing tests changed with the rules (a Don't hold order
+  now joins the fast delivery; the shipped delivery takes the next shop at +৳25; Ship now's ৳10; route times).
+  Mutation: dropping the pickup condition fails 2 domain and both new integration tests. 195 + 6 + 90 = 291 pass,
+  none skipped. `Pre/003` dry-run in a rolled-back transaction on dev (8 groups `NextDay`, 20 `Waiting`), then both
+  databases published: `Grouping.DeliveryGroup` and `Platform.Tenant` rebuilt with their rows, three scripts ran.
+  Live on dev: phone 01816420937 in Mirpur 10 — Fashion House fast quote and OD-100054 ৳70 (DG-100031, `NextDay`),
+  Gadget BD quoted +৳25 and OD-100055 ৳25 in DG-100031, Beauty Shop 3 kg quoted and charged ৳40 (+৳25 + ৳15) in
+  DG-100031; texts "arriving on Wed 30 Sep"; Chattogram 3 kg OD-100057 ৳90; weight 0 → 400; another shop's key and
+  Chattogram's key 404 on OD-100055. Phone 01816420939: Fashion House OD-100058 ৳60 + Beauty Shop OD-100059 ৳25 open
+  in DG-100033; signed in by SMS code, "My deliveries" showed ৳85 and "Deliver tomorrow for +৳10 … instead of
+  Thursday"; pressed → "closed … Wednesday 30 September. Its fee went up by ৳10", fee ৳95; then Gadget BD OD-100060
+  joined at ৳25 → ৳120, "You save ৳60". Hub "Pickup routes" shows the new times. No errors in the app log.
+- **Next:** task 3.5, delivery screen and attempts.
 
 ### 2026-09-28
 - **Done:** connection strings moved out of the repository into git-ignored `appsettings.Local.json` /

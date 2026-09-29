@@ -31,7 +31,7 @@ public partial class ShipNowTests(WebAppFactory factory)
     };
 
     [Fact]
-    public async Task The_owner_ships_now_the_delivery_goes_out_tomorrow_and_the_next_order_starts_a_new_one()
+    public async Task The_owner_ships_now_pays_the_fast_difference_and_the_delivery_goes_out_tomorrow_still_open_to_shops()
     {
         WebAppFactory.RequireDatabase();
         var dhaka = await TenantAsync("dhaka");
@@ -46,7 +46,9 @@ public partial class ShipNowTests(WebAppFactory factory)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var tomorrow = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone)).AddDays(1);
-        Assert.Equal(new Shipped(group.Number, tomorrow), await response.Content.ReadFromJsonAsync<Shipped>(Json, Cancel));
+        Assert.Equal(
+            new Shipped(group.Number, tomorrow, dhaka.FastDeliveryFee - dhaka.BaseDeliveryFee),
+            await response.Content.ReadFromJsonAsync<Shipped>(Json, Cancel));
 
         var shipped = await GroupAsync("dhaka", group.Id);
         Assert.Equal(DeliveryGroupStatus.Locked, shipped.Status);
@@ -58,9 +60,10 @@ public partial class ShipNowTests(WebAppFactory factory)
         Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
         Assert.Contains(DeliveryGroup.NotOpenForShipNow.Code, await again.Content.ReadAsStringAsync(Cancel));
 
-        // The shops that come later start a delivery of their own, at the full fee
-        Assert.Equal(dhaka.BaseDeliveryFee, await CreateAsync(WebAppFactory.DhakaBeauty, phone));
-        Assert.NotEqual(group.Id, (await OpenGroupAsync("dhaka", phone)).Id);
+        // A shop whose pickup route still runs by tomorrow joins the shipped delivery at the extra-shop fee;
+        // no new delivery opens
+        Assert.Equal(dhaka.ExtraShopFee, await CreateAsync(WebAppFactory.DhakaBeauty, phone));
+        Assert.Null(await OpenGroupOrNullAsync("dhaka", phone));
     }
 
     [Fact]
@@ -121,9 +124,14 @@ public partial class ShipNowTests(WebAppFactory factory)
         Assert.Contains($"৳{fee + 1000:N0}", before);
         Assert.Contains($"You save ৳{2 * dhaka.BaseDeliveryFee - fee:N0} against 2 separate deliveries.", before);
         Assert.Contains("""<link rel="manifest" href="/manifest.webmanifest" />""", before);
+        var shipNowFee = dhaka.FastDeliveryFee - dhaka.BaseDeliveryFee;
+        Assert.Contains($"Deliver tomorrow for +৳{shipNowFee:N0}</button>", before);
         Assert.Contains($"Delivery {group.Number} is closed.", after);
+        Assert.Contains("Its fee went up by", after);
+        Assert.Contains($"৳{fee + shipNowFee:N0}", after);
         Assert.DoesNotContain("Waiting for more shops", after);
         Assert.DoesNotContain("Ship now</button>", after);
+        Assert.DoesNotContain("Deliver tomorrow for", after);
         Assert.Equal(DeliveryGroupStatus.Locked, (await GroupAsync("dhaka", group.Id)).Status);
     }
 
@@ -222,6 +230,11 @@ public partial class ShipNowTests(WebAppFactory factory)
 
     private async Task<DeliveryGroup> OpenGroupAsync(string slug, string phone)
     {
+        return await OpenGroupOrNullAsync(slug, phone) ?? throw new InvalidOperationException("No open delivery.");
+    }
+
+    private async Task<DeliveryGroup?> OpenGroupOrNullAsync(string slug, string phone)
+    {
         await using var scope = await ScopeAsync(slug);
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var e164 = PhoneNumber.Parse(phone).Value.Value;
@@ -229,7 +242,7 @@ public partial class ShipNowTests(WebAppFactory factory)
 
         return await db.DeliveryGroups
             .AsNoTracking()
-            .SingleAsync(g => g.CustomerId == customerId && g.Status == DeliveryGroupStatus.Open, Cancel);
+            .SingleOrDefaultAsync(g => g.CustomerId == customerId && g.Status == DeliveryGroupStatus.Open, Cancel);
     }
 
     private async Task<DeliveryGroup> GroupAsync(string slug, long id)
@@ -265,7 +278,7 @@ public partial class ShipNowTests(WebAppFactory factory)
     [GeneratedRegex(@"\b\d{6}\b")]
     private static partial Regex SixDigits();
 
-    private sealed record Shipped(string Number, DateOnly DeliveryDate);
+    private sealed record Shipped(string Number, DateOnly DeliveryDate, decimal AddedFee);
 
     private sealed record Priced(decimal Fee);
 }

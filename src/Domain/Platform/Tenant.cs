@@ -41,5 +41,14 @@ public class Tenant : AuditedEntity, IArchivable
     /// </summary>
     public int GroupJoinDays { get; private set; }
 
+    /// <summary>
+    /// Grams each shop's parcels may weigh in a delivery before <see cref="ExtraKgFee"/> is charged. Nullable only
+    /// because the column came after the launch seed; a tenant without it is not served (see <c>TenantCatalog</c>).
+    /// </summary>
+    public int? WeightAllowanceGrams { get; private set; }
+
+    /// <summary>Fee for every started kilogram a shop's parcels weigh above <see cref="WeightAllowanceGrams"/>.</summary>
+    public decimal? ExtraKgFee { get; private set; }
+
     public bool Archived { get; private set; }
 }

@@ -2,15 +2,20 @@ using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
 using Domain.Common;
 using Domain.Grouping;
+using Domain.Pricing;
 
 namespace Application.Grouping.ShipNow;
 
-/// <summary>The closed delivery and the day it arrives, in the tenant's time zone.</summary>
-public sealed record ShipNowResult(string Number, DateOnly DeliveryDate);
+/// <summary>
+/// The closed delivery, the day it arrives in the tenant's time zone, and what Ship now added to its fee: the fast
+/// difference when it brought the day forward, nothing on the last day to join.
+/// </summary>
+public sealed record ShipNowResult(string Number, DateOnly DeliveryDate, decimal AddedFee);
 
 /// <summary>
 /// Ship now: the signed-in customer closes one of their open deliveries so it goes out the next day instead of
-/// waiting for more shops. Another customer's delivery is not found, never forbidden, so its number reveals nothing.
+/// waiting for more shops; bringing the day forward costs the fast difference. Another customer's delivery is not
+/// found, never forbidden, so its number reveals nothing.
 /// </summary>
 public class ShipNowHandler(IAppDbContext db, ITenantContext tenantContext, ICurrentUser currentUser, TimeProvider time)
 {
@@ -26,8 +31,10 @@ public class ShipNowHandler(IAppDbContext db, ITenantContext tenantContext, ICur
             return Error.NotFound("deliveryGroup.notFound", $"Delivery {number} was not found.");
         }
 
+        var now = time.GetUtcNow().UtcDateTime;
         var timeZone = TimeZoneInfo.FindSystemTimeZoneById(tenant.TimeZone);
-        var shipped = group.ShipNow(time.GetUtcNow().UtcDateTime, timeZone);
+        var addedFee = group.ShipNowBringsForward(now, timeZone) ? new DeliveryFeeCalculator(tenant.Fees).ShipNowFee : 0;
+        var shipped = group.ShipNow(now, timeZone);
         if (shipped.IsFailure)
         {
             return shipped.Error!;
@@ -45,6 +52,7 @@ public class ShipNowHandler(IAppDbContext db, ITenantContext tenantContext, ICur
 
         return new ShipNowResult(
             group.Number,
-            DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(group.LocksAt, timeZone)));
+            DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(group.LocksAt, timeZone)),
+            addedFee);
     }
 }
