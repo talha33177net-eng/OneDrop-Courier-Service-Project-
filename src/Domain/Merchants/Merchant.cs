@@ -8,8 +8,6 @@ namespace Domain.Merchants;
 /// </summary>
 public class Merchant : TenantEntity, IArchivable
 {
-    public const int DefaultReliabilityScore = 100;
-
     private Merchant()
     {
     }
@@ -33,9 +31,6 @@ public class Merchant : TenantEntity, IArchivable
     public string ContactPhone { get; private set; } = "";
 
     public string? ContactEmail { get; private set; }
-
-    /// <summary>Late or missed handovers lower it; merchants that are late too often lose grouping.</summary>
-    public int ReliabilityScore { get; private set; } = DefaultReliabilityScore;
 
     public bool Archived { get; private set; }
 }

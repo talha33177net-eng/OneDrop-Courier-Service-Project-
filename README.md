@@ -15,7 +15,7 @@ progress and daily log live in [Plans/Implementation-Plan.md](Plans/Implementati
 |---|---|---|
 | 1 — Foundation | Solution, tenancy (catalog, resolvers, filters, save guard), domain + database, Identity with roles and phone OTP, seeded tenants/zones/hubs, merchant API key + Create Order | **Done** |
 | 2 — Grouping core | Customer matching, delivery groups + 3-day rule, quote (৳60 / +৳25), lock job + Ship now, outbox + fake SMS, customer group page | **Done** |
-| 3 — Operations & money | Pickup routes + QR labels, hub scan/shelves/shuttle, rider trips, market pricing (joinable fast deliveries, Ship now as an upgrade, weight allowance, staggered pickups), door payment, confirmation and advance payment, ledger + settlement | In progress (3.1–3.6b done) |
+| 3 — Operations & money | Pickup routes + QR labels, hub scan/shelves/shuttle, rider trips, market pricing (joinable fast deliveries, Ship now as an upgrade, weight allowance, staggered pickups), door payment, confirmation and advance payment, ledger + settlement, trust (advance after a refusal until 3 good deliveries; late shops drop off at the hub) | In progress (3.1–3.8 done) |
 | 4 — Polish & proof | SignalR dashboards, webhooks, Row-Level Security, Docker, CI, simulator | |
 
 ## Run it
@@ -97,7 +97,7 @@ curl http://localhost:5080/api/v1/orders \
 
 | Endpoint | |
 |---|---|
-| `POST /api/v1/orders` | 201 with the order number and `fee`; `waitsFor` says what the order waits for from the customer (`none`, `confirm`, or `payInAdvance` when the shop sends `"feeInAdvance": true`, after a refusal, or a no-show). A retry with the same `Idempotency-Key` returns 200 and the same order, a different body with that key 409 |
+| `POST /api/v1/orders` | 201 with the order number and `fee`; `waitsFor` says what the order waits for from the customer (`none`, `confirm`, or `payInAdvance` when the shop sends `"feeInAdvance": true`, after a refusal or a no-show, until the customer has accepted the operator's count of deliveries since). A retry with the same `Idempotency-Key` returns 200 and the same order, a different body with that key 409 |
 | `GET /api/v1/orders/{number}` | The caller's own order; anyone else's is 404 |
 | `GET /api/v1/areas` | The area list an address must pick from |
 | `GET /api/v1/quote?phone=&area=&line1=` | The delivery fee for the checkout: `{ fee, currency, joinsDelivery }` (৳60 for a new delivery, +৳25 when one is already on its way, the fast fee for `speed=fast`). Optional `weightGrams` adds each started kg above the shop's allowance (Dhaka 2 kg, then ৳15); optional `pickupPointId` (default: the shop's default point) |

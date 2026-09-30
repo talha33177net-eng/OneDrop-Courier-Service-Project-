@@ -77,8 +77,10 @@ public class CustomerDirectory(IAppDbContext db)
     }
 
     /// <summary>
-    /// The customer's record so far: deliveries they accepted, and failed visits (a stop refused or with nobody home,
-    /// or an order refused at the door). A customer not saved yet has none.
+    /// The customer's record so far: deliveries they accepted, failed visits (a stop refused or with nobody home, or
+    /// an order refused at the door), and the deliveries accepted since the last failure. A failure is dated by its
+    /// stop; a delivery handed over at the same stop as a refused order does not count as accepted after it. A
+    /// customer not saved yet has none.
     /// </summary>
     public async Task<CustomerStanding> StandingAsync(Customer customer, CancellationToken cancellationToken)
     {
@@ -94,17 +96,38 @@ public class CustomerDirectory(IAppDbContext db)
             join g in db.DeliveryGroups on stop.DeliveryGroupId equals g.Id
             where g.CustomerId == customer.Id &&
                 (stop.Outcome == StopOutcome.Refused || stop.Outcome == StopOutcome.NotHome)
+            select stop.CompletedOn)
+            .ToListAsync(cancellationToken);
+
+        // Across every shop: the merchant filter would hide the other shops' refusals from a merchant's request
+        var refusedOrders = db.Orders
+            .IgnoreQueryFilters([QueryFilters.Merchant])
+            .Where(order => order.CustomerId == customer.Id &&
+                (order.Status == OrderStatus.Refused || order.Status == OrderStatus.ReturnedToMerchant));
+        var refusedCount = await refusedOrders.CountAsync(cancellationToken);
+        var refusedAtDoor = await (
+            from order in refusedOrders
+            join stop in db.TripStops on order.DeliveryGroupId equals stop.DeliveryGroupId
+            where stop.Outcome == StopOutcome.Delivered
+            select stop.CompletedOn)
+            .ToListAsync(cancellationToken);
+
+        var lastFailure = failedStops.Concat(refusedAtDoor).Max();
+        if (lastFailure is null)
+        {
+            return new CustomerStanding(accepted, failedStops.Count + refusedCount, accepted);
+        }
+
+        var acceptedSince = await (
+            from stop in db.TripStops
+            join g in db.DeliveryGroups on stop.DeliveryGroupId equals g.Id
+            where g.CustomerId == customer.Id &&
+                g.Status == DeliveryGroupStatus.Delivered &&
+                stop.Outcome == StopOutcome.Delivered &&
+                stop.CompletedOn > lastFailure
             select stop.Id)
             .CountAsync(cancellationToken);
 
-        // Across every shop: the merchant filter would hide the other shops' refusals from a merchant's request
-        var refusedOrders = await db.Orders
-            .IgnoreQueryFilters([QueryFilters.Merchant])
-            .CountAsync(
-                order => order.CustomerId == customer.Id &&
-                    (order.Status == OrderStatus.Refused || order.Status == OrderStatus.ReturnedToMerchant),
-                cancellationToken);
-
-        return new CustomerStanding(accepted, failedStops + refusedOrders);
+        return new CustomerStanding(accepted, failedStops.Count + refusedCount, acceptedSince);
     }
 }

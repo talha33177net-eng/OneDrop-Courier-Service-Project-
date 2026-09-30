@@ -255,11 +255,8 @@ public class RiderDayHandler(IAppDbContext db, ITenantContext tenantContext, Tim
             var later = await LaterDeliveryAsync(group, now, (tenant, timeZone), cancellationToken);
             foreach (var order in notReady)
             {
-                // The shop pays for the second trip when it had not handed the order over, once per order; not when
-                // the parcel was already with us, nor when it waited at the shop for the customer's advance
-                var shopLate = order.Status == OrderStatus.Created && !order.WaitsForAdvance && order.LeftBehindOn is null;
-                order.FollowUpIn(later, now);
-                if (shopLate && tenant.LateHandoverFee > 0)
+                // The shop pays for the second trip when it had not handed the order over (Order.FollowUpIn decides)
+                if (order.FollowUpIn(later, now) && tenant.LateHandoverFee > 0)
                 {
                     db.LedgerEntries.Add(LedgerEntry.LateHandoverFee(order, tenant.LateHandoverFee, trip.DeliveryDate));
                 }

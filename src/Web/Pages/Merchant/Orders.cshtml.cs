@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
+using Application.Merchants;
 using Domain.Customers;
 using Domain.Orders;
 
@@ -10,7 +11,7 @@ namespace Web.Pages.Merchant;
 /// The merchant's own orders. No WHERE MerchantId here on purpose: the merchant filter adds it, and this page
 /// is the visible proof that it does.
 /// </summary>
-public class OrdersModel(IAppDbContext db) : PageModel
+public class OrdersModel(IAppDbContext db, ShopDropOffs dropOffs) : PageModel
 {
     public string MerchantName { get; private set; } = "";
 
@@ -18,9 +19,13 @@ public class OrdersModel(IAppDbContext db) : PageModel
 
     public IReadOnlyList<KeyRow> Keys { get; private set; } = [];
 
+    /// <summary>Set while the shop has been late too often and brings its parcels to the hub itself.</summary>
+    public OwnDropOff? DropOff { get; private set; }
+
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         MerchantName = await db.Merchants.Select(m => m.Name).FirstOrDefaultAsync(cancellationToken) ?? "";
+        DropOff = await dropOffs.OwnAsync(cancellationToken);
 
         Orders = await (
             from order in db.Orders

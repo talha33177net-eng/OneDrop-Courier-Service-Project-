@@ -18,11 +18,15 @@
     <button type="button" class="button secondary no-print" onclick="window.print()">Print</button>
 </div>
 
+@{
+    var visits = sheet.Stops.Count(stop => stop.Visit);
+}
 <p>
-    <strong>@sheet.Stops.Count @(sheet.Stops.Count == 1 ? "stop" : "stops")</strong>,
+    <strong>@visits @(visits == 1 ? "stop" : "stops")</strong>,
     @sheet.Packages @(sheet.Packages == 1 ? "package" : "packages") to collect.
     Scan or tick every label; a parcel that is not ready stays for the next run.
     An order marked "Leave it" waits for its delivery fee in advance: do not take it.
+    A shop marked "Brings its parcels to the hub" has been late too often: do not call there.
 </p>
 
 @if (sheet.Stops.Count == 0)
@@ -39,7 +43,14 @@
                 <h2>@stop.Merchant <span class="muted">· @stop.PickupPoint</span></h2>
                 <div>@stop.Address · <a href="tel:@stop.ContactPhone">@stop.ContactPhone</a></div>
             </div>
-            <span class="pill">@stop.Packages @(stop.Packages == 1 ? "package" : "packages")</span>
+            @if (stop.Visit)
+            {
+                <span class="pill">@stop.Packages @(stop.Packages == 1 ? "package" : "packages")</span>
+            }
+            else
+            {
+                <span class="pill pill-waiting">Brings its parcels to the hub until @stop.DropsOffUntil!.Value.ToString("ddd d MMM")</span>
+            }
         </div>
         <div class="table-wrap">
             <table>
@@ -67,7 +78,7 @@
                             </td>
                             <td>@string.Join(", ", order.Labels)</td>
                             <td class="num">
-                                @(order.Collect ? string.Concat(Enumerable.Repeat("☐ ", order.Packages)) : "—")
+                                @(order.Collect && stop.Visit ? string.Concat(Enumerable.Repeat("☐ ", order.Packages)) : "—")
                             </td>
                         </tr>
                     }

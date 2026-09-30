@@ -13,9 +13,9 @@ The one place to see where we are and what comes next. Built from the two projec
 
 | | |
 |---|---|
-| Current week | **Week 3 — Operations and money** (9 of 11) |
-| Next task | 3.8 Trust score (simple) |
-| Last session | 2026-09-29 — 3.6b (`0587846`), then task 3.7 (ledger, next-day payouts, riders' cash hand-in) and the UI upgrade (role homes, Hub today, New order, guide) committed together on `day3`, not pushed. 3.4, the market review, 3.4a, 3.5, 3.6a, 3.6b, 3.7 and the UI upgrade are not yet in `main` |
+| Current week | **Week 4 — Polish and proof** (0 of 9) |
+| Next task | 4.1 Dashboards (SignalR) |
+| Last session | 2026-09-30 — task 3.8 (trust and drop-off) and 3.9 (Week 3 demo run, Week 3 complete) on `day4`, uncommitted for review. `main` holds everything up to 3.7 and the UI upgrade (merge `54733e6`) |
 | Blockers | None |
 
 ---
@@ -46,10 +46,10 @@ A task is **not done** until all of these pass. Record the result in the daily l
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
-| 3 | Operations and money | Group delivered, merchants settled | 🔄 9 of 11 |
+| 3 | Operations and money | Group delivered, merchants settled | ✅ Done 2026-09-30 |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
-Tests today: **344 passing** (229 domain, 6 architecture, 109 integration).
+Tests today: **352 passing** (235 domain, 6 architecture, 111 integration).
 
 ---
 
@@ -205,7 +205,7 @@ Tasks:
 
 ---
 
-## Week 3 — Operations and money ⬜
+## Week 3 — Operations and money ✅
 
 **Done when:** a group is picked up, sorted at the hub, delivered by a rider who collects the fee and COD, and
 next morning each merchant is settled.
@@ -527,12 +527,72 @@ next morning each merchant is settled.
       of all payouts or of cash shortfalls over time (4.1); a trip whose rider never closes a stop cannot hand in its cash;
       a second late handover of the same order is not charged again; COD of a wallet payment later reversed by the
       gateway is not modelled; no phone-width screenshot of the Cash and Payouts pages.
-- [ ] **3.8 Trust score (simple).** Refusals and no-shows lower it; merchants' late handovers lower theirs.
+- [x] **3.8 Trust score (simple).** Refusals and no-shows lower it; merchants' late handovers lower theirs.
       *Cut option:* a simple refusal counter.
       *Added by the market review:* a customer's refusal or no-show switches on advance payment (3.6) at every shop
       of the operator; a shop learns only "pays the fee in advance", never why or where. A shop late again and
       again must bring its parcels to the hub.
-- [ ] **3.9 Week 3 demo run.** Group delivered, merchants settled.
+      Owner's answers (2026-09-30): after a refusal or no-show the fee is paid in advance until the customer has
+      accepted **3 deliveries since the last failure**, and the 10-delivery trust counts only deliveries with no failure
+      since; a shop with **3 late handovers in 30 days** brings its parcels to the hub; the unused score columns go.
+      *Done 2026-09-30:* no stored score. **Customer:** `CustomerStanding` gains `AcceptedSinceLastFailure` and
+      `StepFor` takes the tenant's `TrustRules` (`TrustedAfterDeliveries`, new `TrustedAgainAfterDeliveries`):
+      trusted with enough deliveries since the last failure; otherwise the advance while fewer than 3 have been
+      accepted since a failure, or when the shop asks; a first order confirms. `CustomerDirectory.StandingAsync` dates
+      each failure by its stop (`TripStop.CompletedOn`: a stop refused or with nobody home, or a delivered stop where an
+      order was refused) and counts the delivered stops after the last one, across every shop. **Shop:**
+      `Order.ShopLateOn`, set by `Order.FollowUpIn` (now returning whether the shop was late: still `Created`, not held
+      for the advance, first time left behind); the late fee reads it (`LedgerEntry.LateHandoverFee`), so one rule
+      serves both. `Domain/Merchants/DropOffRule` (`DropOffAfterLateHandovers`, `LateHandoverWindowDays`): until when a
+      shop drops off, the moment the oldest late handover keeping it over the limit leaves the window.
+      `Application/Merchants/ShopDropOffs` works it out from `ShopLateOn` (merchant filter on a shop's own request):
+      the route sheet keeps the shop's stop with "Brings its parcels to the hub until …", nothing to collect there, the
+      route list leaves it out (and so does Hub today's count), and the shop's **My orders** says until when, why, and
+      which hub by what time. SQL: `Orders.Order.ShopLateOn` + `IX_Order_Tenant_ShopLateOn`; three nullable tenant
+      settings with checks; DbUp `2026/008_TrustAndDropOff` (3, 3, 30 at both operators), `2026/009_ShopLateOrders`
+      (fills `ShopLateOn` from the late fees already charged); `Pre/004_DropTrustScores` drops
+      `Customers.Customer.TrustScore` and `Merchants.Merchant.ReliabilityScore` with their defaults. No 02:00 job.
+      *Tested:* build 0 errors, no new warnings; 6 new domain tests (the advance until 3 deliveries since a failure,
+      trust only with no failure since and a refusal after 10 deliveries still asks; `ShopLateOn` only for an order the
+      shop had not handed over, once; drop-off from the third late handover in the window, until the oldest counting one
+      leaves it, older ones not counted, a tenant's own count and window) and 2 new integration tests (a real refusal at
+      the door on one trip with four visits, then three accepted one after another: another shop's order waits for the
+      advance, advance, advance, then nothing, and the shop's own request is heard again; a shop one short of the limit
+      is visited, the third late handover puts it on "brings its parcels" until the right day with nothing to collect
+      and out of the route list, its page names the hub and another shop's does not), plus the late-fee test checks
+      `ShopLateOn` and the zone-list test ignores the trip tests' own zones. The first run showed the check orders
+      joining one delivery still waiting for its advance (the 3.6b rule, correct): each check now has its own address.
+      Mutations: the advance kept after recovery fails 1 domain and 1 integration test; the route list counting a
+      drop-off shop fails the integration test. 235 + 6 + 111 = 352 pass, none skipped. The publish script was reviewed
+      first (`Orders.Order` and `Platform.Tenant` rebuilt with their rows copied; the score columns dropped by Pre/004
+      before the publish); both databases published, Pre/004, DbUp 008 and 009 ran (dev: OD-100076 filled).
+      Live on dev: Farzana Islam 01819274101 with Fashion House OD-100088–OD-100091 in Gulshan 1, Gulshan 2, Niketan and
+      Baridhara (DG-100053–DG-100056, made due by hand, scanned in at GUL, planned onto Kamal Uddin's trip with the older
+      DG-100024). OD-100088 refused at the door; Gadget BD OD-100092 then `payInAdvance`; after each delivery of ৳560 in
+      cash Beauty Shop's OD-100093 `payInAdvance`, OD-100094 `payInAdvance`, OD-100095 `none`; with the shop asking,
+      OD-100096 `payInAdvance`; DG-100024 nobody home, "Every stop is done", ৳1,680 to hand in; the same phone at
+      Chattogram OD-100097 `confirm`. Shop: OD-100062 (left at the shop in the 3.5 check, before late fees existed)
+      given its `ShopLateOn` by hand; the Mirpur sheet still called at Beauty Shop (20 packages; list 3 stops, 57
+      orders, 60 packages). A new customer 01819274102 with Fashion House OD-100098 and Beauty Shop OD-100099 in
+      DG-100063, made due, only Fashion's parcel scanned in, planned onto Rafiq Hasan's trip; Start trip left OD-100099
+      behind ("1 order was not ready and follows") with `ShopLateOn` and the ৳25 late fee in one save. Then: sheet
+      "Brings its parcels to the hub until Thu 29 Oct", list 2 stops, 38 orders, 40 packages; Beauty Shop's page "Bring
+      your parcels to the hub until Thursday 29 October. 3 of your orders were not ready … Mirpur hub, Road 3, Section
+      10, Mirpur, Dhaka 1216, by 11:30 AM"; Fashion House's page no notice; OD-100099 brought in and scanned onto
+      MIR-01; DG-100063 ৳960 in cash, DG-100023 nobody home, trip done; Chattogram hub staff 404 on the Dhaka sheet. No
+      errors in the app log.
+      *Left:* the customer is not told why they pay in advance (no SMS "after a refused delivery"); a customer's
+      advance-waiting delivery keeps the rule "an order joining it waits for the same payment" even once the customer
+      has recovered; the shop is not texted when it goes onto or off drop-off; the collect scan does not refuse a
+      drop-off shop's parcel (the collector just does not call); no tenant admin screen of late shops or refusing
+      customers (4.1); the settings are SQL-only like the others.
+- [x] **3.9 Week 3 demo run.** Group delivered, merchants settled.
+      *Done 2026-09-30:* on dev, one delivery through every Week 3 screen (details in the daily log): three shops'
+      orders for one new customer → one delivery at ৳110, confirmed by the SMS links, collected and scanned onto one
+      shelf (Beauty Shop, on drop-off, brought its parcel), locked and planned by the jobs, handed over for ৳3,060 in
+      cash, the cash handed in at the hub, and next morning each shop paid its COD less its charges. No code change.
+      *Left:* the Start trip message "nothing of it was on its shelf" also covers a delivery with some parcels here
+      but no order complete; the wording could say "no order of it is complete" (4.9 polish).
 
 ---
 
@@ -586,7 +646,7 @@ Payments stay fake in the MVP either way.
 |---|---|---|
 | Every 5 seconds (`Jobs:OutboxInterval`) | Outbox sender (in-process dispatcher, not Hangfire) | 2 ✅ |
 | Every 5 minutes | Lock check (lock due groups) | 2 ✅ |
-| 02:00 | Recalculate trust and reliability scores | 3 |
+| 02:00 | Recalculate trust and reliability scores — not needed: advance payment and drop-off are worked out from history when an order is placed or a sheet is opened (3.8) | 3 ✅ |
 | Every hour (`Jobs:SettleMerchants`) | Settle merchants: every shop's lines up to yesterday (tenant's day), paid out soon after the tenant's midnight instead of at 06:00; a failed payout is sent again the next hour (3.7) | 3 ✅ |
 | Every 15 minutes (`Jobs:PlanTrips`) | Plan delivery trips (deliveries due today → riders), instead of once at 08:00 (3.4) | 3 ✅ |
 | 13:00 | Build pickup routes per zone — not needed: the route sheet is worked out when opened (3.1) | 3 ✅ |
@@ -700,6 +760,12 @@ Payments stay fake in the MVP either way.
 | 2026-09-29 | The riders' cash is recorded on the trip once every stop is done (`CashExpected`, `CashReceived`), not in a table of its own | One trip per rider a day already; no more cash can come in once every stop is done |
 | 2026-09-29 | UI: every role has a home, hub pages are six numbered steps of the day behind "Hub today", every page opens with a folded "how this works" box; the hub is remembered in a host-only cookie written only after a page for it rendered | The owner could not tell where to click; a preference cookie never grants access, as each page still checks the hub is the operator's |
 | 2026-09-29 | The shop's **New order** form sends the API's `CreateOrderCommand` through the same handler, with an idempotency key per form; in Development the sign-in page lists the host's demo logins as one-press buttons | One path for price, grouping and confirmation; a double press saves one order; the demo can be played from the screens alone |
+| 2026-09-30 | After a refusal or no-show the customer pays the fee in advance until they have accepted 3 deliveries since the last failure; 10 deliveries make a customer trusted only with no failure since (tenant settings `TrustedAgainAfterDeliveries`, `TrustedAfterDeliveries`) (owner) | A customer who refused once earns their way back; ten old deliveries must not excuse a new refusal |
+| 2026-09-30 | A shop with 3 late handovers in the last 30 days brings its parcels to the hub; it is back on the route when fewer are left in the window (tenant settings `DropOffAfterLateHandovers`, `LateHandoverWindowDays`) (owner) | "A shop late again and again must bring its parcels to the hub"; a rolling window ends the drop-off by itself with nobody to lift it |
+| 2026-09-30 | No stored trust or reliability score: both rules are counts from history, worked out when an order is placed or a sheet opened; the unused `TrustScore` and `ReliabilityScore` columns are dropped (`Pre/004`) and no 02:00 job is needed (owner) | Nothing to keep in step and nothing to go stale between runs; a refusal counts at the next order |
+| 2026-09-30 | A failure is dated by its stop (`TripStop.CompletedOn`); a delivery handed over at the same stop as a refused order is not counted as accepted after it | A partial refusal is a failure, not a good delivery; order statuses have no reliable date of their own |
+| 2026-09-30 | A shop's late handover is stored on the order (`Order.ShopLateOn`, decided in `FollowUpIn`), and the late fee reads it | It counts at an operator whose late fee is ৳0 and it is dated for the window; one rule for fee and drop-off |
+| 2026-09-30 | A shop that drops off is still listed on the route sheet (so hub staff expect its parcels) but counts nothing to collect, and the route list leaves it out; its own page says until when and to which hub | The collector does not call; staff know what is coming; the shop is told plainly, the customers' records never |
 
 ## Quick reference
 
@@ -716,6 +782,49 @@ Payments stay fake in the MVP either way.
 ## Daily log
 
 Newest first. One entry per working day: what was done, how it was tested, what is next.
+
+### 2026-09-30
+- **Decided with the owner:** after a refusal or no-show the fee is paid in advance until 3 deliveries have been
+  accepted since, and 10 deliveries count as trusted only with no failure since; a shop with 3 late handovers in 30
+  days brings its parcels to the hub; the unused `TrustScore` and `ReliabilityScore` columns are dropped.
+- **Done (task 3.8):** `Domain/Customers/CustomerStanding` (`AcceptedSinceLastFailure`, `TrustRules`),
+  `Domain/Merchants/DropOffRule`, `Order.ShopLateOn` and `FollowUpIn` deciding it, `LedgerEntry.LateHandoverFee` reads
+  it; `Tenant` + `TenantInfo` (`Trust`, `DropOff`) + `TenantCatalog` with three settings; `CustomerDirectory.StandingAsync`
+  dated by stops; `Application/Merchants/ShopDropOffs`; route list and sheet; "My orders" notice; SQL `Orders.Order`,
+  `Platform.Tenant`, `Customers.Customer`, `Merchants.Merchant`; `Pre/004_DropTrustScores`, DbUp `2026/008`, `009`;
+  README and Project-Context.
+- **Tested:** see task 3.8 above: 6 new domain and 2 new integration tests, two mutations caught, 235 + 6 + 111 = 352
+  pass, none skipped; both databases published; live on dev through the Gulshan and Mirpur hubs (OD-100088–OD-100099,
+  DG-100053–DG-100056, DG-100063): the advance until the third accepted delivery, Beauty Shop put on drop-off by a real
+  third late handover, its page and the sheet say until Thu 29 Oct. The link to ras-x2 was down for a while (DNS did
+  not answer); the first publish was stopped before connecting and nothing was applied.
+- **Next:** task 3.9, Week 3 demo run.
+- **Done (task 3.9):** Week 3 demo run on dev; Week 3 complete. No code change.
+- **Tested:** build 0 errors, 0 warnings; 235 + 6 + 111 = 352 pass, none skipped. Live (app started with the lock,
+  plan-trips and settle jobs every minute), new customer Parveen Sultana 01819274111, House 7, Road 2, Flat 4A,
+  Mirpur 10: Fashion House quoted ৳60 and OD-100100 charged ৳60 (COD ৳1,500), Gadget BD OD-100101 ৳25 (৳800), Beauty
+  Shop OD-100102 ৳25 (৳650), one open delivery DG-100065 for Fri 2 Oct; the full address with the phone spelt
+  `+880 1819 274111` was then quoted ৳0, joining, for both shops already in it (quotes sent without the flat had priced
+  another address, ৳60, correctly). Each a first cash order: `waitsFor` confirm, the SMS asked with a link, and each
+  link confirmed ("We deliver it on Friday 2 October"). Signed in by SMS code, "My deliveries": 0 of 3 collected, fee
+  ৳110, COD ৳2,950, ৳3,060 at the door, "You save ৳70 against 3 separate deliveries", "Deliver tomorrow for +৳10".
+  Mirpur route sheet: Fashion House and Gadget BD to collect, Beauty Shop "Brings its parcels to the hub until Thu
+  29 Oct" (from 3.8); collect scans for the two, receive scans for all three (Beauty Shop "Reached a hub without a
+  pickup scan") → shelf MIR-03, 3 of 3; a repeat "Already scanned in here". The delivery's dates moved two days back
+  by hand; the job "Locked 1 of 1" (`LockedOn` = the deadline, "is closed … arrive together" texted) and "Planned 1"
+  onto Sumon Ali's trip (Rafiq Hasan's was finished in 3.8) beside the old DG-100029, which stayed at the hub at Start
+  trip (1 of 2 parcels). At the door "Collect ৳3,060"; ৳3,000 refused; ৳3,060 in cash → "Handed over", receipt
+  "৳3,060 paid in cash … Delivery fee ৳110. Beauty Shop OD-100102 ৳650, Fashion House OD-100100 ৳1,500, Gadget BD
+  OD-100101 ৳800"; payment 12 Paid ৳110 + ৳2,950, stop Delivered ৳110/৳2,950, three COD lines, orders and delivery
+  Delivered, shelf freed, trip Finished. Hub Cash: ৳3,060 recorded, no shortfall; the rider's page "Cash handed in
+  ৳3,060". Next morning (the day's 9 unpaid Dhaka lines dated yesterday by hand): "3 payouts, 5270.00 sent, 0 carried
+  forward" — Fashion House ৳3,870 (with the 3.8 check's lines), Gadget BD ৳800, Beauty Shop ৳600 (৳650 less today's
+  ৳25 late fee and the ৳25 carried since 3.7), each equal to its lines, `dhaka-settlement-3` to `-5`; the next run
+  paid nothing. Gadget BD's Payouts page shows none of the other shops' orders and its key 404s on OD-100100; the
+  Chattogram key 404s on it; the same phone is quoted ৳70 at Chattogram, a new delivery; Chattogram hub staff 404 on
+  Mirpur's Cash page; the customer cookie on the Chattogram host goes to its login. "My deliveries" shows DG-100065
+  Delivered ৳110. No errors in the app log.
+- **Next:** Week 4, task 4.1 dashboards.
 
 ### 2026-09-29
 - **Decided with the owner:** weight allowance 2 kg per shop, then ৳15 per started kg in Dhaka and ৳20 in Chattogram;

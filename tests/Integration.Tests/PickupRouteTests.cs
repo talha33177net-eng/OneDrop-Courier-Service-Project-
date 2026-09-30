@@ -70,7 +70,10 @@ public partial class PickupRouteTests(WebAppFactory factory)
     {
         WebAppFactory.RequireDatabase();
 
-        var dhaka = await RoutesAsync("dhaka", handler => handler.ListAsync(Cancel));
+        // Leaving out the zones the trip tests build for themselves (TripTests.NewHubAsync)
+        var dhaka = (await RoutesAsync("dhaka", handler => handler.ListAsync(Cancel)))
+            .Where(route => !route.Zone.StartsWith("Trip test", StringComparison.Ordinal))
+            .ToList();
         var chattogram = await RoutesAsync("chattogram", handler => handler.ListAsync(Cancel));
         var dhakaRouteFromChattogram = await RoutesAsync("chattogram", handler => handler.GetAsync(dhaka[0].Id, Cancel));
 

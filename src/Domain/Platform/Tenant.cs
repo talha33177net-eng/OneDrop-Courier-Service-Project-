@@ -65,5 +65,20 @@ public class Tenant : AuditedEntity, IArchivable
     /// <summary>What a shop pays when a rider has to leave its order behind because the shop had not handed it over.</summary>
     public decimal? LateHandoverFee { get; private set; }
 
+    /// <summary>
+    /// Accepted deliveries, counted since their last refusal or no-show, after which a customer stops paying the fee in
+    /// advance. Nullable only because the column came after the launch seed; a tenant without it is not served.
+    /// </summary>
+    public int? TrustedAgainAfterDeliveries { get; private set; }
+
+    /// <summary>
+    /// Late handovers within <see cref="LateHandoverWindowDays"/> after which a shop brings its parcels to the hub
+    /// itself instead of waiting for the pickup route.
+    /// </summary>
+    public int? DropOffAfterLateHandovers { get; private set; }
+
+    /// <summary>Days a late handover counts towards <see cref="DropOffAfterLateHandovers"/>.</summary>
+    public int? LateHandoverWindowDays { get; private set; }
+
     public bool Archived { get; private set; }
 }

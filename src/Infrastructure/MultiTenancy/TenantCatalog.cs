@@ -50,8 +50,8 @@ public class TenantCatalog(IServiceScopeFactory scopeFactory, IMemoryCache cache
             foreach (var unset in tenants.Where(t => !IsComplete(t)))
             {
                 logger.LogWarning(
-                    "Tenant {Slug} has no weight allowance, extra kg fee, trusted-after count, return charge or " +
-                        "late-handover fee set and is not served",
+                    "Tenant {Slug} has not set every setting added after the launch seed (weight allowance, trust, " +
+                        "shop charges or drop-off rule) and is not served",
                     unset.Slug);
             }
 
@@ -74,7 +74,10 @@ public class TenantCatalog(IServiceScopeFactory scopeFactory, IMemoryCache cache
                         t.ExtraKgFee!.Value,
                         t.TrustedAfterDeliveries!.Value,
                         t.ReturnCharge!.Value,
-                        t.LateHandoverFee!.Value))
+                        t.LateHandoverFee!.Value,
+                        t.TrustedAgainAfterDeliveries!.Value,
+                        t.DropOffAfterLateHandovers!.Value,
+                        t.LateHandoverWindowDays!.Value))
             ];
         }) ?? [];
     }
@@ -86,6 +89,9 @@ public class TenantCatalog(IServiceScopeFactory scopeFactory, IMemoryCache cache
             tenant.ExtraKgFee is not null &&
             tenant.TrustedAfterDeliveries is not null &&
             tenant.ReturnCharge is not null &&
-            tenant.LateHandoverFee is not null;
+            tenant.LateHandoverFee is not null &&
+            tenant.TrustedAgainAfterDeliveries is not null &&
+            tenant.DropOffAfterLateHandovers is not null &&
+            tenant.LateHandoverWindowDays is not null;
     }
 }

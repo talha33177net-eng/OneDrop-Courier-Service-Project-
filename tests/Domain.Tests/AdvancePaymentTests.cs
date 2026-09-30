@@ -9,7 +9,8 @@ namespace Domain.Tests;
 /// <summary>Task 3.6b: what a new order waits for from the customer, and the fee paid in advance.</summary>
 public class AdvancePaymentTests
 {
-    private const int TrustedAfter = 10;
+    // The launch tenants' trust settings (DbUp 006 and 008)
+    private static readonly TrustRules Rules = new(TrustedAfterDeliveries: 10, TrustedAgainAfterDeliveries: 3);
 
     // The launch tenant's prices (seed 001, fast fee 003, weight 004)
     private static readonly FeeSchedule Dhaka = new(60, 25, 70, 2000, 15);
@@ -21,38 +22,51 @@ public class AdvancePaymentTests
         Assert.Equal(CustomerStep.Confirm, Step(CustomerStanding.New, cod: 1200));
 
         // Once they have taken a delivery, nothing is asked until something goes wrong
-        Assert.Equal(CustomerStep.None, Step(new CustomerStanding(1, 0), cod: 1200));
+        Assert.Equal(CustomerStep.None, Step(CustomerStanding.Clean(1), cod: 1200));
     }
 
     [Fact]
     public void A_product_paid_online_never_waits()
     {
         Assert.Equal(CustomerStep.None, Step(CustomerStanding.New, cod: 0));
-        Assert.Equal(CustomerStep.None, Step(new CustomerStanding(0, 3), cod: 0));
+        Assert.Equal(CustomerStep.None, Step(new CustomerStanding(0, 3, 0), cod: 0));
         Assert.Equal(CustomerStep.None, Step(CustomerStanding.New, cod: 0, shopAsks: true));
     }
 
     [Fact]
     public void A_failed_visit_or_the_shops_request_asks_for_the_fee_in_advance()
     {
-        Assert.Equal(CustomerStep.PayInAdvance, Step(new CustomerStanding(0, 1), cod: 1200));
-        Assert.Equal(CustomerStep.PayInAdvance, Step(new CustomerStanding(2, 1), cod: 1200));
-        Assert.Equal(CustomerStep.PayInAdvance, Step(new CustomerStanding(2, 0), cod: 1200, shopAsks: true));
+        Assert.Equal(CustomerStep.PayInAdvance, Step(new CustomerStanding(0, 1, 0), cod: 1200));
+        Assert.Equal(CustomerStep.PayInAdvance, Step(new CustomerStanding(2, 1, 0), cod: 1200));
+        Assert.Equal(CustomerStep.PayInAdvance, Step(CustomerStanding.Clean(2), cod: 1200, shopAsks: true));
 
         // A first order the shop asks about is paid in advance, not merely confirmed
         Assert.Equal(CustomerStep.PayInAdvance, Step(CustomerStanding.New, cod: 1200, shopAsks: true));
     }
 
     [Fact]
-    public void A_customer_with_enough_accepted_deliveries_is_trusted_whatever_happened()
+    public void After_a_failure_the_fee_is_paid_in_advance_until_enough_deliveries_are_accepted_since()
     {
-        var trusted = new CustomerStanding(TrustedAfter, 4);
+        // Task 3.8: 3 deliveries accepted since the last refusal or no-show, whatever came before it
+        Assert.Equal(CustomerStep.PayInAdvance, Step(new CustomerStanding(5, 2, 2), cod: 1200));
+        Assert.Equal(CustomerStep.None, Step(new CustomerStanding(6, 2, 3), cod: 1200));
+
+        // Back to normal means the shop's own request is heard again
+        Assert.Equal(CustomerStep.PayInAdvance, Step(new CustomerStanding(6, 2, 3), cod: 1200, shopAsks: true));
+    }
+
+    [Fact]
+    public void A_customer_is_trusted_after_enough_deliveries_with_no_failure_since()
+    {
+        var trusted = CustomerStanding.Clean(10);
 
         Assert.Equal(CustomerStep.None, Step(trusted, cod: 1200));
         Assert.Equal(CustomerStep.None, Step(trusted, cod: 1200, shopAsks: true));
+        Assert.Equal(CustomerStep.None, Step(new CustomerStanding(14, 1, 10), cod: 1200, shopAsks: true));
 
-        // One delivery short of the tenant's count, a refusal still asks for the fee
-        Assert.Equal(CustomerStep.PayInAdvance, Step(new CustomerStanding(TrustedAfter - 1, 1), cod: 1200));
+        // Ten deliveries do not excuse a refusal after them
+        Assert.Equal(CustomerStep.PayInAdvance, Step(new CustomerStanding(10, 1, 0), cod: 1200));
+        Assert.Equal(CustomerStep.PayInAdvance, Step(CustomerStanding.Clean(9), cod: 1200, shopAsks: true));
     }
 
     [Fact]
@@ -147,7 +161,7 @@ public class AdvancePaymentTests
 
     private static CustomerStep Step(CustomerStanding standing, decimal cod, bool shopAsks = false)
     {
-        return standing.StepFor(cod, shopAsks, TrustedAfter);
+        return standing.StepFor(cod, shopAsks, Rules);
     }
 
     private static FeeLine Line(long merchantId)

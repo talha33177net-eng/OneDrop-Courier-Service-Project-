@@ -5,14 +5,14 @@
 --          Shared by all merchants of the tenant - that is what makes grouping possible.
 -- Author: Courier team
 -- Date: 2026-09-27
+-- 2026-09-30: TrustScore dropped (task 3.8, Pre/004): whether a customer pays in advance is worked out from their
+--             deliveries and failed visits when an order is placed
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Customers].[Customer] (
     [Id]            BIGINT         IDENTITY (1, 1) NOT NULL,
     [TenantId]      BIGINT         NOT NULL,
     [Phone]         NVARCHAR (20)  NOT NULL,
     [Name]          NVARCHAR (200) NULL,
-    -- Refusals and no-shows lower it; a low score means the delivery fee is paid before dispatch
-    [TrustScore]    INT            DEFAULT ((100)) NOT NULL,
     [PhoneVerified] BIT            DEFAULT ((0)) NOT NULL,
     [Archived]      BIT            DEFAULT ((0)) NOT NULL,
     [UpdatedId]     BIGINT         NULL,

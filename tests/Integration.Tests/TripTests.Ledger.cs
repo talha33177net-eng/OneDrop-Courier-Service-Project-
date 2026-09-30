@@ -77,6 +77,9 @@ public partial class TripTests
             await LedgerOfAsync(atTheShop));
         Assert.Empty(await LedgerOfAsync(halfIn));
         Assert.Empty(await LedgerOfAsync(ready));
+
+        // Only the shop's own lateness is recorded towards its drop-off (task 3.8)
+        Assert.Equal(new[] { true, false, false }, await ShopLateAsync(atTheShop, halfIn, ready));
     }
 
     [Fact]
@@ -302,18 +305,20 @@ public partial class TripTests
             .ToListAsync(Cancel);
     }
 
-    /// <summary>A shop of this test's own, picking up in Mirpur 10, with a login when asked for one.</summary>
-    private async Task<TestShop> NewShopAsync(TestHub hub, bool withLogin = false)
+    /// <summary>
+    /// A shop of this test's own, picking up in <paramref name="pickupArea"/>, with a login when asked for one.
+    /// </summary>
+    private async Task<TestShop> NewShopAsync(TestHub hub, bool withLogin = false, string pickupArea = "Mirpur 10")
     {
         await using var scope = await ScopeAsync("dhaka");
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var name = $"Ledger Shop {hub.Code} {Guid.NewGuid():N}"[..28];
-        var pickupArea = await db.Areas.SingleAsync(a => a.Name == "Mirpur 10", Cancel);
-        var merchant = new Merchant(name, pickupArea.ZoneId, "01711999999", null);
+        var area = await db.Areas.SingleAsync(a => a.Name == pickupArea, Cancel);
+        var merchant = new Merchant(name, area.ZoneId, "01711999999", null);
         db.Merchants.Add(merchant);
         await db.SaveChangesAsync(Cancel);
         var (key, plaintext) = MerchantApiKey.Issue(merchant.Id, "Ledger test");
-        db.PickupPoints.Add(new PickupPoint(merchant.Id, pickupArea.Id, "Shop", $"{name}, Mirpur 10", "01711999999", isDefault: true));
+        db.PickupPoints.Add(new PickupPoint(merchant.Id, area.Id, "Shop", $"{name}, {pickupArea}", "01711999999", isDefault: true));
         db.MerchantApiKeys.Add(key);
         await db.SaveChangesAsync(Cancel);
         if (!withLogin)

@@ -14,32 +14,41 @@
 -- 2026-09-29: ReturnCharge and LateHandoverFee (task 3.7): what a shop pays for an order that comes back to it and for
 --             one a rider had to leave behind, taken off its payout. Nullable for the same reason; DbUp 2026/007 sets
 --             them for the launch tenants.
+-- 2026-09-30: TrustedAgainAfterDeliveries, DropOffAfterLateHandovers and LateHandoverWindowDays (task 3.8): accepted
+--             deliveries since a failure after which a customer stops paying in advance, and the late handovers within
+--             the window after which a shop brings its parcels to the hub. Nullable for the same reason; DbUp
+--             2026/008 sets them for the launch tenants.
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Platform].[Tenant] (
-    [Id]                     BIGINT          IDENTITY (1, 1) NOT NULL,
-    [Name]                   NVARCHAR (200)  NOT NULL,
-    [Slug]                   NVARCHAR (50)   NOT NULL,
-    [TimeZone]               NVARCHAR (100)  NOT NULL,
-    [CurrencyCode]           NCHAR (3)       NOT NULL,
-    [SmsSenderName]          NVARCHAR (20)   NOT NULL,
+    [Id]                          BIGINT          IDENTITY (1, 1) NOT NULL,
+    [Name]                        NVARCHAR (200)  NOT NULL,
+    [Slug]                        NVARCHAR (50)   NOT NULL,
+    [TimeZone]                    NVARCHAR (100)  NOT NULL,
+    [CurrencyCode]                NCHAR (3)       NOT NULL,
+    [SmsSenderName]               NVARCHAR (20)   NOT NULL,
     -- Fee for the first shop in a delivery group, and for every extra distinct shop in it
-    [BaseDeliveryFee]        DECIMAL (10, 2) NOT NULL,
-    [ExtraShopFee]           DECIMAL (10, 2) NOT NULL,
-    [FastDeliveryFee]        DECIMAL (10, 2) NOT NULL,
+    [BaseDeliveryFee]             DECIMAL (10, 2) NOT NULL,
+    [ExtraShopFee]                DECIMAL (10, 2) NOT NULL,
+    [FastDeliveryFee]             DECIMAL (10, 2) NOT NULL,
     -- Days, counted from the first order's day, on which later orders still join the group (2 = Day 1 and Day 2)
-    [GroupJoinDays]          INT             NOT NULL,
+    [GroupJoinDays]               INT             NOT NULL,
     -- Grams each shop's parcels may weigh in a delivery, and the fee for every started kg above that
-    [WeightAllowanceGrams]   INT             NULL,
-    [ExtraKgFee]             DECIMAL (10, 2) NULL,
-    -- Accepted deliveries after which a customer never pays the delivery fee in advance
-    [TrustedAfterDeliveries] INT             NULL,
+    [WeightAllowanceGrams]        INT             NULL,
+    [ExtraKgFee]                  DECIMAL (10, 2) NULL,
+    -- Accepted deliveries with no failure since after which a customer never pays the delivery fee in advance
+    [TrustedAfterDeliveries]      INT             NULL,
     -- What a shop pays for an order that comes back to it, and for one a rider had to leave behind
-    [ReturnCharge]           DECIMAL (10, 2) NULL,
-    [LateHandoverFee]        DECIMAL (10, 2) NULL,
-    [Archived]               BIT             DEFAULT ((0)) NOT NULL,
-    [UpdatedId]              BIGINT          NULL,
-    [UpdatedOn]              DATETIME2 (7)   DEFAULT (getutcdate()) NOT NULL,
-    [Created]                DATETIME2 (0)   DEFAULT (getutcdate()) NOT NULL,
+    [ReturnCharge]                DECIMAL (10, 2) NULL,
+    [LateHandoverFee]             DECIMAL (10, 2) NULL,
+    -- Accepted deliveries since the last refusal or no-show after which a customer stops paying the fee in advance
+    [TrustedAgainAfterDeliveries] INT             NULL,
+    -- Late handovers within LateHandoverWindowDays after which a shop brings its parcels to the hub itself
+    [DropOffAfterLateHandovers]   INT             NULL,
+    [LateHandoverWindowDays]      INT             NULL,
+    [Archived]                    BIT             DEFAULT ((0)) NOT NULL,
+    [UpdatedId]                   BIGINT          NULL,
+    [UpdatedOn]                   DATETIME2 (7)   DEFAULT (getutcdate()) NOT NULL,
+    [Created]                     DATETIME2 (0)   DEFAULT (getutcdate()) NOT NULL,
     PRIMARY KEY CLUSTERED ([Id] ASC),
     CONSTRAINT [FK_Tenant_User] FOREIGN KEY ([UpdatedId]) REFERENCES [Identity].[User] ([Id]),
     CONSTRAINT [chk_Tenant_GroupJoinDays] CHECK ([GroupJoinDays] BETWEEN 1 AND 7),
@@ -47,7 +56,10 @@ CREATE TABLE [Platform].[Tenant] (
     CONSTRAINT [chk_Tenant_ExtraKgFee] CHECK ([ExtraKgFee] >= (0)),
     CONSTRAINT [chk_Tenant_TrustedAfterDeliveries] CHECK ([TrustedAfterDeliveries] >= (1)),
     CONSTRAINT [chk_Tenant_ReturnCharge] CHECK ([ReturnCharge] >= (0)),
-    CONSTRAINT [chk_Tenant_LateHandoverFee] CHECK ([LateHandoverFee] >= (0))
+    CONSTRAINT [chk_Tenant_LateHandoverFee] CHECK ([LateHandoverFee] >= (0)),
+    CONSTRAINT [chk_Tenant_TrustedAgainAfterDeliveries] CHECK ([TrustedAgainAfterDeliveries] >= (1)),
+    CONSTRAINT [chk_Tenant_DropOffAfterLateHandovers] CHECK ([DropOffAfterLateHandovers] >= (1)),
+    CONSTRAINT [chk_Tenant_LateHandoverWindowDays] CHECK ([LateHandoverWindowDays] >= (1))
 );
 
 

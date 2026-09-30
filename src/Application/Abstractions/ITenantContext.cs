@@ -1,3 +1,5 @@
+using Domain.Customers;
+using Domain.Merchants;
 using Domain.Pricing;
 
 namespace Application.Abstractions;
@@ -21,10 +23,19 @@ public sealed record TenantInfo(
     decimal ExtraKgFee,
     int TrustedAfterDeliveries,
     decimal ReturnCharge,
-    decimal LateHandoverFee)
+    decimal LateHandoverFee,
+    int TrustedAgainAfterDeliveries,
+    int DropOffAfterLateHandovers,
+    int LateHandoverWindowDays)
 {
     /// <summary>The tenant's prices, for <see cref="DeliveryFeeCalculator"/>.</summary>
     public FeeSchedule Fees => new(BaseDeliveryFee, ExtraShopFee, FastDeliveryFee, WeightAllowanceGrams, ExtraKgFee);
+
+    /// <summary>When a customer pays the fee in advance, for <see cref="CustomerStanding.StepFor"/>.</summary>
+    public TrustRules Trust => new(TrustedAfterDeliveries, TrustedAgainAfterDeliveries);
+
+    /// <summary>When a shop that is often late brings its parcels to the hub itself.</summary>
+    public DropOffRule DropOff => new(DropOffAfterLateHandovers, LateHandoverWindowDays);
 }
 
 /// <summary>

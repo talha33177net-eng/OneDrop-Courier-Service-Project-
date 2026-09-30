@@ -11,6 +11,7 @@ using Application.Grouping;
 using Application.Grouping.CustomerDeliveries;
 using Application.Grouping.LockDueGroups;
 using Application.Grouping.ShipNow;
+using Application.Merchants;
 using Application.Network.HubScan;
 using Application.Network.ListAreas;
 using Application.Network.PickupRoutes;
@@ -54,6 +55,7 @@ public static class DependencyInjection
         services.AddScoped<HubCashHandler>();
         services.AddScoped<SettleMerchantsJob>();
         services.AddScoped<MerchantPayoutsHandler>();
+        services.AddScoped<ShopDropOffs>();
         services.AddScoped<PhoneLoginService>();
 
         return services;

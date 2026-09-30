@@ -17,6 +17,10 @@
 --          PayInAdvance), ConfirmedOn and CustomerToken (task 3.6b): what the order waits for from the customer, when
 --          they confirmed or paid in advance, and the secret in their SMS link. An order waiting for the advance is not
 --          collected from the shop
+-- Updated: 2026-09-30 - Added ShopLateOn: when the order was first left behind because its shop had not handed it over
+--          (task 3.8); the late-handover fee is charged for it and a shop with too many lately brings its parcels to the
+--          hub (tenant settings DropOffAfterLateHandovers, LateHandoverWindowDays). Filled for older orders from their
+--          late-handover fees by DbUp 2026/009
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Orders].[Order] (
     [Id]                BIGINT          IDENTITY (1, 1) NOT NULL,
@@ -39,6 +43,7 @@ CREATE TABLE [Orders].[Order] (
     [AddedFee]          DECIMAL (10, 2) NOT NULL,
     [Note]              NVARCHAR (500)  NULL,
     [LeftBehindOn]      DATETIME2 (7)   NULL,
+    [ShopLateOn]        DATETIME2 (7)   NULL,
     [CustomerStep]      TINYINT         DEFAULT ((0)) NOT NULL,
     [ConfirmedOn]       DATETIME2 (7)   NULL,
     [CustomerToken]     NVARCHAR (30)   NULL,
@@ -88,3 +93,9 @@ CREATE NONCLUSTERED INDEX [IX_Order_DeliveryGroupId]
 GO
 CREATE UNIQUE NONCLUSTERED INDEX [UX_Order_CustomerToken]
     ON [Orders].[Order]([CustomerToken] ASC) WHERE ([CustomerToken] IS NOT NULL);
+
+
+GO
+CREATE NONCLUSTERED INDEX [IX_Order_Tenant_ShopLateOn]
+    ON [Orders].[Order]([TenantId] ASC, [ShopLateOn] ASC)
+    INCLUDE([MerchantId]) WHERE ([ShopLateOn] IS NOT NULL);

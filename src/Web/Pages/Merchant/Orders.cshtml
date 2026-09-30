@@ -27,6 +27,26 @@
     </div>
 </div>
 
+@if (Model.DropOff is { } dropOff)
+{
+    <div class="notice notice-problem">
+        <p>
+            <strong>Bring your parcels to the hub until @dropOff.Until.ToString("dddd d MMMM").</strong>
+            @dropOff.LateHandovers of your orders were not ready when the rider left in the last @dropOff.WindowDays days,
+            so the pickup van does not call at your shop for now.
+        </p>
+        <ul>
+            @foreach (var hub in dropOff.Hubs)
+            {
+                <li>
+                    @hub.Name, @hub.Address@(hub.PickupTime is { } time ? $", by {time.ToString("h:mm tt")}" : null)
+                </li>
+            }
+        </ul>
+        <p>Parcels that reach the hub in time still go out with the customer's delivery that day.</p>
+    </div>
+}
+
 <div class="tiles">
     <div class="tile @(waiting > 0 ? "tile-warn" : null)">
         <div class="tile-number">@waiting</div>

@@ -99,7 +99,7 @@ The user supplied two PDFs (not stored in the repo): *OneDrop Implementation Pla
 |---|---|---|---|
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
-| 3 | Operations and money | Group delivered, merchants settled | 🔄 3.1–3.7 done, next 3.8 (trust score) |
+| 3 | Operations and money | Group delivered, merchants settled | ✅ Done 2026-09-30 |
 | 4 | Polish and proof | Full demo runs end to end | ⬜ |
 
 Task-level detail, the cut list, the job schedule, must-pass tests and the daily log are in
@@ -107,18 +107,18 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 
 ---
 
-## 3. What exists today (Weeks 1 and 2, tasks 3.1–3.7)
+## 3. What exists today (Weeks 1–3)
 
 ### Solution layout (`Courier.sln`)
 | Project | Path | Contents |
 |---|---|---|
-| Domain | `src/Domain` | Entities and rules, no packages. `Common` (Entity with domain events, TenantEntity, Result/Error), `Platform/Tenant`, `Network` (Hub, Zone, Area, PickupRoute), `Customers` (Customer, CustomerAddress, PhoneNumber, PhoneOtp, CustomerStanding + CustomerStep), `Merchants` (Merchant, MerchantApiKey, PickupPoint), `Orders` (Order + state machine and scans, Package with its hub, PackageLabel, OrderStatusHistory), `Grouping` (DeliveryGroup + state machine, lock time and shelf, events), `Delivery` (Rider, Trip, TripStop, TripLoad, TripPlanner), `Pricing` (DeliveryFeeCalculator, FeeSchedule), `Payments` (Payment: cash or wallet, at the door or in advance, pending until paid; LedgerEntry: what each shop is owed or owes per order; Settlement: a payout), `Notifications` (OutboxMessage + retry rule) |
-| Application | `src/Application` | Use cases as vertical slices: `Orders/CreateOrder`, `Orders/GetOrder`, `Orders/ConfirmOrder` (the SMS link: confirm, or pay the fee in advance), `Network/ListAreas`, `Network/PickupRoutes` (route list and sheet), `Network/HubScan` (collect, receive at a hub, shelves, shuttle load and manifest), `Orders/PackageLabels`, `Auth/PhoneLogin`, `Customers/CustomerDirectory` (find-or-create by phone/address), `Grouping/DeliveryGrouping` (join or open the order's group; quote), `Grouping/LockDueGroups` (the lock job), `Grouping/ShipNow`, `Grouping/CustomerDeliveries` ("My deliveries"), `Delivery/PlanTrips` (planner and job), `Delivery/HubTrips`, `Delivery/RiderDay` (the rider's stops, Start trip), `Delivery/Door` (at the door: amount due, QR, hand over, nobody home; writes the ledger), `Delivery/HubCash` (riders' cash hand-in), `Payments/SettleMerchants` (the payout job), `Payments/MerchantPayouts` (the shop's money), `Pricing/GetQuote`, `Notifications` (outbox contracts, `SendOutbox` job and SMS texts). Interfaces: `IAppDbContext`, `ITenantJob`, `ITenantContext` (`TenantInfo.Fees`), `ITenantCatalog`, `ICurrentUser`, `ISmsSender`, `IPaymentGateway`, `IPayoutGateway`, `ICustomerLinks`; `QueryFilters` (filter names) |
+| Domain | `src/Domain` | Entities and rules, no packages. `Common` (Entity with domain events, TenantEntity, Result/Error), `Platform/Tenant`, `Network` (Hub, Zone, Area, PickupRoute), `Customers` (Customer, CustomerAddress, PhoneNumber, PhoneOtp, CustomerStanding + CustomerStep + TrustRules), `Merchants` (Merchant, MerchantApiKey, PickupPoint, DropOffRule), `Orders` (Order + state machine and scans, Package with its hub, PackageLabel, OrderStatusHistory), `Grouping` (DeliveryGroup + state machine, lock time and shelf, events), `Delivery` (Rider, Trip, TripStop, TripLoad, TripPlanner), `Pricing` (DeliveryFeeCalculator, FeeSchedule), `Payments` (Payment: cash or wallet, at the door or in advance, pending until paid; LedgerEntry: what each shop is owed or owes per order; Settlement: a payout), `Notifications` (OutboxMessage + retry rule) |
+| Application | `src/Application` | Use cases as vertical slices: `Orders/CreateOrder`, `Orders/GetOrder`, `Orders/ConfirmOrder` (the SMS link: confirm, or pay the fee in advance), `Network/ListAreas`, `Network/PickupRoutes` (route list and sheet), `Network/HubScan` (collect, receive at a hub, shelves, shuttle load and manifest), `Orders/PackageLabels`, `Auth/PhoneLogin`, `Customers/CustomerDirectory` (find-or-create by phone/address), `Grouping/DeliveryGrouping` (join or open the order's group; quote), `Grouping/LockDueGroups` (the lock job), `Grouping/ShipNow`, `Grouping/CustomerDeliveries` ("My deliveries"), `Delivery/PlanTrips` (planner and job), `Delivery/HubTrips`, `Delivery/RiderDay` (the rider's stops, Start trip), `Delivery/Door` (at the door: amount due, QR, hand over, nobody home; writes the ledger), `Delivery/HubCash` (riders' cash hand-in), `Payments/SettleMerchants` (the payout job), `Payments/MerchantPayouts` (the shop's money), `Merchants/ShopDropOffs` (shops that bring their parcels to the hub), `Pricing/GetQuote`, `Notifications` (outbox contracts, `SendOutbox` job and SMS texts). Interfaces: `IAppDbContext`, `ITenantJob`, `ITenantContext` (`TenantInfo.Fees`, `Trust`, `DropOff`), `ITenantCatalog`, `ICurrentUser`, `ISmsSender`, `IPaymentGateway`, `IPayoutGateway`, `ICustomerLinks`; `QueryFilters` (filter names) |
 | Infrastructure | `src/Infrastructure` | `Persistence/AppDbContext` (EF Core, query filters), `Configurations/*` (mapping), `TenantSaveInterceptor`, `MultiTenancy` (TenantContext, TenantCatalog, CustomerLinks), `Identity` (AppUser, AppRole, claims), `Sms/FakeSmsSender`, `Payments/FakePaymentGateway` (paid by hand on `/Dev/Payments`) and `FakePayoutGateway` (payouts listed there), `Seeding/DemoDataSeeder`, `Jobs` (Hangfire setup, TenantJobRunner, TenantJobRegistry, OutboxDispatcher); `AppDbContext.SaveChangesAsync` writes the outbox |
 | Web | `src/Web` | Razor Pages portals (merchant, customer, hub, platform), `Labels/LabelQrCode` (QRCoder), `Api/V1` (orders, quote, areas by API key; deliveries by customer cookie), `Authentication/ApiKeyAuthenticationHandler`, `MultiTenancy` middleware, `Program.cs` |
 | Database | `src/Database` | SQL project (Microsoft.Build.Sql 2.1.0) → `Database.dacpac`. Owns the schema |
 | Database Update | `src/Database Update` | DbUp console (`dbup.exe`): data migrations in `Scripts/<Year>/`, data-loss scripts in `Scripts/Pre/` |
-| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 229 + 6 + 109 = **344 tests, all passing** |
+| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 235 + 6 + 111 = **352 tests, all passing** |
 | Tools | `tools/db/publish.ps1` | Deploys a database: `dbup pre` → dacpac publish → `dbup` |
 
 ### Features that work
@@ -256,6 +256,17 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   cash collected today (and earlier trips not handed in); once every stop is done staff record what they received
   (`Trip.HandInCash`: `CashExpected`, `CashReceived`, once), "৳85 short". The rider's **Today** shows "Cash handed in".
   Payouts do not wait for it (owner).
+- **Trust** (3.8, `Domain/Customers/CustomerStanding`, `Domain/Merchants/DropOffRule`, `Application/Merchants/ShopDropOffs`):
+  no stored score, worked out from history when needed. **Customer:** after a refusal or no-show at any shop of the
+  operator, the fee is paid in advance until they have accepted `Tenant.TrustedAgainAfterDeliveries` (3) deliveries
+  since the last failure (dated by its stop's `CompletedOn`; a delivery handed over at the stop of a refused order does
+  not count); trusted (never asked, even by the shop) after `TrustedAfterDeliveries` (10) deliveries with no failure
+  since. **Shop:** `Order.FollowUpIn` records `ShopLateOn` when a rider leaves behind an order the shop had not handed
+  over (the same rule as the late fee, which now reads it); `DropOffAfterLateHandovers` (3) of them within
+  `LateHandoverWindowDays` (30) and the shop brings its parcels to the hub: the route sheet marks it "Brings its parcels
+  to the hub until …" and counts nothing to collect there, the route list leaves it out, and the shop's **My orders**
+  says until when and to which hub (its pickup points' zones' hubs, by the route's time). It is back on the route as
+  soon as fewer late handovers are left in the window. The shop never learns why a customer pays in advance.
 - **Finding your way** (UI upgrade, 2026-09-29): `/` sends each role to its home (shops "My orders", customers "My
   deliveries", riders "Today's trip", hub staff and tenant admins **Hub today** `/Hub`, platform admins Operators). The
   header marks the current page and shows who is signed in; Development adds a **Demo mode** bar (SMS inbox, wallet).
@@ -283,12 +294,13 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   where a parcel was last scanned in (null on the shuttle, when `ShuttleToHubId` says where it is going);
   `DeliveryGroup.Shelf` is unique per hub while set (`UX_DeliveryGroup_Hub_Shelf`). `Grouping.DeliveryGroup.Kind` 4 = FollowUp;
   `Delivery.TripStop.Outcome` (1 Delivered, 2 Refused, 3 NotHome), `FeeCollected`, `CodCollected`, `CompletedOn`;
-  `Orders.Order.LeftBehindOn`; `Orders.Order.CustomerStep` (0 None, 1 Confirm, 2 PayInAdvance), `ConfirmedOn` and
+  `Orders.Order.LeftBehindOn`, `ShopLateOn` (`IX_Order_Tenant_ShopLateOn`); `Orders.Order.CustomerStep` (0 None, 1 Confirm, 2 PayInAdvance), `ConfirmedOn` and
   `CustomerToken` (`UX_Order_CustomerToken`).
 - `Platform.Tenant` settings (fees, `GroupJoinDays`, time zone, currency, SMS sender, `WeightAllowanceGrams`,
-  `ExtraKgFee`, `TrustedAfterDeliveries`, `ReturnCharge`, `LateHandoverFee`) have **no defaults**, in SQL or C#: every
+  `ExtraKgFee`, `TrustedAfterDeliveries`, `ReturnCharge`, `LateHandoverFee`, `TrustedAgainAfterDeliveries`,
+  `DropOffAfterLateHandovers`, `LateHandoverWindowDays`) have **no defaults**, in SQL or C#: every
   tenant states its own. No business value is hard-coded anywhere. The settings added after the launch seed are nullable
-  in SQL (seed 001 inserts tenants without them; DbUp 004, 006 and 007 set them); `TenantCatalog` does not serve a tenant that has
+  in SQL (seed 001 inserts tenants without them; DbUp 004, 006, 007 and 008 set them); `TenantCatalog` does not serve a tenant that has
   not set them. `Grouping.DeliveryGroup.Kind` (TINYINT, 1 Waiting,
   2 NextDay, 3 ShippedNow) was filled in for existing groups by `Scripts/Pre/003_DeliveryGroupKind`.
 - Every tenant table: `TenantId` + FK + index; housekeeping columns `Archived`, `UpdatedId`, `UpdatedOn`, `Created`.
@@ -300,14 +312,18 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   Nasirabad 11:30, Chawkbazar 12:00, Agrabad 12:30, Panchlaish 13:00). `2026/004_WeightAllowance.sql`: 2 kg per
   shop, then ৳15 (Dhaka) or ৳20 (Chattogram) per started kg. `2026/006_TrustedAfterDeliveries.sql`: 10 accepted
   deliveries at both operators. `2026/007_MerchantCharges.sql`: return charge ৳30 (Dhaka) / ৳35 (Chattogram),
-  late-handover fee ৳25 / ৳30. Roles are seeded by `Script.PostDeployment.sql`.
+  late-handover fee ৳25 / ৳30. `2026/008_TrustAndDropOff.sql`: advance until 3 deliveries accepted since a failure;
+  drop-off after 3 late handovers in 30 days (both operators). `2026/009_ShopLateOrders.sql` filled `ShopLateOn` from
+  the late-handover fees already charged. `Customers.Customer.TrustScore` and `Merchants.Merchant.ReliabilityScore`
+  (never used) were dropped by `Scripts/Pre/004_DropTrustScores`. Roles are seeded by `Script.PostDeployment.sql`.
 - Dev data in `OneDrop`: merchants 1–3 (Dhaka: Fashion House, Gadget BD, Beauty Shop) and 4–6 (Chattogram, same
   names); demo riders Rafiq Hasan (`rider@dhaka`, MIR, 30 parcels / 25 kg), Sumon Ali (`rider2@dhaka`, MIR, 12 /
   15 kg), Kamal Uddin (`rider3@dhaka`, GUL), Jamal Chowdhury (`rider@chattogram`, AGR). Orders OD-100001 onwards
   come from the live checks; each task's entry in the plan's daily log says which orders, phones and deliveries it
   made. Some delivery deadlines were moved into the past by hand for live checks (DG-100012, DG-100020,
   DG-100027–29, DG-100045–46), so those show as due today with no parcel at the hub. The 3.7 live check dated its ledger
-  lines a day back by hand to see the payout (settlements 1 and 2). Orders before OD-100031 have no outbox rows.
+  lines a day back by hand to see the payout (settlements 1 and 2). The 3.9 demo run (DG-100065, OD-100100–OD-100102, Parveen Sultana 01819274111) was delivered and settled (settlements 3–5); the 3.8 check gave OD-100062 its `ShopLateOn` by
+  hand and put Beauty Shop on drop-off (three late handovers, until 29 October). Orders before OD-100031 have no outbox rows.
   The Hangfire tables are installed at app start in both databases; only `OneDrop` runs jobs, as the integration
   tests start no job server. Group numbers have gaps: a sequence value used in a rolled-back dry run is not reused.
 
@@ -382,6 +398,8 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 | The return charge applies to refusals and to the second "nobody home"; the late fee only when the shop had not handed the order over, once per order | Both returns cost the same trip; a parcel already with the operator is the operator's delay |
 | The settle job runs hourly, paying up to yesterday in each tenant's time zone; payouts are sent with an idempotency key | Tenants differ in time zone; a failed payout is retried within the hour and never paid twice |
 | The riders' cash hand-in is recorded on `Delivery.Trip` once every stop is done | One trip per rider a day; no cash can come in after the last stop |
+| 3.8 (owner, 2026-09-30): after a refusal or no-show the fee is paid in advance until 3 deliveries have been accepted since the last failure, and 10 deliveries count as trusted only with no failure since; a shop with 3 late handovers in 30 days brings its parcels to the hub until fewer are left in the window (tenant settings); the unused `TrustScore` and `ReliabilityScore` columns are dropped | A customer who refused once should earn their way back, and ten old deliveries must not excuse a new refusal; counts from history need no stored score, no nightly job and cannot drift; the drop-off ends by itself |
+| A shop's late handover is stored on the order (`ShopLateOn`), not read from the ledger | It counts even at an operator whose late fee is ৳0, and it is dated for the window |
 | UI (2026-09-29): a home per role, "Hub today" with the hub's six steps and a step bar, a folded "how this works" box per page, the hub remembered in a host-only cookie; the **New order** form uses the API's handler; demo logins as buttons in Development | The owner could not tell where to click; one path for price and grouping; the cookie is a preference, each page still checks the hub |
 
 ---

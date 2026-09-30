@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
+using Application.Merchants;
 using Domain.Customers;
 using Domain.Grouping;
 using Domain.Orders;
@@ -35,15 +36,22 @@ public sealed record PickupStopOrder(string Number, int Packages, bool Urgent, C
         [.. Enumerable.Range(1, Packages).Select(sequence => new PackageLabel(Number, sequence))];
 }
 
-/// <summary>A merchant pickup point the collector visits, with every parcel waiting there.</summary>
+/// <summary>
+/// A merchant pickup point with every parcel waiting there. The collector visits it unless the shop has been late too
+/// often: then it brings its parcels to the hub itself until <see cref="DropsOffUntil"/> (the tenant's day), and
+/// nothing is collected here.
+/// </summary>
 public sealed record PickupStop(
     string Merchant,
     string PickupPoint,
     string Address,
     string ContactPhone,
-    IReadOnlyList<PickupStopOrder> Orders)
+    IReadOnlyList<PickupStopOrder> Orders,
+    DateOnly? DropsOffUntil = null)
 {
-    public int Packages => Orders.Where(order => order.Collect).Sum(order => order.Packages);
+    public bool Visit => DropsOffUntil is null;
+
+    public int Packages => Visit ? Orders.Where(order => order.Collect).Sum(order => order.Packages) : 0;
 }
 
 /// <summary>The collector's sheet: where to go, what to collect, where to bring it.</summary>
@@ -62,14 +70,20 @@ public sealed record PickupRouteSheet(
 /// <summary>
 /// Pickup routes for hub staff. A route's stops are the pickup points in its zone with orders the route has not
 /// collected yet (<see cref="OrderStatus.Created"/>); the zone is the pickup point's, since that is where the
-/// parcels are. Worked out when asked, so an order placed a minute before the run is on the sheet.
+/// parcels are. Worked out when asked, so an order placed a minute before the run is on the sheet. A shop that drops
+/// off at the hub (<see cref="ShopDropOffs"/>) is listed on the sheet so staff expect its parcels, but not counted.
 /// </summary>
-public class PickupRoutesHandler(IAppDbContext db, ITenantContext tenantContext, TimeProvider time)
+public class PickupRoutesHandler(
+    IAppDbContext db,
+    ITenantContext tenantContext,
+    ShopDropOffs dropOffs,
+    TimeProvider time)
 {
     public async Task<IReadOnlyList<PickupRouteSummary>> ListAsync(CancellationToken cancellationToken = default)
     {
         var timeZone = TenantTimeZone();
         var now = time.GetUtcNow().UtcDateTime;
+        var droppingOff = (await dropOffs.CurrentAsync(cancellationToken)).Keys.ToList();
 
         var routes = await db.PickupRoutes
             .Where(route => !route.Archived)
@@ -84,7 +98,8 @@ public class PickupRoutesHandler(IAppDbContext db, ITenantContext tenantContext,
             join point in db.PickupPoints on order.PickupPointId equals point.Id
             join area in db.Areas on point.AreaId equals area.Id
             where order.Status == OrderStatus.Created &&
-                (order.CustomerStep != CustomerStep.PayInAdvance || order.ConfirmedOn != null)
+                (order.CustomerStep != CustomerStep.PayInAdvance || order.ConfirmedOn != null) &&
+                !droppingOff.Contains(order.MerchantId)
             group new { OrderId = order.Id, order.PickupPointId } by area.ZoneId into zone
             select new
             {
@@ -138,6 +153,7 @@ public class PickupRoutesHandler(IAppDbContext db, ITenantContext tenantContext,
             select new
             {
                 PointId = point.Id,
+                MerchantId = merchant.Id,
                 Merchant = merchant.Name,
                 Point = point.Name,
                 point.Address,
@@ -152,18 +168,21 @@ public class PickupRoutesHandler(IAppDbContext db, ITenantContext tenantContext,
             .ToListAsync(cancellationToken);
 
         var timeZone = TenantTimeZone();
+        var droppingOff = await dropOffs.CurrentAsync(cancellationToken);
         var stops = orders
             .GroupBy(row => row.PointId)
             .Select(stop =>
             {
                 var first = stop.First();
+                var dropOff = droppingOff.GetValueOrDefault(first.MerchantId);
 
                 return new PickupStop(
                     first.Merchant,
                     first.Point,
                     first.Address,
                     first.ContactPhone,
-                    [.. stop.Select(row => row.Order)]);
+                    [.. stop.Select(row => row.Order)],
+                    dropOff is null ? null : LocalDay(dropOff.Until, timeZone));
             });
 
         return new PickupRouteSheet(

@@ -9,8 +9,6 @@ namespace Domain.Customers;
 /// </summary>
 public class Customer : TenantEntity, IArchivable
 {
-    public const int DefaultTrustScore = 100;
-
     private Customer()
     {
     }
@@ -24,9 +22,6 @@ public class Customer : TenantEntity, IArchivable
     public string Phone { get; private set; } = "";
 
     public string? Name { get; private set; }
-
-    /// <summary>Refusals and no-shows lower it. A low score means the fee is paid before dispatch.</summary>
-    public int TrustScore { get; private set; } = DefaultTrustScore;
 
     /// <summary>Set once the customer proves they own the number with an OTP.</summary>
     public bool PhoneVerified { get; private set; }

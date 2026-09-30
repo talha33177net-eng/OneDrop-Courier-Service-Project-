@@ -122,6 +122,13 @@ public class Order : TenantEntity, IMerchantOwned
     public DateTime? LeftBehindOn { get; private set; }
 
     /// <summary>
+    /// When the order was first left behind because its shop had not handed it over (still at the shop, and not held
+    /// there for the customer's advance). The shop pays the late-handover fee for it, and a shop with too many of these
+    /// lately brings its parcels to the hub itself (<see cref="Merchants.DropOffRule"/>).
+    /// </summary>
+    public DateTime? ShopLateOn { get; private set; }
+
+    /// <summary>
     /// What the order waits for from the customer before the shop hands it over: a one-tap confirmation, or the
     /// delivery fee paid in advance (the order is not collected until then). Decided once, when the order is placed.
     /// </summary>
@@ -446,9 +453,11 @@ public class Order : TenantEntity, IMerchantOwned
     /// <summary>
     /// The rider left without the order (not ready when its delivery went out): it moves to a later delivery of the
     /// same customer and address, the customer's open one or a follow-up. The merchant's <see cref="AddedFee"/> stays
-    /// as it was given; the customer hears where the order now travels.
+    /// as it was given; the customer hears where the order now travels. True when the shop is to blame, recorded as
+    /// <see cref="ShopLateOn"/>: it had not handed the order over, and not because the order waited for the customer's
+    /// advance. Only the first time an order is left behind counts; a parcel already with us is our delay.
     /// </summary>
-    public void FollowUpIn(DeliveryGroup group, DateTime now)
+    public bool FollowUpIn(DeliveryGroup group, DateTime now)
     {
         if (group.CustomerId != CustomerId || group.AddressId != AddressId)
         {
@@ -460,12 +469,20 @@ public class Order : TenantEntity, IMerchantOwned
             throw new InvalidOperationException($"{Number} is {Status}; only an order still waiting is left behind.");
         }
 
+        var shopLate = Status == OrderStatus.Created && !WaitsForAdvance && LeftBehindOn is null;
         DeliveryGroup = group;
         DeliveryGroupId = group.Id;
         LeftBehindOn = now;
+        if (shopLate)
+        {
+            ShopLateOn = now;
+        }
+
         history.Add(new OrderStatusHistory(this, Status, "Not ready when the rider left; goes in a later delivery"));
         Withdraw<OrderPlacedInDelivery>();
         Raise(new OrderPlacedInDelivery(this));
+
+        return shopLate;
     }
 
     /// <summary>

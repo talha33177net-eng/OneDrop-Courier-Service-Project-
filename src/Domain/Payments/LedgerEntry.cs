@@ -86,12 +86,12 @@ public class LedgerEntry : TenantEntity, IMerchantOwned
         return Charge(order, LedgerEntryKind.ReturnCharge, charge, entryDate);
     }
 
-    /// <summary>The tenant's late-handover fee for an order a rider had to leave behind.</summary>
+    /// <summary>The tenant's late-handover fee for an order a rider had to leave behind because the shop was late.</summary>
     public static LedgerEntry LateHandoverFee(Order order, decimal fee, DateOnly entryDate)
     {
-        if (order.LeftBehindOn is null)
+        if (order.ShopLateOn is null)
         {
-            throw new InvalidOperationException("A late handover is charged for an order left behind.");
+            throw new InvalidOperationException("A late handover is charged for an order its shop had not handed over.");
         }
 
         return Charge(order, LedgerEntryKind.LateHandoverFee, fee, entryDate);

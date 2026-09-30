@@ -104,10 +104,7 @@ public class CreateOrderHandler(
             IdempotencyKey = command.IdempotencyKey,
             RequestHash = requestHash,
             Note = command.Note,
-            CustomerStep = standing.StepFor(
-                command.CodAmount,
-                command.FeeInAdvance,
-                tenantContext.Tenant!.TrustedAfterDeliveries)
+            CustomerStep = standing.StepFor(command.CodAmount, command.FeeInAdvance, tenantContext.Tenant!.Trust)
         });
         if (created.IsFailure)
         {
