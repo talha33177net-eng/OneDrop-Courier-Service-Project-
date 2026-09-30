@@ -1587,3 +1587,66 @@ input.number {
     margin: 6px 0 0;
     padding-left: 18px;
 }
+
+/* Live dashboards (Hub today, the operator's dashboard): a badge says whether the page is updating by itself */
+
+.live-status {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+    background: var(--line);
+    color: var(--muted);
+}
+
+.live-status[data-state="live"] {
+    background: #e8f6f5;
+    color: #13766f;
+}
+
+.live-status[data-state="live"]::before {
+    content: "● ";
+}
+
+.live-status[data-state="off"] {
+    background: #fbe7e5;
+    color: var(--danger);
+}
+
+.live-warning {
+    margin-bottom: 16px;
+}
+
+.live-warning details {
+    margin-top: 8px;
+}
+
+.live-warning table {
+    margin-top: 8px;
+}
+
+/* Packages per delivery: two or more is the target */
+
+table.density td,
+table.density tfoot th {
+    text-align: right;
+}
+
+table.density td:first-child,
+table.density tfoot th:first-child {
+    text-align: left;
+}
+
+.density-good {
+    color: #13766f;
+    font-weight: 600;
+}
+
+.density-low {
+    color: var(--orange-dark);
+    font-weight: 600;
+}

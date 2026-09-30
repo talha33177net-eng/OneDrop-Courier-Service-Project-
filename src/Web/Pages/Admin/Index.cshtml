@@ -1,0 +1,171 @@
+@page
+@model Web.Pages.Admin.IndexModel
+@using Domain.Grouping
+@{
+    ViewData["Title"] = "Dashboard";
+    var now = Model.Now;
+    var open = now.Hubs.Sum(hub => hub.OpenDeliveries);
+    var here = now.Hubs.Sum(hub => hub.ParcelsHere);
+    var ridersOut = now.Hubs.Sum(hub => hub.RidersOut);
+    var riders = now.Hubs.Sum(hub => hub.Riders);
+    var missing = now.Hubs.Sum(hub => hub.NotHereYet.Count);
+    var thisWeek = now.Total[^1].PackagesPerDelivery;
+
+    string Density(DeliveryDensity density)
+    {
+        return density.PackagesPerDelivery?.ToString("0.0") ?? "–";
+    }
+
+    string? Tooltip(DeliveryDensity density)
+    {
+        return density.Deliveries == 0
+            ? null
+            : $"{density.Packages} {(density.Packages == 1 ? "package" : "packages")} in " +
+                $"{density.Deliveries} {(density.Deliveries == 1 ? "delivery" : "deliveries")}";
+    }
+
+    string? DensityClass(DeliveryDensity density)
+    {
+        return density.PackagesPerDelivery switch
+        {
+            null => "muted",
+            >= 2 => "density-good",
+            _ => "density-low"
+        };
+    }
+}
+
+@section Head {
+    <partial name="_Live" />
+}
+
+<div class="page-head">
+    <div>
+        <p class="eyebrow">@now.Day.ToString("dddd d MMMM") <span class="live-status" data-live-status>Connecting…</span></p>
+        <h1>@Model.Tenant.Name today</h1>
+        <p class="lead">Every hub at a glance, and how many packages each delivery carries: the number to grow.</p>
+    </div>
+</div>
+
+<details class="help">
+    <summary>How this page works</summary>
+    <ul>
+        <li>It updates by itself whenever a parcel is scanned, a delivery closes or a rider starts or finishes.</li>
+        <li><strong>Not scanned in yet</strong> counts parcels of deliveries due out today that are not on their shelf.
+            Riders take only orders with every parcel here; the rest follow tomorrow. Open a hub to see which ones.</li>
+        <li><strong>Packages per delivery</strong> counts deliveries handed over and the packages the customer took, per
+            seven days. Two or more means customers are combining shops; less means the area needs more shops.</li>
+    </ul>
+</details>
+
+<div data-live="dashboard">
+<div class="tiles">
+    <div class="tile">
+        <div class="tile-number">@open</div>
+        <div class="tile-label">deliveries still open to shops</div>
+    </div>
+    <div class="tile">
+        <div class="tile-number">@here</div>
+        <div class="tile-label">parcels in the hubs</div>
+    </div>
+    <div class="tile">
+        <div class="tile-number">@ridersOut</div>
+        <div class="tile-label">riders out of @riders</div>
+    </div>
+    <div class="tile @(missing > 0 ? "tile-warn" : null)">
+        <div class="tile-number">@missing</div>
+        <div class="tile-label">parcels for today not scanned in yet</div>
+    </div>
+    <div class="tile @(thisWeek >= 2 ? "tile-good" : "tile-warn")">
+        <div class="tile-number">@(thisWeek?.ToString("0.0") ?? "–")</div>
+        <div class="tile-label">packages per delivery, last 7 days</div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Hubs now</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Hub</th>
+                    <th>Open deliveries</th>
+                    <th>Due out today</th>
+                    <th>Parcels in</th>
+                    <th>On the shuttle here</th>
+                    <th>Riders out</th>
+                    <th>Not scanned in yet</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var hub in now.Hubs)
+                {
+                    <tr>
+                        <td><a asp-page="/Hub/Index" asp-route-hub="@hub.Code">@hub.Name</a> <span class="muted">@hub.Code</span></td>
+                        <td>@hub.OpenDeliveries</td>
+                        <td>@hub.DueToday</td>
+                        <td>@hub.ParcelsHere</td>
+                        <td>@hub.ParcelsOnTheWay</td>
+                        <td>@hub.RidersOut of @hub.Riders</td>
+                        <td>
+                            @if (hub.NotHereYet.Count > 0)
+                            {
+                                <span class="pill pill-waiting">@hub.NotHereYet.Count</span>
+                            }
+                            else
+                            {
+                                <span class="muted">0</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Packages per delivery, week by week</h2>
+    @if (now.Areas.Count == 0)
+    {
+        <p class="muted">No delivery has been handed over in the last @IndexModel.Weeks weeks.</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="density">
+                <thead>
+                    <tr>
+                        <th>Area</th>
+                        @foreach (var week in now.Weeks)
+                        {
+                            <th title="@week.From.ToString("d MMM") to @week.To.ToString("d MMM")">to @week.To.ToString("d MMM")</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var area in now.Areas)
+                    {
+                        <tr>
+                            <td>@area.Area <span class="muted">@area.Zone</span></td>
+                            @foreach (var week in area.Weeks)
+                            {
+                                <td class="@DensityClass(week)" title="@Tooltip(week)">@Density(week)</td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th>All areas</th>
+                        @foreach (var week in now.Total)
+                        {
+                            <th class="@DensityClass(week)" title="@Tooltip(week)">@Density(week)</th>
+                        }
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    }
+</div>
+</div>

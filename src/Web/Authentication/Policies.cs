@@ -13,6 +13,9 @@ public static class Policies
     /// <summary>The operator's own staff: hub staff and tenant admins.</summary>
     public const string Operations = nameof(Operations);
 
+    /// <summary>The operator's admins: the whole operator at once (every hub, the week-by-week numbers).</summary>
+    public const string OperatorAdmin = nameof(OperatorAdmin);
+
     /// <summary>The operator's riders, on their own tenant's subdomain.</summary>
     public const string Rider = nameof(Rider);
 
@@ -31,6 +34,9 @@ public static class Policies
         options.AddPolicy(PlatformAdmin, policy => policy.RequireRole(Roles.PlatformAdmin));
         options.AddPolicy(Operations, policy => policy
             .RequireRole(Roles.HubStaff, Roles.TenantAdmin)
+            .RequireClaim(AppClaims.TenantId));
+        options.AddPolicy(OperatorAdmin, policy => policy
+            .RequireRole(Roles.TenantAdmin)
             .RequireClaim(AppClaims.TenantId));
         options.AddPolicy(Rider, policy => policy
             .RequireRole(Roles.Rider)

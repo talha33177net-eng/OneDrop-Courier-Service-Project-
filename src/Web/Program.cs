@@ -8,7 +8,9 @@ using Hangfire;
 using Infrastructure;
 using Infrastructure.Jobs;
 using Infrastructure.Seeding;
+using Application.Abstractions;
 using Web.Authentication;
+using Web.Live;
 using Web.MultiTenancy;
 using Web.Pages.Hub;
 using Serilog;
@@ -63,6 +65,8 @@ builder.Services
     .AddJsonOptions(options =>
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
 builder.Services.AddProblemDetails();
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IOperationsFeed, OperationsFeed>();
 builder.Services.AddRazorPages(options =>
 {
     options.Conventions.AuthorizeFolder("/Merchant", Policies.MerchantPortal);
@@ -71,6 +75,7 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AllowAnonymousToPage("/Customer/Order");
     options.Conventions.AuthorizeFolder("/Platform", Policies.PlatformAdmin);
     options.Conventions.AuthorizeFolder("/Hub", Policies.Operations);
+    options.Conventions.AuthorizeFolder("/Admin", Policies.OperatorAdmin);
     options.Conventions.AddFolderApplicationModelConvention("/Hub", model => model.Filters.Add(new RememberHub()));
     options.Conventions.AuthorizeFolder("/Rider", Policies.Rider);
 });
@@ -109,6 +114,7 @@ app.UseRateLimiter();
 
 app.MapControllers();
 app.MapRazorPages().WithStaticAssets();
+app.MapHub<OperationsHub>(OperationsHub.Path);
 // Every tenant's jobs in one view, so platform staff only. The policy replaces Hangfire's local-requests-only check
 app.MapHangfireDashboardWithAuthorizationPolicy(
     Policies.PlatformAdmin,
@@ -119,7 +125,7 @@ app.Run();
 
 static Task ApiAwareRedirect(RedirectContext<CookieAuthenticationOptions> context, int apiStatus)
 {
-    if (context.Request.Path.StartsWithSegments("/api"))
+    if (context.Request.Path.StartsWithSegments("/api") || context.Request.Path.StartsWithSegments("/hubs"))
     {
         context.Response.StatusCode = apiStatus;
     }

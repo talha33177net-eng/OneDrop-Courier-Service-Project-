@@ -15,6 +15,7 @@ using Application.Merchants;
 using Application.Network.HubScan;
 using Application.Network.ListAreas;
 using Application.Network.PickupRoutes;
+using Application.Operations.Dashboard;
 using Application.Notifications.SendOutbox;
 using Application.Orders.ConfirmOrder;
 using Application.Orders.CreateOrder;
@@ -50,6 +51,7 @@ public static class DependencyInjection
         services.AddScoped<TripPlanning>();
         services.AddScoped<PlanTripsJob>();
         services.AddScoped<HubTripsHandler>();
+        services.AddScoped<OperationsDashboardHandler>();
         services.AddScoped<RiderDayHandler>();
         services.AddScoped<DoorHandler>();
         services.AddScoped<HubCashHandler>();

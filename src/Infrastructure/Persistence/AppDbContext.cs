@@ -31,11 +31,16 @@ namespace Infrastructure.Persistence;
 public class AppDbContext(
     DbContextOptions<AppDbContext> options,
     ITenantContext tenantContext,
-    ICurrentUser currentUser)
+    ICurrentUser currentUser,
+    IOperationsFeed? operationsFeed = null)
     : IdentityDbContext<AppUser, AppRole, long>(options), IAppDbContext
 {
     public const string TenantFilter = QueryFilters.Tenant;
     public const string MerchantFilter = QueryFilters.Merchant;
+
+    /// <summary>What the operator's dashboards count: a save touching one of these tells them to read again.</summary>
+    private static readonly Type[] Operations =
+        [typeof(Order), typeof(Package), typeof(DeliveryGroup), typeof(Trip), typeof(TripStop), typeof(Rider)];
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
 
@@ -91,10 +96,26 @@ public class AppDbContext(
     /// Saves, and writes every domain event raised by the saved entities to the outbox in the same transaction:
     /// first the changes (so the new rows have their ids), then the outbox rows, then commit. A caller's own
     /// transaction is joined instead. Events are cleared only once committed, so a failed save can be retried.
+    /// Once a change to operations is saved, the operator's dashboards are told (<see cref="IOperationsFeed"/>).
     /// </summary>
     public override async Task<int> SaveChangesAsync(
         bool acceptAllChangesOnSuccess,
         CancellationToken cancellationToken = default)
+    {
+        var tenantId = tenantContext.TenantId;
+        var touchesOperations = operationsFeed is not null && tenantId is not null && ChangeTracker.Entries()
+            .Any(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted &&
+                Operations.Contains(entry.Metadata.ClrType));
+        var saved = await SaveWithOutboxAsync(acceptAllChangesOnSuccess, cancellationToken);
+        if (touchesOperations)
+        {
+            operationsFeed!.Changed(tenantId!.Value);
+        }
+
+        return saved;
+    }
+
+    private async Task<int> SaveWithOutboxAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken)
     {
         var raisers = ChangeTracker.Entries<Entity>()
             .Select(entry => entry.Entity)

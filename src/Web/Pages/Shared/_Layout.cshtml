@@ -49,6 +49,10 @@
                     {
                         <a asp-page="/Customer/Index" class="@Active("/Customer/Index")">My deliveries</a>
                     }
+                    if (user.IsInRole(Roles.TenantAdmin))
+                    {
+                        <a asp-page="/Admin/Index" class="@Active("/Admin/Index")">Dashboard</a>
+                    }
                     if (operations)
                     {
                         <a asp-page="/Hub/Index" asp-route-hub="@hub" class="@(page.StartsWith("/Hub/") ? "active" : null)">Hub today</a>

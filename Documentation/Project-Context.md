@@ -100,25 +100,25 @@ The user supplied two PDFs (not stored in the repo): *OneDrop Implementation Pla
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
 | 3 | Operations and money | Group delivered, merchants settled | ✅ Done 2026-09-30 |
-| 4 | Polish and proof | Full demo runs end to end | ⬜ |
+| 4 | Polish and proof | Full demo runs end to end | 🔄 4.1 done, next 4.2 (merchant webhooks) |
 
 Task-level detail, the cut list, the job schedule, must-pass tests and the daily log are in
 [Plans/Implementation-Plan.md](../Plans/Implementation-Plan.md). **That file is the source of truth for progress.**
 
 ---
 
-## 3. What exists today (Weeks 1–3)
+## 3. What exists today (Weeks 1–3, task 4.1)
 
 ### Solution layout (`Courier.sln`)
 | Project | Path | Contents |
 |---|---|---|
 | Domain | `src/Domain` | Entities and rules, no packages. `Common` (Entity with domain events, TenantEntity, Result/Error), `Platform/Tenant`, `Network` (Hub, Zone, Area, PickupRoute), `Customers` (Customer, CustomerAddress, PhoneNumber, PhoneOtp, CustomerStanding + CustomerStep + TrustRules), `Merchants` (Merchant, MerchantApiKey, PickupPoint, DropOffRule), `Orders` (Order + state machine and scans, Package with its hub, PackageLabel, OrderStatusHistory), `Grouping` (DeliveryGroup + state machine, lock time and shelf, events), `Delivery` (Rider, Trip, TripStop, TripLoad, TripPlanner), `Pricing` (DeliveryFeeCalculator, FeeSchedule), `Payments` (Payment: cash or wallet, at the door or in advance, pending until paid; LedgerEntry: what each shop is owed or owes per order; Settlement: a payout), `Notifications` (OutboxMessage + retry rule) |
-| Application | `src/Application` | Use cases as vertical slices: `Orders/CreateOrder`, `Orders/GetOrder`, `Orders/ConfirmOrder` (the SMS link: confirm, or pay the fee in advance), `Network/ListAreas`, `Network/PickupRoutes` (route list and sheet), `Network/HubScan` (collect, receive at a hub, shelves, shuttle load and manifest), `Orders/PackageLabels`, `Auth/PhoneLogin`, `Customers/CustomerDirectory` (find-or-create by phone/address), `Grouping/DeliveryGrouping` (join or open the order's group; quote), `Grouping/LockDueGroups` (the lock job), `Grouping/ShipNow`, `Grouping/CustomerDeliveries` ("My deliveries"), `Delivery/PlanTrips` (planner and job), `Delivery/HubTrips`, `Delivery/RiderDay` (the rider's stops, Start trip), `Delivery/Door` (at the door: amount due, QR, hand over, nobody home; writes the ledger), `Delivery/HubCash` (riders' cash hand-in), `Payments/SettleMerchants` (the payout job), `Payments/MerchantPayouts` (the shop's money), `Merchants/ShopDropOffs` (shops that bring their parcels to the hub), `Pricing/GetQuote`, `Notifications` (outbox contracts, `SendOutbox` job and SMS texts). Interfaces: `IAppDbContext`, `ITenantJob`, `ITenantContext` (`TenantInfo.Fees`, `Trust`, `DropOff`), `ITenantCatalog`, `ICurrentUser`, `ISmsSender`, `IPaymentGateway`, `IPayoutGateway`, `ICustomerLinks`; `QueryFilters` (filter names) |
+| Application | `src/Application` | Use cases as vertical slices: `Orders/CreateOrder`, `Orders/GetOrder`, `Orders/ConfirmOrder` (the SMS link: confirm, or pay the fee in advance), `Network/ListAreas`, `Network/PickupRoutes` (route list and sheet), `Network/HubScan` (collect, receive at a hub, shelves, shuttle load and manifest), `Orders/PackageLabels`, `Auth/PhoneLogin`, `Customers/CustomerDirectory` (find-or-create by phone/address), `Grouping/DeliveryGrouping` (join or open the order's group; quote), `Grouping/LockDueGroups` (the lock job), `Grouping/ShipNow`, `Grouping/CustomerDeliveries` ("My deliveries"), `Delivery/PlanTrips` (planner and job), `Delivery/HubTrips`, `Delivery/RiderDay` (the rider's stops, Start trip), `Delivery/Door` (at the door: amount due, QR, hand over, nobody home; writes the ledger), `Delivery/HubCash` (riders' cash hand-in), `Payments/SettleMerchants` (the payout job), `Payments/MerchantPayouts` (the shop's money), `Operations/Dashboard` (live counts per hub and packages per delivery), `Merchants/ShopDropOffs` (shops that bring their parcels to the hub), `Pricing/GetQuote`, `Notifications` (outbox contracts, `SendOutbox` job and SMS texts). Interfaces: `IAppDbContext`, `IOperationsFeed`, `ITenantJob`, `ITenantContext` (`TenantInfo.Fees`, `Trust`, `DropOff`), `ITenantCatalog`, `ICurrentUser`, `ISmsSender`, `IPaymentGateway`, `IPayoutGateway`, `ICustomerLinks`; `QueryFilters` (filter names) |
 | Infrastructure | `src/Infrastructure` | `Persistence/AppDbContext` (EF Core, query filters), `Configurations/*` (mapping), `TenantSaveInterceptor`, `MultiTenancy` (TenantContext, TenantCatalog, CustomerLinks), `Identity` (AppUser, AppRole, claims), `Sms/FakeSmsSender`, `Payments/FakePaymentGateway` (paid by hand on `/Dev/Payments`) and `FakePayoutGateway` (payouts listed there), `Seeding/DemoDataSeeder`, `Jobs` (Hangfire setup, TenantJobRunner, TenantJobRegistry, OutboxDispatcher); `AppDbContext.SaveChangesAsync` writes the outbox |
-| Web | `src/Web` | Razor Pages portals (merchant, customer, hub, platform), `Labels/LabelQrCode` (QRCoder), `Api/V1` (orders, quote, areas by API key; deliveries by customer cookie), `Authentication/ApiKeyAuthenticationHandler`, `MultiTenancy` middleware, `Program.cs` |
+| Web | `src/Web` | Razor Pages portals (merchant, customer, hub, operator admin, platform), `Live` (SignalR `OperationsHub`, `OperationsFeed`), `Labels/LabelQrCode` (QRCoder), `Api/V1` (orders, quote, areas by API key; deliveries by customer cookie), `Authentication/ApiKeyAuthenticationHandler`, `MultiTenancy` middleware, `Program.cs` |
 | Database | `src/Database` | SQL project (Microsoft.Build.Sql 2.1.0) → `Database.dacpac`. Owns the schema |
 | Database Update | `src/Database Update` | DbUp console (`dbup.exe`): data migrations in `Scripts/<Year>/`, data-loss scripts in `Scripts/Pre/` |
-| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 235 + 6 + 111 = **352 tests, all passing** |
+| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 239 + 6 + 115 = **360 tests, all passing** |
 | Tools | `tools/db/publish.ps1` | Deploys a database: `dbup pre` → dacpac publish → `dbup` |
 
 ### Features that work
@@ -268,13 +268,24 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   says until when and to which hub (its pickup points' zones' hubs, by the route's time). It is back on the route as
   soon as fewer late handovers are left in the window. The shop never learns why a customer pays in advance.
 - **Finding your way** (UI upgrade, 2026-09-29): `/` sends each role to its home (shops "My orders", customers "My
-  deliveries", riders "Today's trip", hub staff and tenant admins **Hub today** `/Hub`, platform admins Operators). The
+  deliveries", riders "Today's trip", hub staff **Hub today** `/Hub`, tenant admins **Dashboard** `/Admin` (since
+  4.1), platform admins Operators). The
   header marks the current page and shows who is signed in; Development adds a **Demo mode** bar (SMS inbox, wallet).
   Hub today shows the hub's day as six numbered steps with live counts, and a step bar sits on every hub page; the hub
   is picked once and remembered (`Pages/Hub/RememberHub`, host-only cookie). Pages open with a folded "how this works"
   box; statuses are words and colours from `Web/Display/Statuses`. Shops enter orders by hand on **New order**
   (`/Merchant/NewOrder`, the API's handler). Customers and riders see a tracker of where they are. `/Guide` follows
   one delivery through every screen; in Development the sign-in page offers the host's demo logins as buttons.
+- **Live dashboards** (4.1, `Application/Operations/Dashboard`, `Web/Live`): counts worked out from the data when asked.
+  Per hub: deliveries still open to shops, deliveries due out today (or late) and not out, parcels scanned in, parcels
+  on the shuttle to it, riders out, and every parcel of a due delivery not on its shelf with where it is
+  (`ParcelState.PlaceFor`). Hub today warns "N parcels for today's deliveries are not scanned in yet" with that list.
+  Tenant admins' **Dashboard** (`/Admin`, policy `OperatorAdmin`) shows every hub and **packages per delivery** by area
+  for 8 weeks of seven days ending today (`DeliveryDensity`, green at 2 or more). Live: after a committed save
+  touching orders, packages, deliveries, trips, stops or riders, `AppDbContext` calls `IOperationsFeed`; the Web
+  `OperationsFeed` sends "changed" (no data) to the operator's SignalR group (`/hubs/operations`, group from the
+  sign-in's tenant claim) at most once a second, and `wwwroot/js/live.js` fetches the page again and swaps its
+  `data-live` parts. One app instance (no backplane).
 - **Not yet:** a screen to add riders or change a bike's limit, a screen to change route times or weight settings, Ship now by SMS "reply 1" (needs an inbound SMS gateway), a screen for failed outbox messages,
   merchant screens to create API keys, tenant admin screens.
 
@@ -400,6 +411,8 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 | The riders' cash hand-in is recorded on `Delivery.Trip` once every stop is done | One trip per rider a day; no cash can come in after the last stop |
 | 3.8 (owner, 2026-09-30): after a refusal or no-show the fee is paid in advance until 3 deliveries have been accepted since the last failure, and 10 deliveries count as trusted only with no failure since; a shop with 3 late handovers in 30 days brings its parcels to the hub until fewer are left in the window (tenant settings); the unused `TrustScore` and `ReliabilityScore` columns are dropped | A customer who refused once should earn their way back, and ten old deliveries must not excuse a new refusal; counts from history need no stored score, no nightly job and cannot drift; the drop-off ends by itself |
 | A shop's late handover is stored on the order (`ShopLateOn`), not read from the ledger | It counts even at an operator whose late fee is ৳0, and it is dated for the window |
+| 4.1: live dashboards hear only "changed" over SignalR and read themselves again through their own request, swapping their `data-live` parts | Nothing can leak through the socket; the page's authorisation and query filters decide what is shown; Razor markup is reused |
+| Packages per delivery in seven-day weeks ending today, by area; tenant admins land on the operator's Dashboard | Bangladesh's week does not start on Monday and a week-start setting would exist for one report; the admin looks at the whole operator |
 | UI (2026-09-29): a home per role, "Hub today" with the hub's six steps and a step bar, a folded "how this works" box per page, the hub remembered in a host-only cookie; the **New order** form uses the API's handler; demo logins as buttons in Development | The owner could not tell where to click; one path for price and grouping; the cookie is a preference, each page still checks the hub |
 
 ---

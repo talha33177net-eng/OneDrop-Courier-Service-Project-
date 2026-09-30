@@ -37,7 +37,12 @@ public class IndexModel(
             return RedirectToPage("/Rider/Index");
         }
 
-        if (User.IsInRole(Roles.HubStaff) || User.IsInRole(Roles.TenantAdmin))
+        if (User.IsInRole(Roles.TenantAdmin))
+        {
+            return RedirectToPage("/Admin/Index");
+        }
+
+        if (User.IsInRole(Roles.HubStaff))
         {
             return RedirectToPage("/Hub/Index");
         }

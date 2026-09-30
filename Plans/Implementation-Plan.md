@@ -13,9 +13,9 @@ The one place to see where we are and what comes next. Built from the two projec
 
 | | |
 |---|---|
-| Current week | **Week 4 — Polish and proof** (0 of 9) |
-| Next task | 4.1 Dashboards (SignalR) |
-| Last session | 2026-09-30 — task 3.8 (trust and drop-off) and 3.9 (Week 3 demo run, Week 3 complete) on `day4`, uncommitted for review. `main` holds everything up to 3.7 and the UI upgrade (merge `54733e6`) |
+| Current week | **Week 4 — Polish and proof** (1 of 9) |
+| Next task | 4.2 Merchant webhooks |
+| Last session | 2026-09-30 — 3.8 and 3.9 committed on `day4` (`8c6b9e1`, not pushed); task 4.1 (live dashboards) on `day4`, uncommitted for review. `main` holds everything up to 3.7 and the UI upgrade (merge `54733e6`) |
 | Blockers | None |
 
 ---
@@ -47,9 +47,9 @@ A task is **not done** until all of these pass. Record the result in the daily l
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
 | 3 | Operations and money | Group delivered, merchants settled | ✅ Done 2026-09-30 |
-| 4 | Polish and proof | Full demo runs end to end | ⬜ |
+| 4 | Polish and proof | Full demo runs end to end | 🔄 1 of 9 |
 
-Tests today: **352 passing** (235 domain, 6 architecture, 111 integration).
+Tests today: **360 passing** (239 domain, 6 architecture, 115 integration).
 
 ---
 
@@ -596,13 +596,50 @@ next morning each merchant is settled.
 
 ---
 
-## Week 4 — Polish and proof ⬜
+## Week 4 — Polish and proof 🔄
 
 **Done when:** the final demo script below runs end to end.
 
-- [ ] **4.1 Dashboards (SignalR).** Live counts for admin and hub: open groups, parcels at hub, riders out.
+- [x] **4.1 Dashboards (SignalR).** Live counts for admin and hub: open groups, parcels at hub, riders out.
       *Added by the market review:* **packages per delivery per area, week by week** (the number the business
       lives on), and a hub warning before the riders leave: "3 parcels for today's deliveries not scanned in yet".
+      *Done 2026-09-30:* `Application/Operations/Dashboard/OperationsDashboardHandler` counts from the data when asked:
+      per hub, deliveries still open to shops, closed deliveries due out today (or late) and not out, parcels scanned in
+      (`Package.HubId`), parcels on the shuttle to it, riders out of its riders, and each parcel of a due delivery not on
+      its shelf with where it is (`Domain/Orders/ParcelState.PlaceFor`: still at the shop, waiting for the advance,
+      collected but not scanned in, at another hub, on the shuttle, with a rider); for the operator, every hub and
+      **packages per delivery** by area for the last 8 weeks (`Domain/Grouping/DeliveryDensity`: delivered stops and
+      the packages taken, weeks = the seven days ending today, so no week-start convention). **Live:**
+      `AppDbContext.SaveChangesAsync` tells `IOperationsFeed` (Application) once a save touching orders, packages,
+      deliveries, trips, stops or riders is committed; `Web/Live/OperationsFeed` sends "changed" (no data) to the
+      operator's SignalR group at most once a second; `Web/Live/OperationsHub` (`/hubs/operations`, policy `Operations`)
+      puts a connection in its tenant's group from its sign-in; `wwwroot/js/live.js` (SignalR client 10.0.11 vendored in
+      `wwwroot/lib/signalr`) fetches the page again and swaps its `data-live` parts, keeping unfolded boxes open, with a
+      "Live · updated" badge. `/hubs` answers 401/403 like `/api`. **Pages:** Hub today gets the red "N parcels for
+      today's deliveries are not scanned in yet" with the list (label, delivery, shop, where it is), or "Every parcel of
+      today's N deliveries is here", and tiles for open deliveries and parcels in the hub; new **Dashboard** (`/Admin`,
+      policy `OperatorAdmin` = tenant admin) with totals, a row per hub linking to its Hub today, and the week-by-week
+      table (two or more green, less orange); tenant admins now land on it.
+      *Tested:* build 0 errors, no new warnings; 4 new domain tests (a parcel on its shelf is not missing; where one is
+      from its last scan then its order's status, including nobody home; packages per delivery to one decimal and
+      nothing without deliveries; weeks counted back whole) and 4 new integration tests (hub counts, the three missing
+      parcels at the shop, on the shuttle and at another hub, the page's warning, and after Start trip only the away
+      parcels left, another operator null; two deliveries handed over, one dated a week back: the area reads 3.0 this
+      week and 1.0 the week before, the admin lands on `/Admin` which lists the hub, hub staff denied, Chattogram's
+      dashboard without it; a hub staff SignalR connection hears "changed" after an order while anonymous is 401 and a
+      shop 403; only a committed change to operations signals, and with its own tenant). Mutations: no signal fails 2
+      tests, counting shelved parcels as missing fails 1. 239 + 6 + 115 = 360 pass, none skipped. No schema change.
+      Live on dev: `/Admin` for OneDrop Dhaka (13 open deliveries, 2 parcels in, 0 of 3 riders out, 59 parcels not
+      scanned in — the old dev deliveries never collected — and 1.5 packages per delivery; Mirpur 10 1.5 then 1.8); by
+      curl over long polling, the admin's connection got `{"type":1,"target":"changed","arguments":[]}` 1.6 s after
+      Gadget BD's OD-100104, a Chattogram admin listening at the same time got nothing for OD-100105, a shop 403, the
+      Dhaka cookie on the Chattogram host 401, anonymous 401; in headless Chrome at 390 px (no sideways scroll) the
+      dashboard went 13 → 14 open deliveries and Mirpur's Hub today 9 → 10 open, 43 → 44 parcels at shops, without a
+      reload, badge "Live · updated". The live check led to the warning's spacing and the cell tooltips ("1 package in
+      1 delivery"). No errors in the app log.
+      *Left:* one app instance (a second would need a SignalR backplane); Shelves, Trips and Cash pages are not live
+      (they reload); the warning also lists late deliveries from earlier days, which on dev are the old test orders;
+      packages per delivery counts per delivery, not per door visit; no chart, a table.
 - [ ] **4.2 Merchant webhooks.** Order status changes posted to the merchant's URL through the outbox, signed.
 - [ ] **4.3 Tenant isolation test sweep.** Every endpoint and page: tenant A gets 404 for tenant B; merchant sees
       only its parcels.
@@ -766,6 +803,9 @@ Payments stay fake in the MVP either way.
 | 2026-09-30 | A failure is dated by its stop (`TripStop.CompletedOn`); a delivery handed over at the same stop as a refused order is not counted as accepted after it | A partial refusal is a failure, not a good delivery; order statuses have no reliable date of their own |
 | 2026-09-30 | A shop's late handover is stored on the order (`Order.ShopLateOn`, decided in `FollowUpIn`), and the late fee reads it | It counts at an operator whose late fee is ৳0 and it is dated for the window; one rule for fee and drop-off |
 | 2026-09-30 | A shop that drops off is still listed on the route sheet (so hub staff expect its parcels) but counts nothing to collect, and the route list leaves it out; its own page says until when and to which hub | The collector does not call; staff know what is coming; the shop is told plainly, the customers' records never |
+| 2026-09-30 | Live dashboards: a committed save touching operations sends "changed" with no data to the operator's SignalR group (at most once a second); the page reads itself again through its normal request and swaps its `data-live` parts | Nothing can leak through the socket, the page's own authorisation and query filters decide what it shows, and every live page reuses its Razor markup instead of a second JSON view |
+| 2026-09-30 | Packages per delivery counts deliveries handed over and the packages taken, by area, in seven-day weeks ending today | The number the business lives on (target 2+); Bangladesh's week does not start on Monday, and a week-start tenant setting would exist for one report |
+| 2026-09-30 | Tenant admins get their own **Dashboard** (`/Admin`, every hub and the weekly numbers) as their home; hub staff keep Hub today, which now warns about today's parcels not scanned in yet | The admin looks at the whole operator; hub staff at one hub's day |
 
 ## Quick reference
 
@@ -825,6 +865,18 @@ Newest first. One entry per working day: what was done, how it was tested, what 
   Mirpur's Cash page; the customer cookie on the Chattogram host goes to its login. "My deliveries" shows DG-100065
   Delivered ৳110. No errors in the app log.
 - **Next:** Week 4, task 4.1 dashboards.
+- **Committed:** tasks 3.8 and 3.9 as `8c6b9e1` on `day4` (not pushed).
+- **Done (task 4.1):** `Domain/Orders/ParcelPlace` (`ParcelState`), `Domain/Grouping/DeliveryDensity`;
+  `Application/Abstractions/IOperationsFeed`, `Application/Operations/Dashboard/OperationsDashboardHandler`;
+  `AppDbContext` signals after a committed change to operations; `Web/Live/OperationsHub` and `OperationsFeed`,
+  `AddSignalR` and `/hubs/operations`, `/hubs` answering 401/403; policy `OperatorAdmin`; pages Hub today (warning,
+  tiles, live) and `/Admin` Dashboard, nav "Dashboard", tenant admins' home; `wwwroot/js/live.js`,
+  `wwwroot/lib/signalr/signalr.min.js` (10.0.11), `Shared/_Live`; `Statuses.Place`; styles; test package
+  `Microsoft.AspNetCore.SignalR.Client` 10.0.12.
+- **Tested:** see task 4.1 above: 4 new domain and 4 new integration tests, two mutations caught, 239 + 6 + 115 = 360
+  pass, none skipped; no schema change; live on dev by curl over SignalR long polling and in headless Chrome at 390 px
+  (OD-100103–OD-100107): counts changed on the open page without a reload, Chattogram heard nothing of Dhaka.
+- **Next:** task 4.2, merchant webhooks.
 
 ### 2026-09-29
 - **Decided with the owner:** weight allowance 2 kg per shop, then ৳15 per started kg in Dhaka and ৳20 in Chattogram;

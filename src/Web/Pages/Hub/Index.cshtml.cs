@@ -4,6 +4,7 @@ using Application.Delivery.HubCash;
 using Application.Delivery.HubTrips;
 using Application.Network.HubScan;
 using Application.Network.PickupRoutes;
+using Application.Operations.Dashboard;
 
 namespace Web.Pages.Hub;
 
@@ -16,7 +17,8 @@ public class IndexModel(
     HubScanHandler scans,
     PickupRoutesHandler routes,
     HubTripsHandler trips,
-    HubCashHandler cash) : PageModel
+    HubCashHandler cash,
+    OperationsDashboardHandler dashboard) : PageModel
 {
     [BindProperty(SupportsGet = true)]
     public string? Hub { get; set; }
@@ -36,6 +38,8 @@ public class IndexModel(
 
     public HubCash Cash { get; private set; } = new(default, []);
 
+    public HubNow? Now { get; private set; }
+
     public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
         Hubs = await scans.HubsAsync(cancellationToken);
@@ -52,6 +56,7 @@ public class IndexModel(
         Shuttle = await scans.ShuttleAsync(Current.Code, cancellationToken) ?? Shuttle;
         Trips = await trips.TodayAsync(Current.Code, cancellationToken) ?? Trips;
         Cash = await cash.ListAsync(Current.Code, cancellationToken) ?? Cash;
+        Now = await dashboard.HubAsync(Current.Code, cancellationToken);
 
         return Page();
     }

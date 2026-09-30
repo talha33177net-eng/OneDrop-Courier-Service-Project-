@@ -2,8 +2,16 @@
 @model Web.Pages.Hub.IndexModel
 @using Domain.Delivery
 @using Web.Pages.Hub
+@using Web.Display
 @{
     ViewData["Title"] = Model.Current is null ? "Hub today" : $"{Model.Current.Name} today";
+}
+
+@section Head {
+    @if (Model.Current is not null)
+    {
+        <partial name="_Live" />
+    }
 }
 
 @if (Model.Current is null)
@@ -22,11 +30,13 @@
     var planned = riders.Count(rider => rider.Status == TripStatus.Planned);
     var back = riders.Count(rider => rider.Status == TripStatus.Finished);
     var notHandedIn = Model.Cash.Trips.Count(trip => trip.HandedIn is null && trip.Status == TripStatus.Finished);
+    var now = Model.Now!;
+    var missing = now.NotHereYet;
 }
 
 <div class="page-head">
     <div>
-        <p class="eyebrow">@Model.Trips.Day.ToString("dddd d MMMM")</p>
+        <p class="eyebrow">@Model.Trips.Day.ToString("dddd d MMMM") <span class="live-status" data-live-status>Connecting…</span></p>
         <h1>@hub.Name today</h1>
         <p class="lead">
             Parcels flow through the hub in six steps, top to bottom. Each card says what is waiting and takes you to
@@ -49,7 +59,52 @@
     }
 </div>
 
+<div data-live="today">
+@if (missing.Count > 0)
+{
+    <div class="notice notice-problem live-warning" role="alert">
+        <strong>
+            @missing.Count @(missing.Count == 1 ? "parcel" : "parcels") for today's deliveries @(missing.Count == 1 ? "is" : "are") not
+            scanned in yet.
+        </strong>
+        Riders take only orders with every parcel on the shelf; the rest follow tomorrow.
+        <details id="missing-parcels">
+            <summary>Which parcels, and where they are</summary>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr><th>Label</th><th>Delivery</th><th>Shop</th><th>Where it is</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var parcel in missing)
+                        {
+                            <tr>
+                                <td>@parcel.Label</td>
+                                <td>@parcel.Delivery</td>
+                                <td>@parcel.Shop</td>
+                                <td>@Statuses.Place(parcel.Place, parcel.OtherHub)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </details>
+    </div>
+}
+else if (now.DueToday > 0)
+{
+    <p class="notice notice-ok">Every parcel of today's @now.DueToday @(now.DueToday == 1 ? "delivery" : "deliveries") is here.</p>
+}
+
 <div class="tiles">
+    <a class="tile" asp-page="/Hub/Shelves" asp-route-hub="@hub.Code">
+        <div class="tile-number">@now.OpenDeliveries</div>
+        <div class="tile-label">deliveries still open to shops</div>
+    </a>
+    <a class="tile" asp-page="/Hub/Shelves" asp-route-hub="@hub.Code">
+        <div class="tile-number">@now.ParcelsHere</div>
+        <div class="tile-label">parcels in the hub@(now.ParcelsOnTheWay > 0 ? $", {now.ParcelsOnTheWay} on the way" : "")</div>
+    </a>
     <a class="tile @(waitingAtShops > 0 ? "tile-warn" : null)" asp-page="/Hub/Routes">
         <div class="tile-number">@waitingAtShops</div>
         <div class="tile-label">parcels waiting at shops</div>
@@ -181,6 +236,7 @@
         <div class="flow-action"><a class="button ghost" asp-page="/Hub/Cash" asp-route-hub="@hub.Code">Riders' cash</a></div>
     </li>
 </ol>
+</div>
 
 <p class="muted">
     Shops are paid their cash on delivery automatically the next day. Returned parcels: scan them in (the screen says

@@ -48,4 +48,18 @@ public static class Statuses
             _ => "Cancelled"
         };
     }
+
+    /// <summary>Where a parcel of today's delivery is while it is not on its shelf; <paramref name="otherHub"/> names that hub.</summary>
+    public static string Place(ParcelPlace place, string? otherHub)
+    {
+        return place switch
+        {
+            ParcelPlace.AtTheShop => "Still at the shop",
+            ParcelPlace.WaitingForAdvance => "At the shop, waiting for the fee in advance",
+            ParcelPlace.WithTheCollector => "Collected, not scanned in yet",
+            ParcelPlace.AtAnotherHub => $"At {otherHub} hub, not on the shuttle yet",
+            ParcelPlace.OnTheShuttle => "On the shuttle here",
+            _ => "With a rider, not scanned back in"
+        };
+    }
 }
