@@ -1,0 +1,46 @@
+@page
+@model Web.Pages.Dev.WebhooksModel
+@{
+    ViewData["Title"] = "Shop webhooks";
+}
+
+<h1>Shop webhooks</h1>
+<p class="lead">
+    Development only. A demo shop sets its webhook on <strong>Order updates</strong> to
+    <code>http://localhost:5080/Dev/Webhooks</code>; this page plays its website and keeps the last 50 updates.
+</p>
+
+<div class="card table-wrap">
+    @if (Model.Received.Count == 0)
+    {
+        <p class="muted">No webhooks yet.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr><th>Received (UTC)</th><th>Id</th><th>Signature</th><th>Body</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var (webhook, shop) in Model.Received)
+                {
+                    <tr>
+                        <td>@webhook.On.ToString("HH:mm:ss")</td>
+                        <td>@webhook.Id</td>
+                        <td>
+                            @if (shop is null)
+                            {
+                                <span class="status status-problem">Does not check</span>
+                            }
+                            else
+                            {
+                                <span class="status status-done">Checks: @shop</span>
+                            }
+                        </td>
+                        <td style="white-space: normal"><code>@webhook.Body</code></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>

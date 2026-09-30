@@ -44,18 +44,27 @@ public class ApiKeyAuthenticationHandler(
             return AuthenticateResult.Fail("The API key is malformed.");
         }
 
-        // Deliberately across tenants: the key is what tells us the tenant
-        var key = await db.MerchantApiKeys
-            .IgnoreQueryFilters([AppDbContext.TenantFilter])
-            .FirstOrDefaultAsync(k => k.Prefix == prefix, Context.RequestAborted);
+        // Deliberately across tenants, in the query filter and in the database: the key is what tells us the tenant
+        MerchantApiKey? key;
+        var merchantActive = false;
+        await using (await db.AcrossTenantsAsync(Context.RequestAborted))
+        {
+            key = await db.MerchantApiKeys
+                .IgnoreQueryFilters([AppDbContext.TenantFilter])
+                .FirstOrDefaultAsync(k => k.Prefix == prefix, Context.RequestAborted);
+            if (key is not null && key.Matches(secret))
+            {
+                merchantActive = await db.Merchants
+                    .IgnoreQueryFilters([AppDbContext.TenantFilter])
+                    .AnyAsync(m => m.Id == key.MerchantId && m.TenantId == key.TenantId && !m.Archived, Context.RequestAborted);
+            }
+        }
+
         if (key is null || !key.Matches(secret))
         {
             return AuthenticateResult.Fail("The API key is not valid.");
         }
 
-        var merchantActive = await db.Merchants
-            .IgnoreQueryFilters([AppDbContext.TenantFilter])
-            .AnyAsync(m => m.Id == key.MerchantId && m.TenantId == key.TenantId && !m.Archived, Context.RequestAborted);
         var tenant = await catalog.FindByIdAsync(key.TenantId, Context.RequestAborted);
         if (!merchantActive || tenant is null)
         {

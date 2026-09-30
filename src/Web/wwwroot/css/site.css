@@ -1650,3 +1650,22 @@ table.density tfoot th:first-child {
     color: var(--orange-dark);
     font-weight: 600;
 }
+
+/* Merchant webhook page: an example body and a secret that must fit a phone */
+.help pre {
+    background: #f4f6f8;
+    padding: 10px 12px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 0.85rem;
+}
+
+code.secret {
+    word-break: break-all;
+    font-size: 0.95rem;
+}
+
+.help pre code {
+    background: none;
+    padding: 0;
+}

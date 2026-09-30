@@ -16,6 +16,10 @@ namespace Application.Notifications.SendOutbox;
 /// </summary>
 public class CustomerTexts(IAppDbContext db, ITenantContext tenantContext, ICustomerLinks links, ISmsSender sms)
 {
+    /// <summary>The outbox messages that are texts; the others are for someone else (<c>SendWebhooksJob</c>).</summary>
+    public static readonly string[] Types =
+        [nameof(OrderPlacedMessage), nameof(DeliveryLockedMessage), nameof(PaymentReceivedMessage)];
+
     public async Task SendAsync(OutboxMessage message, CancellationToken cancellationToken)
     {
         var (phone, text) = message.Type switch

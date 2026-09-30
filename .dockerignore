@@ -1,0 +1,14 @@
+# Secrets: connection strings and the compose password never go into an image
+**/*.Local.json
+.env
+
+# Build output, hidden tool folders and documents the build does not need
+**/bin/
+**/obj/
+**/TestResults/
+**/*.dbmdl
+**/*.jfm
+.*
+*.md
+Documentation/
+Plans/

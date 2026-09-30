@@ -5,8 +5,8 @@ using Infrastructure.Persistence;
 namespace Web.Pages.Platform;
 
 /// <summary>
-/// The platform view across tenants. The only page that lifts the tenant filter, and it says so explicitly;
-/// it only ever reads counts.
+/// The platform view across tenants. The only page that lifts the tenant filter, and it says so explicitly, to EF
+/// and to the database's Row-Level Security; it only ever reads counts.
 /// </summary>
 public class TenantsModel(AppDbContext db) : PageModel
 {
@@ -16,6 +16,7 @@ public class TenantsModel(AppDbContext db) : PageModel
     {
         string[] acrossTenants = [AppDbContext.TenantFilter];
 
+        await using var database = await db.AcrossTenantsAsync(cancellationToken);
         Tenants = await db.Tenants
             .OrderBy(t => t.Name)
             .Select(t => new TenantRow(

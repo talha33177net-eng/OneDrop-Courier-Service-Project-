@@ -57,6 +57,10 @@ dotnet test --project tests/Integration.Tests
 - Queries are filtered automatically (`AppDbContext` named filters `Tenant` and `Merchant`). Do not add
   `IgnoreQueryFilters()` without a filter key, and only where crossing tenants is the point (API key lookup,
   platform pages). Say why in a comment.
+- The database enforces the tenant too (Row-Level Security, `Platform.TenantIsolation`): every connection the
+  context opens carries its tenant (`TenantSessionInterceptor`), so a lifted tenant filter, `ExecuteUpdate` or raw
+  SQL still reaches only the current tenant's rows. A read that must cross tenants also wraps itself in
+  `await using (await db.AcrossTenantsAsync())`, kept as short as the read.
 - A request's tenant comes from the subdomain (`TenantResolutionMiddleware`) or the API key
   (`ApiKeyAuthenticationHandler`). Background work sets `TenantContext` from a job parameter.
 - A merchant must only ever see its own orders; another tenant's or merchant's row is a 404, never a 403.

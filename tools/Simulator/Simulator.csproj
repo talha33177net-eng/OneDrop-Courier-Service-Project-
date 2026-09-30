@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Fills an operator with made-up shops and a stream of orders for demos (see Program.cs for how to run it).
+    The shops are made in the database (there is no API for them); the orders go through the running app's
+    POST /api/v1/orders, so grouping, fees, texts and the live dashboards behave as for a real shop.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Infrastructure\Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
+  </ItemGroup>
+
+</Project>

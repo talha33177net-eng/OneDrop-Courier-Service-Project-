@@ -13,9 +13,9 @@ The one place to see where we are and what comes next. Built from the two projec
 
 | | |
 |---|---|
-| Current week | **Week 4 — Polish and proof** (1 of 9) |
-| Next task | 4.2 Merchant webhooks |
-| Last session | 2026-09-30 — 3.8 and 3.9 committed on `day4` (`8c6b9e1`, not pushed); task 4.1 (live dashboards) on `day4`, uncommitted for review. `main` holds everything up to 3.7 and the UI upgrade (merge `54733e6`) |
+| Current week | **Week 4 — Polish and proof** (6 of 9) |
+| Next task | 4.7 Combine deliveries and learn addresses |
+| Last session | 2026-09-30 — 4.1 committed on `day4` (`2bdb736`, not pushed); tasks 4.2 (merchant webhooks), 4.3 (tenant isolation sweep), 4.4 (Row-Level Security), 4.5 (Docker and CI) and 4.6 (simulator) on `day4`, uncommitted for review. `main` holds everything up to 3.7 and the UI upgrade (merge `54733e6`) |
 | Blockers | None |
 
 ---
@@ -47,9 +47,9 @@ A task is **not done** until all of these pass. Record the result in the daily l
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
 | 3 | Operations and money | Group delivered, merchants settled | ✅ Done 2026-09-30 |
-| 4 | Polish and proof | Full demo runs end to end | 🔄 1 of 9 |
+| 4 | Polish and proof | Full demo runs end to end | 🔄 6 of 9 |
 
-Tests today: **360 passing** (239 domain, 6 architecture, 115 integration).
+Tests today: **395 passing** (258 domain, 6 architecture, 131 integration).
 
 ---
 
@@ -640,14 +640,197 @@ next morning each merchant is settled.
       *Left:* one app instance (a second would need a SignalR backplane); Shelves, Trips and Cash pages are not live
       (they reload); the warning also lists late deliveries from earlier days, which on dev are the old test orders;
       packages per delivery counts per delivery, not per door visit; no chart, a table.
-- [ ] **4.2 Merchant webhooks.** Order status changes posted to the merchant's URL through the outbox, signed.
-- [ ] **4.3 Tenant isolation test sweep.** Every endpoint and page: tenant A gets 404 for tenant B; merchant sees
+- [x] **4.2 Merchant webhooks.** Order status changes posted to the merchant's URL through the outbox, signed.
+      *Done 2026-09-30:* `Order.MoveTo` raises `OrderStatusChanged` (every move, none for a new order), written to the
+      outbox as `OrderStatusChangedMessage` (order, shop, the status it moved to) in the change's transaction. New
+      `SendWebhooksJob` (tenant job) posts the due ones oldest first: body `{ type: "order.status_changed", timestamp,
+      data: { number, externalReference, status } }` (timestamp = when it happened, whole seconds; never the delivery,
+      the fee or the customer), signed as **Standard Webhooks** (`Domain/Merchants/WebhookSignature`: `webhook-id`
+      `msg_{outbox id}`, the same on a retry; `webhook-timestamp`; `webhook-signature` `v1,` + base64 HMAC-SHA256 of
+      `{id}.{timestamp}.{body}` with the base64 of the `whsec_` secret), so a shop can use that specification's
+      libraries. A 2xx answer is sent; anything else waits 1, 2, 4, 8 minutes as for texts, and the shop is not called
+      again in the same run; a shop with no webhook has its messages `Skipped` (new `OutboxStatus` 4). The texts
+      sender takes only its own types (`CustomerTexts.Types`) and the in-process `OutboxDispatcher` runs the two
+      senders in loops of their own, so a slow shop server never holds up an SMS. `IWebhookSender` →
+      `Infrastructure/Webhooks/HttpWebhookSender` (typed `HttpClient`, `Webhooks:Timeout` 10 s, no redirects, the
+      answer's body never read; a refused connection or timeout comes back as the response, not an exception).
+      `Merchant.WebhookUrl` and `WebhookSecret` (`SetWebhook`: https only, plain http only to localhost, no user info,
+      at most 500 characters; the secret made the first time and kept; `NewWebhookSecret`, `RemoveWebhook`). Shop
+      page **Order updates** (`/Merchant/Webhook`, `MerchantWebhookHandler`): the address, the secret, a new secret,
+      stop, and **Send a test** (`webhook.test`, sent at once, "Your website answered 200"); how to check a signature in
+      its help box. Development page **Shop webhooks** (`/Dev/Webhooks`) plays a shop's website: it keeps the last 50
+      posts and says whose secret each signature checks against. SQL: `Merchants.Merchant.WebhookUrl`,
+      `WebhookSecret`, `chk_Merchant_Webhook`; the `OutboxMessage` header names status 4. `System.Net.Http.HttpClient`
+      logs at Warning (it logged every call with a stack trace for a refused one).
+      *Tested:* build 0 errors, no new warnings; 19 new domain test cases (the specification's own test vector; another
+      secret, id, time or body signs differently; a secret is `whsec_` + 24 random bytes; setting a webhook makes a
+      secret once and keeps it, a new secret replaces it, removing keeps it; http only to localhost, 127.0.0.1 or
+      `*.localhost`; blank, relative, no scheme, ftp, user info, http elsewhere and too long refused; every move
+      raises one event with its status, a hub scan with no pickup scan two, a refused move none; a skipped message is
+      never due) and 5 new integration tests on shops of their own, with a recording sender in place of HTTP (a hub
+      scan posts `pickedUp` then `atHub` with ids `msg_{id}`, each signature checks with the shop's secret, the body
+      has exactly its fields and no delivery number or phone, the event time; a shop with no webhook is skipped and
+      nothing posted; a server answering 500: the first change waits a minute, the second is not tried in that run,
+      the server back → the second goes first, then the first once due; a Chattogram shop's change is left alone by
+      the texts sender and by Dhaka's run and posted by Chattogram's; on the page a shop saves, sees its secret, sends a
+      test signed with it, sees a 500 as not delivered, another shop sees neither, a new secret, stop, anonymous
+      redirected). Mutations: the texts sender taking every type and a failing shop called again in the same run each
+      fail 1 test. 258 + 6 + 120 = 384 pass, none skipped. The publish script was reviewed first
+      (`Merchants.Merchant` rebuilt with its rows copied); both databases published. Live on dev (real HTTP):
+      Fashion House's page refused `http://myshop.com.bd/hook`, saved `http://localhost:5080/Dev/Webhooks` (secret
+      shown), the test "answered 200"; Fashion House OD-100108 (FB-2001) collected and scanned in at MIR → `msg_112`
+      `pickedUp` and `msg_113` `atHub` on `/Dev/Webhooks`, "Checks: Fashion House"; Gadget BD OD-100109 and
+      Chattogram OD-100110 collected → `Skipped` (tenant 2 for the latter); Gadget BD's and Chattogram Fashion House's
+      pages show neither the address nor the secret, the Dhaka cookie on Chattogram's page is redirected (302), hub
+      staff access denied; a dead address (`localhost:5999`) → the test says "No answer: … actively refused it", and
+      OD-100111 collected meanwhile failed once (logged), then with the address back arrived a minute later as the same
+      `msg_117` with the original time. No errors in the app log.
+      *Left:* webhooks for a shop's own orders only as status changes (no "joined a delivery", no payout webhook); no
+      list of past deliveries or failed webhooks on the shop's page (like failed texts, no screen yet); the address is
+      not checked against private networks (only https and no redirects); order across retries is by timestamp, not
+      guaranteed; the secret is stored as it is (signing needs it) rather than encrypted; one app instance sends (no
+      claim on a row, as for texts); no API to set the webhook, only the page.
+- [x] **4.3 Tenant isolation test sweep.** Every endpoint and page: tenant A gets 404 for tenant B; merchant sees
       only its parcels.
-- [ ] **4.4 SQL Server Row-Level Security** (isolation layer 3), using SESSION_CONTEXT set per connection.
+      *Done 2026-09-30:* no product code changed; the sweep found no leak. `tests/Integration.Tests/TripTests.Isolation.cs`
+      (a part of `TripTests`, for its hub, rider and due-delivery helpers) reads **every route the app maps** from its
+      endpoint table (pages, API actions, the SignalR hub, the jobs dashboard and anything else, static files left out)
+      and holds one line per route with what another operator, or another shop of the same operator, gets there; a
+      route added without a line fails with "Add each new route to the sweep …: /ping". The lines work on one real
+      Dhaka delivery (a Fashion House order handed to a rider on a hub of the test's own) and a second order waiting in
+      an open delivery: Chattogram hub staff and admin get 404 for the hub's Hub today, Shelves, Shuttle, Trips (and
+      Plan), Cash (and hand-in, also at their own hub; Dhaka staff at another Dhaka hub too), Scan and a Dhaka route
+      sheet, and their scans of the Dhaka label in all four modes change nothing; Chattogram's route list and dashboard
+      name no Dhaka zone or hub; Chattogram's rider and another Dhaka rider of the same hub cannot see or close the stop
+      (nobody home, hand over); the customer's phone signed in at Chattogram is another customer who sees neither
+      delivery and whose Ship now (page and API 404) leaves it open; the SMS link's token is a 404 on Chattogram's host
+      for view, confirm and pay; Gadget BD and Chattogram's Fashion House see neither the order, its labels nor its
+      payout line (Fashion House does), nor any other shop's webhook secret; Chattogram's key and form cannot use a
+      Dhaka area (`order.area.unknown`, `quote.area.unknown`, "The order was not saved") and Gadget BD's key cannot use
+      Fashion House's pickup point (`order.pickupPoint.unknown`, `quote.pickupPoint.unknown`); a tenant admin is
+      denied the platform pages and `/jobs`. Fixed-text pages say why they have nothing to ask for. Afterwards the
+      waiting order is still `Created`, unconfirmed, no parcel scanned, its delivery open, the trip's cash not handed in,
+      and no order exists at Chattogram for the phone. **Wrong host:** a Dhaka shop, hub staff, admin, rider and customer
+      sign-in, and the platform admin's, sent to every route of every other host is 403. **Production:** `/Dev/Sms`,
+      `/Dev/Payments` and `/Dev/Webhooks` (the only pages besides the platform's that show every operator) are 404 and
+      the sign-in page lists no demo logins. Test support: `ClientAddressFilter` in `WebAppFactory` lets a test's
+      requests come from an address of its own (header `X-Test-Client`), so its phone sign-ins do not use up the
+      allowance of 10 a minute every other test's shares.
+      *Tested:* build 0 errors, no new warnings; 3 new integration tests; 258 + 6 + 123 = 387 pass, none skipped. No
+      schema change. Mutation: an extra `MapGet("/ping")` fails the sweep naming `/ping`. Mutations that remove the host
+      guard or a query filter were not run: auto mode refused to run the app with a tenant guard removed. Live on dev by
+      curl with the demo logins: Chattogram hub staff and admin 404 on `/Hub?hub=MIR`, `/Hub/Shelves?hub=MIR`,
+      `/Hub/Cash?hub=GUL`, `/Hub/Trips?hub=MIR` and `/Hub/RouteSheet/1` (Dhaka hub staff 200), Chattogram's dashboard
+      names no Dhaka zone; Dhaka cookies on the Chattogram and platform hosts 403, the platform admin's on Dhaka 403;
+      OD-100108's label and OD-100100's payout line only on Fashion House's pages; DG-100065 on Sumon Ali's page and not
+      on Chattogram's rider's; Chattogram's and Gadget BD's keys 404 on OD-100108 (Fashion House 200), Chattogram's quote
+      with a Dhaka area `quote.area.unknown`. No errors in the app log.
+      *Left:* the Dev pages show every operator in Development by design; the host guard and query filters are proved by
+      the sweep's results, not by a mutation run; Row-Level Security (4.4) is the next layer.
+- [x] **4.4 SQL Server Row-Level Security** (isolation layer 3), using SESSION_CONTEXT set per connection.
       *Cut option:* moves to "next step"; EF filters and the save interceptor still protect the data.
-- [ ] **4.5 Docker and CI.** `docker-compose.yml` (app + SQL Server); GitHub Actions: build, publish the dacpac
+      *Done 2026-09-30 (not cut):* SQL project: predicate function `Platform.TenantAccess(@TenantId)` and security
+      policy `Platform.TenantIsolation` on all 22 tables with a `TenantId` (every schema but `Platform`, including
+      `Identity.User`): a filter predicate (reads, and the rows an update or delete can reach) and block predicates
+      after insert and after update (no row written for, or moved to, another tenant). `Infrastructure/Persistence/
+      TenantSessionInterceptor` (a `DbConnectionInterceptor`, scoped) runs `sp_set_session_context` as each connection
+      opens: `TenantScoped` = 1 and `TenantId` = the current tenant, both read only for the connection (the pool's reset
+      clears them). A marked connection sees its tenant's rows only, and with no tenant none at all, except platform
+      logins (`Identity.User` with a NULL `TenantId`). A connection not marked (DbUp, SqlPackage, an operator's
+      `sqlcmd`) is not restricted, so migrations and table rebuilds see every row. Code that crosses tenants on purpose
+      now says so to the database as well as to EF: `AppDbContext.AcrossTenantsAsync()` keeps the connection open with
+      `AllTenants` = 1 until disposed, used by the API key lookup, the platform's Operators page and `/Dev/Webhooks`
+      (with `IgnoreQueryFilters([Tenant])` as before). The key lookup now closes the across-tenants scope before the
+      key sets the tenant. No other code changed: every Application query already runs inside its tenant.
+      *Tested:* build 0 errors, no new warnings; 6 new integration tests (`RowLevelSecurityTests`: every table with a
+      `TenantId` has the filter and both block predicates in the enabled policy, naming the table to add otherwise;
+      with the query filter lifted a Chattogram connection sees only its hubs, and Dhaka's inside `AcrossTenantsAsync`
+      and not after it, and no Dhaka order; with no tenant no hub and only platform logins; writes that skip the save
+      interceptor (`ExecuteUpdate`, raw `UPDATE`) reach no Dhaka row, a raw insert for Dhaka and moving a row there are
+      refused by the block predicate; pooled connections alternating Dhaka and Chattogram never keep the last tenant; a
+      plain connection sees both), and the two save-interceptor tests that read Dhaka's rows from Chattogram now say
+      `AcrossTenantsAsync`. Mutations: without the interceptor 4 of the 6 fail; with `Orders.Package` dropped from the
+      policy the policy test fails naming it. 258 + 6 + 129 = 393 pass, none skipped. The publish script was reviewed
+      first: the function and the policy only (plus the usual check re-creates), no table rebuilt; SqlPackage disables
+      the security policies around a publish, so later rebuilds copy every row. Both databases published. **Found on the
+      way:** the first mutation run had the app's connections unmarked, so the bypass test's `ExecuteUpdate` really
+      renamed every Dhaka hub in `OneDrop-Test` to "Hijacked" (and deleted its Dhaka login codes), which then failed 8
+      other tests; the names were put back from the seed and the test pattern, dev was never touched, and the test now
+      writes each row's own value back so a broken policy counts rows without changing them. Live on dev (curl): the
+      Dhaka key finds OD-100108 on the bare host and on Dhaka's (200), Gadget BD 404, the Chattogram key 401 on the
+      Dhaka host and 404 elsewhere; Gadget BD OD-100112 ৳60 and Fashion House OD-100113 ৳25 for Tahmina Akter
+      01819274121 in one delivery (the other shop's order read with the merchant filter lifted, inside the tenant),
+      Chattogram OD-100114 ৳70, their "Is your … order" texts sent; the platform's Operators page counts both operators
+      (103 + 11 orders); Chattogram hub staff 404 on Mirpur's Hub today, Shelves, Trips and route sheet (Dhaka 200);
+      each shop's list shows its own order only; the Dhaka dashboard and `/Dev/Webhooks` work. No errors in the app
+      log.
+      *Left:* the app connects as `sa`, which could turn the policy off: a login of its own without `ALTER ANY
+      SECURITY POLICY` belongs with the deployment (4.5) and needs a new login on ras-x2 (ask first); Hangfire's tables
+      carry no tenant and are not covered; one extra round trip per connection opened (the integration suite ran in 6–7 minutes, not compared with a run before);
+      RLS enforces the tenant only, the merchant filter stays in EF.
+- [x] **4.5 Docker and CI.** `docker-compose.yml` (app + SQL Server); GitHub Actions: build, publish the dacpac
       to a throwaway database, run all tests.
-- [ ] **4.6 Simulator.** `tools/Simulator` fills both tenants with fake merchants and orders for demos.
+      *Done 2026-09-30:* `Dockerfile` (multi-stage from one copy of the repository): `web`, the published app on
+      `aspnet:10.0` as the image's non-root user, port 8080, with a folder for the data-protection keys; `database`,
+      `sdk:10.0` + the `microsoft.sqlpackage` tool running `tools/db/publish.ps1` with the connection string it is
+      given. `.dockerignore` leaves out every `*.Local.json`, `.env`, build output, hidden folders and the documents, so no
+      password reaches an image. `docker-compose.yml`: `sql` (SQL Server 2025, `SA_PASSWORD` from the git-ignored
+      `.env`, a health check with `sqlcmd`, a data volume, `localhost:14330`), `database` (the one-shot deploy, after
+      `sql` is healthy) and `web` (Development, so the demo data and Dev pages are there; `5080:8080`, so
+      `dhaka.localhost:5080` works as before; a keys volume; starts once `database` has succeeded). `.env.example`
+      says what to set. `.github/workflows/ci.yml` (pushes to `main` and `day*`, pull requests): job `test` starts a
+      throwaway SQL Server 2025 with `docker run` and a password made up for the run and masked (no repository
+      secret), installs sqlpackage, builds, deploys `OneDrop-CI` from nothing with `publish.ps1`, runs the three
+      suites and fails when the integration log does not say `skipped: 0`; job `docker` builds the images.
+      **`publish.ps1` runs on Linux too:** paths by `Path.Combine` (Windows PowerShell 5.1 has no three-part
+      `Join-Path`) and the connection string through `DbConnectionStringBuilder` (PowerShell 7 on Linux has no
+      `System.Data.SqlClient`). Found on the way: PowerShell reads `$builder.ConnectionString` on that builder as a
+      dictionary key, so the first draft ignored `-Database` and its script-only check ran against the dev database
+      (a script only, nothing applied); the script now uses `set_ConnectionString` / `get_ConnectionString`, and the
+      script-only run names `OneDrop-Test`. README: "Run it in Docker", CI, the RLS layer.
+      *Tested:* no C# change, so the Windows suites stand at 4.4's 393. Docker Desktop 29.4 on this machine:
+      `docker compose up --build` deployed an empty SQL Server 2025 from nothing (dbup pre created the database, the
+      dacpac with the security policy, 13 DbUp scripts; only Identity's usual 900-byte key warnings), then the app
+      seeded the demo data. In the container: the three hosts and the sign-in page 200; Gadget BD OD-100001 ৳60
+      (`confirm`) and Fashion House OD-100002 ৳25 for one phone, both "Is your … order" texts on `/Dev/Sms`; the
+      Chattogram key 404 on OD-100001, Gadget BD's 200; Dhaka hub staff 200 on Mirpur's Hub today and Chattogram's 404;
+      the same sign-in cookie still worked after `docker compose restart web` (keys volume); policy `TenantIsolation`
+      enabled with 66 predicates; no errors in the app log. **CI emulated:** the workflow's steps in an `sdk:10.0`
+      Linux container against a new `OneDrop-CI` in the compose SQL Server (a local container, not ras-x2): build,
+      `publish.ps1` from nothing, 258 + 6 + 129 pass, none skipped. The workflow itself has not run: it needs a push.
+      *Left:* the workflow's first real run on GitHub; the images are built, not pushed to a registry; the app in
+      Docker signs in to SQL Server as `sa` (a login of its own without `ALTER ANY SECURITY POLICY` is still open from
+      4.4); no production compose (HTTPS, a real domain, no demo data).
+- [x] **4.6 Simulator.** `tools/Simulator` fills both tenants with fake merchants and orders for demos.
+      *Done 2026-09-30:* console project `tools/Simulator` (in the solution under `tools`, referencing Infrastructure):
+      `dotnet run --project tools/Simulator -- [--tenant dhaka] [--shops 6] [--orders 40] [--pace 2] [--seed 7] [--url
+      http://localhost:5080]`, with the app running. **Shops** (`SimulatedShops`): up to 8 made-up shops per operator
+      (Nakshi Crafts, Boi Ghor, Gadget Corner, Deshi Threads, Rupsha Cosmetics, Shishu Toys, Krishi Fresh (mangoes,
+      Don't hold), Home Kitchen), each with what it sells and its weight range, made once in the database with a default
+      pickup point in a random area and found again by its contact address `{key}@simulator.example`; every run issues
+      each a new API key ("Simulator") and revokes the one before, as the plaintext is never stored. **Orders**
+      (`OrderGenerator`, seeded): about one customer per 2.2 orders, each buying from shops they have not used yet, so a
+      delivery averages about two shops; a fifth also have an office address (used 15% of the time), 15% paid online,
+      8% fast, one or two packages. **Through the API** (`Simulation`): the areas from `GET /api/v1/areas`, then for
+      each order the checkout quote (which says `joinsDelivery`) and `POST /api/v1/orders` with an idempotency key, one
+      by one, `--pace` seconds apart; in the app's process, so grouping, fees, the confirmation texts and the live
+      dashboards work as for a real shop. It prints each order and, per operator, "15 orders sent, 8 joined a delivery
+      already on its way, 0 refused", and exits 1 when the API refused any. The shops are made in the database because
+      there is no API for them (Week 1 gap); the database is the app's (`src/Web/appsettings.Local.json` or
+      `ConnectionStrings__Database`).
+      *Tested:* build 0 errors, no new warnings; 2 new integration tests (`SimulatorTests`, against the test host: 12
+      orders from 3 shops for Chattogram, all accepted, every order that operator's and one of its simulated shops, a
+      delivery with two or more of them and an order at the extra-shop fee; a second run keeps the shop and its new key
+      works while the old one is 401). Mutation: every order from the same shop fails the first test. 258 + 6 + 131 =
+      395 pass, none skipped. No schema change. Live on dev (`--orders 15 --shops 5 --seed 30`, both operators):
+      OD-100115–OD-100129 at Chattogram (7 joined) and OD-100130–OD-100144 at Dhaka (8 joined), 10 simulated shops over
+      the two operators; deliveries with several shops priced by the tenant: Dhaka DG-100086 Zahid Hossain 4 shops ৳135,
+      DG-100082 3 shops ৳110, DG-100083 ৳95 with a fast order, Chattogram DG-100077 4 shops ৳160, DG-100074 3 shops ৳130;
+      every outbox message sent; no errors in the app log.
+      *Left:* orders only: the simulator does not collect, scan, deliver or settle them, so packages per delivery on the
+      dashboard still needs handed-over deliveries (a "play the day" mode would drive the hub and door handlers); the
+      live dashboard moving under `--pace` was not watched in a browser this time (the orders go through the app, which
+      signals as in 4.1); simulated customers get the "Is your … order" text like real ones.
 - [ ] **4.7 Combine deliveries and learn addresses** (market review). An order with the same phone and area as an
       open delivery but another address match key asks the customer by SMS and on "My deliveries": "Same address as
       your delivery DG-…? Combine / Keep separate". Combining merges the deliveries and recalculates the fee; the
@@ -681,7 +864,7 @@ Payments stay fake in the MVP either way.
 
 | Time | Job | Week |
 |---|---|---|
-| Every 5 seconds (`Jobs:OutboxInterval`) | Outbox sender (in-process dispatcher, not Hangfire) | 2 ✅ |
+| Every 5 seconds (`Jobs:OutboxInterval`) | Outbox senders (in-process dispatcher, not Hangfire): texts, and shops' webhooks in a loop of their own (4.2) | 2 ✅ |
 | Every 5 minutes | Lock check (lock due groups) | 2 ✅ |
 | 02:00 | Recalculate trust and reliability scores — not needed: advance payment and drop-off are worked out from history when an order is placed or a sheet is opened (3.8) | 3 ✅ |
 | Every hour (`Jobs:SettleMerchants`) | Settle merchants: every shop's lines up to yesterday (tenant's day), paid out soon after the tenant's midnight instead of at 06:00; a failed payout is sent again the next hour (3.7) | 3 ✅ |
@@ -699,8 +882,8 @@ Payments stay fake in the MVP either way.
 | An order on Day 3 starts a new group | ✅ `DeliveryGroupingTests` |
 | Fee = base + extra per distinct accepted shop (tenant settings; Dhaka ৳60 + ৳25) | ✅ `DeliveryFeeCalculatorTests`, `PricingTests` |
 | Only one open group per customer + address, even with two orders at the same moment | ✅ `DeliveryGroupingTests` (race forced and recovered) |
-| Tenant A gets 404 for tenant B's order | ✅ `OrderApiTests` |
-| A merchant sees only its own parcels | ✅ `OrderApiTests` |
+| Tenant A gets 404 for tenant B's order | ✅ `OrderApiTests`; every route in `TripTests.Isolation` (4.3); in the database, `RowLevelSecurityTests` (4.4) |
+| A merchant sees only its own parcels | ✅ `OrderApiTests`; every shop page and API action in `TripTests.Isolation` (4.3) |
 | Every entity (except Platform) has a TenantId — build fails otherwise | ✅ `TenantOwnershipTests` |
 
 ---
@@ -806,6 +989,16 @@ Payments stay fake in the MVP either way.
 | 2026-09-30 | Live dashboards: a committed save touching operations sends "changed" with no data to the operator's SignalR group (at most once a second); the page reads itself again through its normal request and swaps its `data-live` parts | Nothing can leak through the socket, the page's own authorisation and query filters decide what it shows, and every live page reuses its Razor markup instead of a second JSON view |
 | 2026-09-30 | Packages per delivery counts deliveries handed over and the packages taken, by area, in seven-day weeks ending today | The number the business lives on (target 2+); Bangladesh's week does not start on Monday, and a week-start tenant setting would exist for one report |
 | 2026-09-30 | Tenant admins get their own **Dashboard** (`/Admin`, every hub and the weekly numbers) as their home; hub staff keep Hub today, which now warns about today's parcels not scanned in yet | The admin looks at the whole operator; hub staff at one hub's day |
+| 2026-09-30 | Merchant webhooks follow the Standard Webhooks specification (`whsec_` secret, `webhook-id`/`-timestamp`/`-signature`, HMAC-SHA256 over `{id}.{timestamp}.{body}`) | Shops can check them with that specification's ready-made libraries instead of our own scheme; the id is stable across retries so a shop can drop a repeat |
+| 2026-09-30 | Every order status change is an outbox message; the webhook sender skips a shop with no webhook when sending, not when saving | The save does not read the shop's settings; a shop that adds a webhook gets changes from then on, and the outbox gives webhooks the same all-or-nothing save and retries as texts |
+| 2026-09-30 | A webhook says the order's number, the shop's own reference and the status it moved to, with when; nothing about the delivery, the fee or the customer | A shop must never learn the customer bought elsewhere; the shop already has everything else |
+| 2026-09-30 | Webhooks are sent by their own job in their own loop, and a shop whose server fails is not called again in that run | A slow or dead shop server must not hold up customers' texts or other shops' webhooks for long; order is by the body's timestamp |
+| 2026-09-30 | A webhook address is https (plain http only to localhost); no redirects are followed; the secret is stored as it is | The order data and the signature cross the internet encrypted; a redirect could send our request elsewhere; signing needs the secret itself, unlike an API key |
+| 2026-09-30 | The isolation sweep reads the routes from the running app's endpoint table and fails for a route without a line saying what another operator or shop gets there | A new page or endpoint cannot ship without its isolation check; a hand-kept list of routes would drift |
+| 2026-09-30 | Row-Level Security reads the tenant from `SESSION_CONTEXT`, set read only by a connection interceptor as each application connection opens; a marked connection with no tenant sees no tenant's rows; connections the application did not open are not restricted | The app, DbUp and SqlPackage all sign in as `sa`, so only the connection can tell them apart; the application fails closed, while migrations and table rebuilds must see every row |
+| 2026-09-30 | Crossing tenants on purpose takes `AppDbContext.AcrossTenantsAsync()` besides `IgnoreQueryFilters([Tenant])`: the connection stays open with `AllTenants` = 1 until the scope is disposed | One lifted EF filter alone is exactly the bug layer 3 exists for; the three places that cross tenants say so twice |
+| 2026-09-30 | The policy filters every table with a `TenantId` and blocks inserts and updates for another tenant; a test fails for a tenant table left out of it | Layer 3 also covers writes that skip the save interceptor (`ExecuteUpdate`, raw SQL) |
+| 2026-09-30 | Docker: one Dockerfile with a `web` image and a `database` image that runs the same `publish.ps1`; compose runs the app as Development with the demo data; CI starts its own SQL Server with a password made up per run and deploys from nothing | One deploy path for a laptop, a container and CI; the compose stack is the demo; no secret to store, and every run proves a fresh database still builds |
 
 ## Quick reference
 
@@ -877,6 +1070,48 @@ Newest first. One entry per working day: what was done, how it was tested, what 
   pass, none skipped; no schema change; live on dev by curl over SignalR long polling and in headless Chrome at 390 px
   (OD-100103–OD-100107): counts changed on the open page without a reload, Chattogram heard nothing of Dhaka.
 - **Next:** task 4.2, merchant webhooks.
+- **Committed:** task 4.1 as `2bdb736` on `day4` (not pushed).
+- **Done (task 4.2):** `Domain/Orders/OrderEvents` (`OrderStatusChanged`, raised by `Order.MoveTo`),
+  `Domain/Merchants/WebhookSignature`, `Merchant.WebhookUrl` / `WebhookSecret` and their methods, `OutboxStatus.Skipped`
+  and `MarkSkipped`; `Application/Abstractions/IWebhookSender`, outbox contract `OrderStatusChangedMessage`,
+  `Application/Notifications/SendWebhooks` (`MerchantWebhooks`, `SendWebhooksJob`), `CustomerTexts.Types` and the texts
+  sender limited to them, `Application/Merchants/Webhook/MerchantWebhookHandler`; `Infrastructure/Webhooks/HttpWebhookSender`,
+  `OutboxDispatcher` with two loops, the job registered; pages `/Merchant/Webhook` (nav "Order updates") and
+  `/Dev/Webhooks` (demo bar "Shop webhooks"); SQL `Merchants.Merchant` (two columns, `chk_Merchant_Webhook`) and the
+  `OutboxMessage` header; `Webhooks:Timeout`, HTTP client logging at Warning; the test host's `RecordingWebhooks`;
+  README (webhooks, status table).
+- **Tested:** see task 4.2 above: 19 new domain test cases and 5 new integration tests, two mutations caught,
+  258 + 6 + 120 = 384 pass, none skipped; both databases published; live on dev with real HTTP to the Dev receiver
+  (OD-100108–OD-100111): signed `pickedUp` and `atHub` for Fashion House, the others skipped, a dead address retried
+  a minute later with the same id.
+- **Next:** task 4.3, tenant isolation test sweep.
+- **Done (task 4.3):** `tests/Integration.Tests/TripTests.Isolation.cs` (route table from the app, one line per route,
+  wrong-host sweep, Production check of the Dev pages), `ClientAddressFilter` in `WebAppFactory`. No product code
+  changed; no leak found.
+- **Tested:** see task 4.3 above: 3 new integration tests, 258 + 6 + 123 = 387 pass, none skipped; an unlisted endpoint
+  fails the sweep; live on dev by curl across both operators and three shops. The link to ras-x2 dropped once (DNS)
+  and came back within seconds.
+- **Next:** task 4.4, SQL Server Row-Level Security.
+- **Done (task 4.4):** `src/Database/Platform/Functions/TenantAccess.sql`, `Platform/Security Policies/TenantIsolation.sql`
+  (listed in the sqlproj); `Infrastructure/Persistence/TenantSessionInterceptor`, registered with the context;
+  `AppDbContext.AcrossTenantsAsync`; used by `ApiKeyAuthenticationHandler`, `Platform/Tenants` and `Dev/Webhooks`;
+  `tests/Integration.Tests/RowLevelSecurityTests.cs`; `SaveInterceptorTests` and the sweep's secret helper read across
+  tenants explicitly; Project-Context, Conventions and Database.md.
+- **Tested:** see task 4.4 above: 6 new integration tests, two mutations caught, 258 + 6 + 129 = 393 pass, none
+  skipped; both databases published (function and policy only); live on dev by curl (OD-100112–OD-100114). The first
+  mutation run damaged Dhaka hub names in `OneDrop-Test` through the test itself; repaired, and the test made harmless.
+- **Next:** task 4.5, Docker and CI.
+- **Done (task 4.5):** `Dockerfile`, `.dockerignore`, `docker-compose.yml`, `.env.example`, `.github/workflows/ci.yml`;
+  `tools/db/publish.ps1` portable to PowerShell 7 on Linux (and its `-Database` switch fixed before it ever ran against
+  the wrong database); README.
+- **Tested:** see task 4.5 above: the compose stack from an empty SQL Server to a working app (OD-100001–OD-100002 in
+  the container's database), and the CI steps emulated in a Linux SDK container: 258 + 6 + 129 pass, none skipped.
+- **Next:** task 4.6, simulator.
+- **Done (task 4.6):** `tools/Simulator` (`Program`, `SimulatedShops`, `OrderGenerator`, `Simulation`), in `Courier.sln`;
+  `tests/Integration.Tests/SimulatorTests.cs` (the test project references the simulator); README and Project-Context.
+- **Tested:** see task 4.6 above: 2 new integration tests, one mutation caught, 258 + 6 + 131 = 395 pass, none skipped;
+  live on dev 30 orders over both operators (OD-100115–OD-100144), several-shop deliveries at the tenants' prices.
+- **Next:** task 4.7, combine deliveries and learn addresses.
 
 ### 2026-09-29
 - **Decided with the owner:** weight allowance 2 kg per shop, then ৳15 per started kg in Dhaka and ৳20 in Chattogram;

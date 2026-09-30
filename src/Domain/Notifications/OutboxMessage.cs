@@ -11,13 +11,16 @@ public enum OutboxStatus : byte
     Sent = 2,
 
     /// <summary>Every attempt failed. Left for someone to look at; never retried by itself.</summary>
-    Failed = 3
+    Failed = 3,
+
+    /// <summary>Nobody to send it to (a shop with no webhook). Never sent later.</summary>
+    Skipped = 4
 }
 
 /// <summary>
-/// A domain event waiting to be acted on (an SMS to the customer), saved in the same transaction as the change
-/// that raised it, so a change is never lost without its message nor a message sent for a change rolled back.
-/// The sender job handles it later and retries a failure with growing gaps: 1, 2, 4 and 8 minutes, then gives up.
+/// A domain event waiting to be acted on (an SMS to the customer, a webhook to a shop), saved in the same transaction
+/// as the change that raised it, so a change is never lost without its message nor a message sent for a change rolled
+/// back. A sender job handles it later and retries a failure with growing gaps: 1, 2, 4 and 8 minutes, then gives up.
 /// <see cref="AuditedEntity.Created"/> is when the event happened.
 /// </summary>
 public class OutboxMessage : TenantEntity
@@ -59,6 +62,12 @@ public class OutboxMessage : TenantEntity
         Attempts++;
         Status = OutboxStatus.Sent;
         SentOn = now;
+        NextAttemptOn = null;
+    }
+
+    public void MarkSkipped()
+    {
+        Status = OutboxStatus.Skipped;
         NextAttemptOn = null;
     }
 

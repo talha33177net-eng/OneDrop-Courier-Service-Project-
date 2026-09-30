@@ -13,6 +13,8 @@ public class MerchantConfiguration : IEntityTypeConfiguration<Merchant>
         builder.Property(m => m.Name).HasMaxLength(200);
         builder.Property(m => m.ContactPhone).HasMaxLength(20);
         builder.Property(m => m.ContactEmail).HasMaxLength(320);
+        builder.Property(m => m.WebhookUrl).HasMaxLength(Merchant.MaxWebhookUrlLength);
+        builder.Property(m => m.WebhookSecret).HasMaxLength(100);
         builder.HasOne<Zone>().WithMany().HasForeignKey(m => m.ZoneId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(m => new { m.TenantId, m.Name }).IsUnique().HasDatabaseName("UX_Merchant_Tenant_Name");
     }

@@ -1,6 +1,12 @@
+using System.Collections.Concurrent;
+using System.Net;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Application.Abstractions;
 
 [assembly: AssemblyFixture(typeof(Integration.Tests.WebAppFactory))]
 
@@ -18,6 +24,9 @@ public sealed class WebAppFactory : WebApplicationFactory<Program>, IAsyncLifeti
     public const string DhakaGadget = "od_dhkgadget001_DevOnlyKeyDoNotUseInProduction02";
     public const string DhakaBeauty = "od_dhkbeauty001_DevOnlyKeyDoNotUseInProduction03";
     public const string ChattogramFashion = "od_ctgfashion01_DevOnlyKeyDoNotUseInProduction04";
+
+    /// <summary>Every webhook the app posts, in place of real HTTP: a test's shop gets an address of its own.</summary>
+    public RecordingWebhooks Webhooks { get; } = new();
 
     public static string? ConnectionString { get; } = new ConfigurationBuilder()
         .SetBasePath(AppContext.BaseDirectory)
@@ -77,9 +86,74 @@ public sealed class WebAppFactory : WebApplicationFactory<Program>, IAsyncLifeti
         // Added after the web app's own sources (including its appsettings.Local.json, which points at the dev
         // database), so the test database always wins
         builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(settings));
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddSingleton<IWebhookSender>(Webhooks);
+            services.AddTransient<IStartupFilter, ClientAddressFilter>();
+        });
         foreach (var (key, value) in settings)
         {
             builder.UseSetting(key, value);
         }
+    }
+}
+
+/// <summary>
+/// Lets a test say which address its requests come from (header <see cref="Header"/>). Every test request otherwise
+/// shares one address, and so one allowance of a limit counted per address, such as the phone sign-in's.
+/// </summary>
+public sealed class ClientAddressFilter : IStartupFilter
+{
+    public const string Header = "X-Test-Client";
+
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)
+    {
+        return app =>
+        {
+            app.Use((context, nextMiddleware) =>
+            {
+                if (IPAddress.TryParse(context.Request.Headers[Header], out var address))
+                {
+                    context.Connection.RemoteIpAddress = address;
+                }
+
+                return nextMiddleware(context);
+            });
+            next(app);
+        };
+    }
+}
+
+/// <summary>
+/// Stands in for the shops' servers: keeps every webhook posted and answers 200, or 500 for an address a test has taken
+/// down.
+/// </summary>
+public sealed class RecordingWebhooks : IWebhookSender
+{
+    private readonly ConcurrentQueue<WebhookRequest> posted = new();
+    private readonly ConcurrentDictionary<string, bool> down = new();
+
+    public IReadOnlyCollection<WebhookRequest> Posted => posted;
+
+    public IReadOnlyList<WebhookRequest> To(string url)
+    {
+        return [.. posted.Where(request => request.Url.AbsoluteUri == url)];
+    }
+
+    public void Down(string url)
+    {
+        down[url] = true;
+    }
+
+    public void Up(string url)
+    {
+        down.TryRemove(url, out _);
+    }
+
+    public Task<WebhookResponse> PostAsync(WebhookRequest request, CancellationToken cancellationToken = default)
+    {
+        posted.Enqueue(request);
+
+        return Task.FromResult(new WebhookResponse(down.ContainsKey(request.Url.AbsoluteUri) ? 500 : 200));
     }
 }

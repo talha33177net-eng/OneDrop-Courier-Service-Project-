@@ -1,0 +1,101 @@
+@page
+@model Web.Pages.Merchant.WebhookModel
+@{
+    ViewData["Title"] = "Order updates";
+    var settings = Model.Settings;
+}
+
+<div class="page-head">
+    <div>
+        <p class="eyebrow">@settings.MerchantName</p>
+        <h1>Order updates</h1>
+        <p class="lead">
+            Your website can hear each time one of your orders moves on: collected, at the hub, out with the rider,
+            delivered, refused or back with you. We post it to an address of your website, signed so you know it is ours.
+        </p>
+    </div>
+    <a class="button ghost" asp-page="/Merchant/Orders">My orders</a>
+</div>
+
+<details class="help">
+    <summary>What your website receives, and how to check it</summary>
+    <p>A <strong>POST</strong> with a JSON body like this, one per change:</p>
+    <pre><code>{
+  "type": "order.status_changed",
+  "timestamp": "2026-09-30T11:32:05Z",
+  "data": { "number": "OD-100001", "externalReference": "WEB-1042", "status": "atHub" }
+}</code></pre>
+    <ul>
+        <li>
+            <strong>status</strong> is one of <code>pickedUp</code>, <code>atHub</code>, <code>outForDelivery</code>,
+            <code>delivered</code>, <code>refused</code>, <code>returnedToMerchant</code>, <code>cancelled</code>.
+            <strong>timestamp</strong> is when it happened (UTC); an update sent again after a failure can arrive after a
+            later one, so keep the latest timestamp.
+        </li>
+        <li>
+            The headers follow <a href="https://www.standardwebhooks.com/" rel="noopener">Standard Webhooks</a>, so its
+            libraries check them for you: <code>webhook-id</code> (the same when an update is sent again, so you can skip
+            one you already have), <code>webhook-timestamp</code> (Unix seconds) and <code>webhook-signature</code>.
+        </li>
+        <li>
+            To check by hand: take your secret without <code>whsec_</code>, decode it from base64, and compute HMAC-SHA256
+            of <code>{webhook-id}.{webhook-timestamp}.{body}</code> with it. <code>v1,</code> followed by the result in
+            base64 must equal the signature. Refuse a timestamp more than five minutes old.
+        </li>
+        <li>
+            Answer quickly with any status from 200 to 299. Otherwise we try again after 1, 2, 4 and 8 minutes,
+            then stop.
+        </li>
+    </ul>
+</details>
+
+@if (Model.Done is not null)
+{
+    <div class="notice @(Model.DoneOk ? "notice-ok" : "notice-problem")" role="status">@Model.Done</div>
+}
+
+@if (Model.Problem is not null)
+{
+    <div class="notice notice-problem" role="alert">@Model.Problem</div>
+}
+
+<section class="card">
+    <h2><span class="step-no">1</span> Your website's address</h2>
+    <form method="post" asp-page-handler="Save">
+        <label asp-for="Address">Webhook address</label>
+        <input asp-for="Address" type="url" inputmode="url" placeholder="https://myshop.com.bd/onedrop/webhook" required />
+        <div class="door-actions">
+            <button type="submit" class="button">Save</button>
+        </div>
+    </form>
+    @if (settings.Url is not null)
+    {
+        <form method="post" asp-page-handler="Remove">
+            <p class="muted">Updates go to <strong>@settings.Url</strong>.</p>
+            <button type="submit" class="button ghost compact">Stop sending updates</button>
+        </form>
+    }
+</section>
+
+@if (settings.Secret is not null)
+{
+    <section class="card">
+        <h2><span class="step-no">2</span> Your secret</h2>
+        <p>Your website checks each update's signature with this. Keep it on your server; never put it in a web page.</p>
+        <p><code class="secret">@settings.Secret</code></p>
+        <form method="post" asp-page-handler="Secret">
+            <button type="submit" class="button ghost compact">Make a new secret</button>
+        </form>
+    </section>
+}
+
+@if (settings.Url is not null)
+{
+    <section class="card">
+        <h2><span class="step-no">3</span> Try it</h2>
+        <p>We send a <code>webhook.test</code> update now, signed like every other, and show what your website answers.</p>
+        <form method="post" asp-page-handler="Test">
+            <button type="submit" class="button">Send a test</button>
+        </form>
+    </section>
+}

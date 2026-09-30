@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Application.Delivery.PlanTrips;
 using Application.Grouping.LockDueGroups;
 using Application.Notifications.SendOutbox;
+using Application.Notifications.SendWebhooks;
 using Application.Payments.SettleMerchants;
 
 namespace Infrastructure.Jobs;
@@ -21,7 +22,12 @@ public static class JobsSetup
 {
     public static IServiceCollection AddJobs(this IServiceCollection services, bool runServer)
     {
-        services.AddSingleton(new TenantJobRegistry(typeof(LockDueGroupsJob), typeof(SendOutboxJob), typeof(PlanTripsJob), typeof(SettleMerchantsJob)));
+        services.AddSingleton(new TenantJobRegistry(
+            typeof(LockDueGroupsJob),
+            typeof(SendOutboxJob),
+            typeof(SendWebhooksJob),
+            typeof(PlanTripsJob),
+            typeof(SettleMerchantsJob)));
         services.AddScoped<TenantJobRunner>();
         // The connection string is read when Hangfire first opens a connection, from the final configuration
         services.AddHangfire((provider, configuration) => configuration

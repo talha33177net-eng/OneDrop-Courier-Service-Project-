@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Application.Abstractions;
 using Domain.Customers;
+using Domain.Network;
 using Infrastructure.MultiTenancy;
 using Infrastructure.Persistence;
 
@@ -17,10 +18,14 @@ public class SaveInterceptorTests(WebAppFactory factory)
         await using var scope = await ScopeForAsync("chattogram");
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var dhaka = await TenantIdAsync("dhaka");
+        Hub dhakaHub;
+        await using (await db.AcrossTenantsAsync(TestContext.Current.CancellationToken))
+        {
+            dhakaHub = await db.Hubs
+                .IgnoreQueryFilters([AppDbContext.TenantFilter])
+                .FirstAsync(h => h.TenantId == dhaka);
+        }
 
-        var dhakaHub = await db.Hubs
-            .IgnoreQueryFilters([AppDbContext.TenantFilter])
-            .FirstAsync(h => h.TenantId == dhaka);
         db.Entry(dhakaHub).Property(h => h.Name).CurrentValue = "Hijacked";
 
         var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync());
@@ -63,7 +68,10 @@ public class SaveInterceptorTests(WebAppFactory factory)
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         Assert.Equal(0, await db.Hubs.CountAsync());
-        Assert.True(await db.Hubs.IgnoreQueryFilters([AppDbContext.TenantFilter]).AnyAsync());
+        await using (await db.AcrossTenantsAsync(TestContext.Current.CancellationToken))
+        {
+            Assert.True(await db.Hubs.IgnoreQueryFilters([AppDbContext.TenantFilter]).AnyAsync());
+        }
     }
 
     private async Task<AsyncServiceScope> ScopeForAsync(string slug)

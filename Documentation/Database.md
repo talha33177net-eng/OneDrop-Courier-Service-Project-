@@ -75,6 +75,12 @@ Every table except `Platform.*` and the Identity join tables carries `[TenantId]
 counts). Merchant-owned tables also carry `[MerchantId]` - copy it onto child rows so the merchant filter needs
 no join.
 
+A new table with a `TenantId` is added to the security policy `Platform/Security Policies/TenantIsolation.sql`: one
+filter predicate and two block predicates (`AFTER INSERT`, `AFTER UPDATE`) with `[Platform].[TenantAccess]([TenantId])`.
+`RowLevelSecurityTests` fails for a tenant table left out. The policy restricts only connections the application
+marks (`SESSION_CONTEXT` `TenantScoped`); DbUp, SqlPackage and `sqlcmd` see every row, so data scripts need no
+session context. SqlPackage switches the policy off around a publish, so table rebuilds copy every row.
+
 Column order: `Id`, `TenantId`, business columns, `Archived BIT DEFAULT ((0)) NOT NULL` (when rows are hidden
 rather than deleted), `UpdatedId BIGINT NULL` (`FK_Table_User` to `Identity.User`),
 `UpdatedOn DATETIME2 (7) DEFAULT (getutcdate()) NOT NULL`, `Created DATETIME2 (0) DEFAULT (getutcdate()) NOT NULL`.

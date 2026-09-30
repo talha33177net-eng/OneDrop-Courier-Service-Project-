@@ -100,26 +100,28 @@ The user supplied two PDFs (not stored in the repo): *OneDrop Implementation Pla
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
 | 3 | Operations and money | Group delivered, merchants settled | ✅ Done 2026-09-30 |
-| 4 | Polish and proof | Full demo runs end to end | 🔄 4.1 done, next 4.2 (merchant webhooks) |
+| 4 | Polish and proof | Full demo runs end to end | 🔄 4.1–4.6 done, next 4.7 (combine deliveries and learn addresses) |
 
 Task-level detail, the cut list, the job schedule, must-pass tests and the daily log are in
 [Plans/Implementation-Plan.md](../Plans/Implementation-Plan.md). **That file is the source of truth for progress.**
 
 ---
 
-## 3. What exists today (Weeks 1–3, task 4.1)
+## 3. What exists today (Weeks 1–3, tasks 4.1–4.6)
 
 ### Solution layout (`Courier.sln`)
 | Project | Path | Contents |
 |---|---|---|
-| Domain | `src/Domain` | Entities and rules, no packages. `Common` (Entity with domain events, TenantEntity, Result/Error), `Platform/Tenant`, `Network` (Hub, Zone, Area, PickupRoute), `Customers` (Customer, CustomerAddress, PhoneNumber, PhoneOtp, CustomerStanding + CustomerStep + TrustRules), `Merchants` (Merchant, MerchantApiKey, PickupPoint, DropOffRule), `Orders` (Order + state machine and scans, Package with its hub, PackageLabel, OrderStatusHistory), `Grouping` (DeliveryGroup + state machine, lock time and shelf, events), `Delivery` (Rider, Trip, TripStop, TripLoad, TripPlanner), `Pricing` (DeliveryFeeCalculator, FeeSchedule), `Payments` (Payment: cash or wallet, at the door or in advance, pending until paid; LedgerEntry: what each shop is owed or owes per order; Settlement: a payout), `Notifications` (OutboxMessage + retry rule) |
-| Application | `src/Application` | Use cases as vertical slices: `Orders/CreateOrder`, `Orders/GetOrder`, `Orders/ConfirmOrder` (the SMS link: confirm, or pay the fee in advance), `Network/ListAreas`, `Network/PickupRoutes` (route list and sheet), `Network/HubScan` (collect, receive at a hub, shelves, shuttle load and manifest), `Orders/PackageLabels`, `Auth/PhoneLogin`, `Customers/CustomerDirectory` (find-or-create by phone/address), `Grouping/DeliveryGrouping` (join or open the order's group; quote), `Grouping/LockDueGroups` (the lock job), `Grouping/ShipNow`, `Grouping/CustomerDeliveries` ("My deliveries"), `Delivery/PlanTrips` (planner and job), `Delivery/HubTrips`, `Delivery/RiderDay` (the rider's stops, Start trip), `Delivery/Door` (at the door: amount due, QR, hand over, nobody home; writes the ledger), `Delivery/HubCash` (riders' cash hand-in), `Payments/SettleMerchants` (the payout job), `Payments/MerchantPayouts` (the shop's money), `Operations/Dashboard` (live counts per hub and packages per delivery), `Merchants/ShopDropOffs` (shops that bring their parcels to the hub), `Pricing/GetQuote`, `Notifications` (outbox contracts, `SendOutbox` job and SMS texts). Interfaces: `IAppDbContext`, `IOperationsFeed`, `ITenantJob`, `ITenantContext` (`TenantInfo.Fees`, `Trust`, `DropOff`), `ITenantCatalog`, `ICurrentUser`, `ISmsSender`, `IPaymentGateway`, `IPayoutGateway`, `ICustomerLinks`; `QueryFilters` (filter names) |
-| Infrastructure | `src/Infrastructure` | `Persistence/AppDbContext` (EF Core, query filters), `Configurations/*` (mapping), `TenantSaveInterceptor`, `MultiTenancy` (TenantContext, TenantCatalog, CustomerLinks), `Identity` (AppUser, AppRole, claims), `Sms/FakeSmsSender`, `Payments/FakePaymentGateway` (paid by hand on `/Dev/Payments`) and `FakePayoutGateway` (payouts listed there), `Seeding/DemoDataSeeder`, `Jobs` (Hangfire setup, TenantJobRunner, TenantJobRegistry, OutboxDispatcher); `AppDbContext.SaveChangesAsync` writes the outbox |
+| Domain | `src/Domain` | Entities and rules, no packages. `Common` (Entity with domain events, TenantEntity, Result/Error), `Platform/Tenant`, `Network` (Hub, Zone, Area, PickupRoute), `Customers` (Customer, CustomerAddress, PhoneNumber, PhoneOtp, CustomerStanding + CustomerStep + TrustRules), `Merchants` (Merchant with its webhook, MerchantApiKey, PickupPoint, DropOffRule, WebhookSignature), `Orders` (Order + state machine and scans, Package with its hub, PackageLabel, OrderStatusHistory, OrderStatusChanged), `Grouping` (DeliveryGroup + state machine, lock time and shelf, events), `Delivery` (Rider, Trip, TripStop, TripLoad, TripPlanner), `Pricing` (DeliveryFeeCalculator, FeeSchedule), `Payments` (Payment: cash or wallet, at the door or in advance, pending until paid; LedgerEntry: what each shop is owed or owes per order; Settlement: a payout), `Notifications` (OutboxMessage + retry rule) |
+| Application | `src/Application` | Use cases as vertical slices: `Orders/CreateOrder`, `Orders/GetOrder`, `Orders/ConfirmOrder` (the SMS link: confirm, or pay the fee in advance), `Network/ListAreas`, `Network/PickupRoutes` (route list and sheet), `Network/HubScan` (collect, receive at a hub, shelves, shuttle load and manifest), `Orders/PackageLabels`, `Auth/PhoneLogin`, `Customers/CustomerDirectory` (find-or-create by phone/address), `Grouping/DeliveryGrouping` (join or open the order's group; quote), `Grouping/LockDueGroups` (the lock job), `Grouping/ShipNow`, `Grouping/CustomerDeliveries` ("My deliveries"), `Delivery/PlanTrips` (planner and job), `Delivery/HubTrips`, `Delivery/RiderDay` (the rider's stops, Start trip), `Delivery/Door` (at the door: amount due, QR, hand over, nobody home; writes the ledger), `Delivery/HubCash` (riders' cash hand-in), `Payments/SettleMerchants` (the payout job), `Payments/MerchantPayouts` (the shop's money), `Operations/Dashboard` (live counts per hub and packages per delivery), `Merchants/ShopDropOffs` (shops that bring their parcels to the hub), `Merchants/Webhook` (the shop's webhook settings and test), `Pricing/GetQuote`, `Notifications` (outbox contracts, `SendOutbox` job and SMS texts, `SendWebhooks` job and signed bodies). Interfaces: `IAppDbContext`, `IOperationsFeed`, `ITenantJob`, `ITenantContext` (`TenantInfo.Fees`, `Trust`, `DropOff`), `ITenantCatalog`, `ICurrentUser`, `ISmsSender`, `IWebhookSender`, `IPaymentGateway`, `IPayoutGateway`, `ICustomerLinks`; `QueryFilters` (filter names) |
+| Infrastructure | `src/Infrastructure` | `Persistence/AppDbContext` (EF Core, query filters), `Configurations/*` (mapping), `TenantSaveInterceptor`, `MultiTenancy` (TenantContext, TenantCatalog, CustomerLinks), `Identity` (AppUser, AppRole, claims), `Sms/FakeSmsSender`, `Payments/FakePaymentGateway` (paid by hand on `/Dev/Payments`) and `FakePayoutGateway` (payouts listed there), `Webhooks/HttpWebhookSender`, `Seeding/DemoDataSeeder`, `Jobs` (Hangfire setup, TenantJobRunner, TenantJobRegistry, OutboxDispatcher); `AppDbContext.SaveChangesAsync` writes the outbox |
 | Web | `src/Web` | Razor Pages portals (merchant, customer, hub, operator admin, platform), `Live` (SignalR `OperationsHub`, `OperationsFeed`), `Labels/LabelQrCode` (QRCoder), `Api/V1` (orders, quote, areas by API key; deliveries by customer cookie), `Authentication/ApiKeyAuthenticationHandler`, `MultiTenancy` middleware, `Program.cs` |
 | Database | `src/Database` | SQL project (Microsoft.Build.Sql 2.1.0) → `Database.dacpac`. Owns the schema |
 | Database Update | `src/Database Update` | DbUp console (`dbup.exe`): data migrations in `Scripts/<Year>/`, data-loss scripts in `Scripts/Pre/` |
-| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 239 + 6 + 115 = **360 tests, all passing** |
-| Tools | `tools/db/publish.ps1` | Deploys a database: `dbup pre` → dacpac publish → `dbup` |
+| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 258 + 6 + 131 = **395 tests, all passing** |
+| Tools | `tools/db/publish.ps1` | Deploys a database: `dbup pre` → dacpac publish → `dbup` (Windows PowerShell 5.1 and PowerShell 7 on Linux) |
+| Simulator | `tools/Simulator` | Demo data (4.6): made-up shops per operator (a new API key each run), then orders from customers who buy at several shops, sent through the running app's quote and Create Order: `dotnet run --project tools/Simulator -- --orders 40 --pace 2` |
+| Docker and CI | `Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml` | Images `web` and `database` (runs `publish.ps1`); compose = SQL Server 2025 + deploy + app on `localhost:5080`, password in git-ignored `.env`; CI deploys a throwaway SQL Server from nothing and runs every suite (4.5) |
 
 ### Features that work
 - `POST /api/v1/orders` (API key in `X-Api-Key`, optional `Idempotency-Key`): validates per field, finds or
@@ -286,16 +288,38 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   `OperationsFeed` sends "changed" (no data) to the operator's SignalR group (`/hubs/operations`, group from the
   sign-in's tenant claim) at most once a second, and `wwwroot/js/live.js` fetches the page again and swaps its
   `data-live` parts. One app instance (no backplane).
-- **Not yet:** a screen to add riders or change a bike's limit, a screen to change route times or weight settings, Ship now by SMS "reply 1" (needs an inbound SMS gateway), a screen for failed outbox messages,
+- **Merchant webhooks** (4.2, `Application/Notifications/SendWebhooks`, `Domain/Merchants/WebhookSignature`): every
+  `Order.MoveTo` raises `OrderStatusChanged` → outbox `OrderStatusChangedMessage` (order, shop, status). `SendWebhooksJob`,
+  run by the `OutboxDispatcher` in a loop of its own beside the texts, posts `{ type: "order.status_changed", timestamp,
+  data: { number, externalReference, status } }` to `Merchant.WebhookUrl`, signed as Standard Webhooks with the shop's
+  `whsec_` `WebhookSecret` (`webhook-id` `msg_{outbox id}`, `webhook-timestamp`, `webhook-signature`); a 2xx answer is
+  sent, anything else retried like a text, and the shop is not called again in that run; no webhook → `Skipped`. The
+  texts sender takes only `CustomerTexts.Types`. Shops set the address (https, plain http only to localhost), see and
+  renew the secret and send a test on **Order updates** (`/Merchant/Webhook`); in Development `/Dev/Webhooks` plays
+  their website and checks each signature. `HttpWebhookSender`: `Webhooks:Timeout`, no redirects.
+- **Tenant isolation sweep** (4.3, `tests/Integration.Tests/TripTests.Isolation.cs`): reads every route the app maps
+  from its endpoint table and holds one line per route saying what another operator, or another shop of the same
+  operator, gets there, checked on a real delivery; **a new page or endpoint fails the sweep until it has its line**
+  (the message names it). Every sign-in is also sent to every route of the other hosts (403), and the Dev pages are
+  checked to be 404 outside Development.
+- **Row-Level Security** (4.4, isolation layer 3): the SQL security policy `Platform.TenantIsolation` with predicate
+  `Platform.TenantAccess` filters every table with a `TenantId` and blocks inserts and updates for another tenant.
+  `Infrastructure/Persistence/TenantSessionInterceptor` marks each connection the context opens (`SESSION_CONTEXT`
+  `TenantScoped` = 1 and `TenantId`, read only); a marked connection sees only its tenant's rows, and with no tenant
+  only platform logins. Connections the app did not open (DbUp, SqlPackage, `sqlcmd`) are not restricted. A read that
+  crosses tenants on purpose (API key lookup, the platform's Operators page, `/Dev/Webhooks`) wraps itself in
+  `AppDbContext.AcrossTenantsAsync()` besides lifting the EF filter. `RowLevelSecurityTests` fails for a tenant table
+  missing from the policy.
+- **Not yet:** a screen to add riders or change a bike's limit, a screen to change route times or weight settings, Ship now by SMS "reply 1" (needs an inbound SMS gateway), a screen for failed outbox messages or webhooks,
   merchant screens to create API keys, tenant admin screens.
 
 ### Database
 - Schemas: `Platform` (Tenant), `Identity` (User, Role, UserRole, UserClaim, UserLogin, UserToken, RoleClaim),
-  `Network` (Hub, Zone, Area, PickupRoute), `Customers` (Customer, CustomerAddress, PhoneOtp), `Merchants` (Merchant,
-  MerchantApiKey, PickupPoint), `Orders` (Order, Package, OrderStatusHistory, sequence OrderNumber → `OD-100001`),
+  `Network` (Hub, Zone, Area, PickupRoute), `Customers` (Customer, CustomerAddress, PhoneOtp), `Merchants` (Merchant
+  with `WebhookUrl` and `WebhookSecret`, `chk_Merchant_Webhook`; MerchantApiKey, PickupPoint), `Orders` (Order, Package, OrderStatusHistory, sequence OrderNumber → `OD-100001`),
   `Grouping` (DeliveryGroup, sequence DeliveryGroupNumber → `DG-100001`; one `Open` group per customer + address
   by filtered unique index), `Delivery` (Rider, Trip — one per rider a day, TripStop — a delivery on one trip a
-  day), `Notifications` (OutboxMessage), `Payments` (Payment: `Purpose` 1 Door / 2 Advance, `Method` 1 Cash / 2 Bkash / 3 Nagad,
+  day), `Notifications` (OutboxMessage: `Status` 1 Pending / 2 Sent / 3 Failed / 4 Skipped), `Payments` (Payment: `Purpose` 1 Door / 2 Advance, `Method` 1 Cash / 2 Bkash / 3 Nagad,
   `Status` 1 Pending / 2 Paid / 3 Cancelled; `Delivery.TripStop.PaymentId` points at it; LedgerEntry: `Kind` 1 Cod /
   2 ReturnCharge / 3 LateHandoverFee, `Amount` negative for a charge, `UX_LedgerEntry_Order_Kind`, `SettlementId` once
   paid out; Settlement: `Status` 1 Pending / 2 Paid, `UpToDate`, `Account`). `Delivery.Trip.CashExpected`,
@@ -314,7 +338,9 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   in SQL (seed 001 inserts tenants without them; DbUp 004, 006, 007 and 008 set them); `TenantCatalog` does not serve a tenant that has
   not set them. `Grouping.DeliveryGroup.Kind` (TINYINT, 1 Waiting,
   2 NextDay, 3 ShippedNow) was filled in for existing groups by `Scripts/Pre/003_DeliveryGroupKind`.
-- Every tenant table: `TenantId` + FK + index; housekeeping columns `Archived`, `UpdatedId`, `UpdatedOn`, `Created`.
+- Every tenant table: `TenantId` + FK + index; housekeeping columns `Archived`, `UpdatedId`, `UpdatedOn`, `Created`;
+  and a filter and two block predicates in the security policy `Platform.TenantIsolation` (function
+  `Platform.TenantAccess`, 4.4).
 - Seeded by DbUp `2026/001_SeedLaunchTenants.sql`: **OneDrop Dhaka** (id 1, slug `dhaka`, 7 zones on 5 hubs,
   32 areas, ৳60 + ৳25, fast ৳70 since `2026/003_DhakaFastDeliveryFee.sql`) and **OneDrop Chattogram** (id 2, slug
   `chattogram`, 5 zones on 2 hubs, 14 areas, ৳70 + ৳30, fast ৳80). `2026/002_SeedPickupRoutes.sql` gives every
@@ -334,7 +360,7 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   made. Some delivery deadlines were moved into the past by hand for live checks (DG-100012, DG-100020,
   DG-100027–29, DG-100045–46), so those show as due today with no parcel at the hub. The 3.7 live check dated its ledger
   lines a day back by hand to see the payout (settlements 1 and 2). The 3.9 demo run (DG-100065, OD-100100–OD-100102, Parveen Sultana 01819274111) was delivered and settled (settlements 3–5); the 3.8 check gave OD-100062 its `ShopLateOn` by
-  hand and put Beauty Shop on drop-off (three late handovers, until 29 October). Orders before OD-100031 have no outbox rows.
+  hand and put Beauty Shop on drop-off (three late handovers, until 29 October). Orders before OD-100031 have no outbox rows, and orders before the 4.2 live check (OD-100108) no status-change rows. Dev Fashion House (Dhaka) has its webhook set to `http://localhost:5080/Dev/Webhooks` from the 4.2 live check.
   The Hangfire tables are installed at app start in both databases; only `OneDrop` runs jobs, as the integration
   tests start no job server. Group numbers have gaps: a sequence value used in a rolled-back dry run is not reused.
 
@@ -351,6 +377,8 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 | **No product-name prefix in code** (`src/Web`, `AppDbContext`, `Courier.sln`) | User preference, DCN style. "OneDrop" appears only in UI text, SMS text, tenant data, demo logins and the database names |
 | `TenantId` on every row (not DCN's AccountId/LocationId) | The plan's design; named filters `Tenant` and `Merchant` in `AppDbContext` |
 | Isolation layers: 1 EF query filters, 2 save interceptor, 3 Row-Level Security (Week 4) | From the plan: if one layer has a bug the next still stops a leak |
+| 4.4: RLS takes the tenant from `SESSION_CONTEXT`, set read only as each app connection opens; a marked connection without a tenant sees nothing; unmarked connections (DbUp, SqlPackage, `sqlcmd`) are not restricted; crossing tenants takes `AcrossTenantsAsync()` as well as `IgnoreQueryFilters` | Everything signs in as `sa`, so only the connection tells the app from the tools; the app fails closed while migrations and rebuilds see every row; one lifted EF filter alone is the bug layer 3 is for |
+| 4.5: one Dockerfile (`web`, and `database` running `publish.ps1`); compose = SQL Server 2025 + deploy + the app as Development; CI starts a throwaway SQL Server with a per-run password and deploys from nothing | One deploy path everywhere; the compose stack is the demo; no stored secret, and every run proves a fresh database builds |
 | Tenant from the **subdomain** (portals) or the **API key** (API); staff sign in on their own subdomain; the bare domain is platform staff only | Cookies are host-only, which keeps tenants apart. Resolving a tenant from the login alone is left for a future rider app |
 | `Zone.HubId` — a zone is served by one hub, a hub serves several zones | 7 Dhaka zones on 3–5 hubs as the MVP scope requires (the PDF diagram drew Zone 1–* Hub) |
 | Customer = phone per tenant; address matched by a normalised **match key** (`h 12 r 5 f 3 b`) | Same person across shops; typos and spellings of Dhaka addresses |
@@ -413,6 +441,10 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 | A shop's late handover is stored on the order (`ShopLateOn`), not read from the ledger | It counts even at an operator whose late fee is ৳0, and it is dated for the window |
 | 4.1: live dashboards hear only "changed" over SignalR and read themselves again through their own request, swapping their `data-live` parts | Nothing can leak through the socket; the page's authorisation and query filters decide what is shown; Razor markup is reused |
 | Packages per delivery in seven-day weeks ending today, by area; tenant admins land on the operator's Dashboard | Bangladesh's week does not start on Monday and a week-start setting would exist for one report; the admin looks at the whole operator |
+| 4.2: merchant webhooks are Standard Webhooks (`whsec_` secret, HMAC-SHA256 over `{id}.{timestamp}.{body}`), one per order status change, through the outbox; the body names the order and status only | Shops can use ready-made libraries; the outbox gives the same all-or-nothing save and retries as texts; a shop must never learn about the delivery |
+| Webhooks have their own sender loop; a failing shop is not called again in that run; a shop with no webhook is skipped at send time | A slow shop server must not hold up texts or other shops; the save never reads shop settings |
+| A webhook address is https (plain http only to localhost), no redirects; the secret is stored as it is | Encrypted in transit; a redirect could send our request elsewhere; signing needs the secret, unlike an API key |
+| 4.3: the isolation sweep takes the routes from the running app and fails for a route with no line in it | A new page or endpoint cannot ship without its isolation check; a hand-kept list would drift |
 | UI (2026-09-29): a home per role, "Hub today" with the hub's six steps and a step bar, a folded "how this works" box per page, the hub remembered in a host-only cookie; the **New order** form uses the API's handler; demo logins as buttons in Development | The owner could not tell where to click; one path for price and grouping; the cookie is a preference, each page still checks the hub |
 
 ---
@@ -425,7 +457,7 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 | SQL Server | `ras-x2,1433`, SQL Server 2025, login `sa`. Shared with the team (DCN-&lt;name&gt; databases) |
 | Databases | `OneDrop` (development), `OneDrop-Test` (integration tests). **Ask before creating any other** |
 | Connection strings | `src/Web/appsettings.Local.json` (dev; also read by `publish.ps1` and passed to DbUp) and `tests/Integration.Tests/testsettings.Local.json` (test). Both git-ignored; format in the README |
-| Tools | `sqlpackage` (dotnet global tool), `sqlcmd`, GitHub CLI at `C:\Program Files\GitHub CLI\gh.exe` (signed in as `talha33177net-eng`) |
+| Tools | `sqlpackage` (dotnet global tool), `sqlcmd`, Docker Desktop 29.4 (start it first; the local compose stack keeps its data in the `onedrop_sql-data` volume), GitHub CLI at `C:\Program Files\GitHub CLI\gh.exe` (signed in as `talha33177net-eng`) |
 | Repository | https://github.com/talha33177net-eng/OneDrop (private), branch `main`, local folder `C:\Courier Project` |
 | Git identity | Talha Ahmed &lt;talha33177.net@gmail.com&gt; |
 | App URLs | http://localhost:5080 (platform), http://dhaka.localhost:5080, http://chattogram.localhost:5080 |
@@ -440,6 +472,7 @@ dotnet test --project tests/Domain.Tests
 dotnet test --project tests/Architecture.Tests
 dotnet test --project tests/Integration.Tests    # must report succeeded, not skipped
 dotnet run --project src/Web
+docker compose up --build                         # the whole stack in Docker (.env from .env.example)
 git push                                          # main tracks origin/main
 ```
 
@@ -484,6 +517,12 @@ git push                                          # main tracks origin/main
 | `sqlcmd` runs with `QUOTED_IDENTIFIER OFF`; statements touching a filtered index fail | Pass `-I` when running scripts by hand (DbUp's connection already has it on) |
 | Detaching an added principal that a tracked order still points at throws (required relationship severed) | Re-point the order (`PlaceIn` + `Entry(order).DetectChanges()`) before detaching |
 | A running `dotnet run --project src/Web` locks `src/Web/bin`; builds then silently keep the old DLLs for tests | Stop the app before rebuilding or running the test suites |
+| A test that tries to write another tenant's rows really writes them when the isolation layer is broken (a mutation run renamed every Dhaka hub in `OneDrop-Test` to "Hijacked") | Isolation tests write each row's own value back (`SetProperty(h => h.Name, h => h.Name)`, `SET [Name] = [Name]`) and count the rows, so a failure changes nothing |
+| `sys.security_predicates.operation_desc` reads `AFTER INSERT` with a space, not `AFTER_INSERT` | — |
+| PowerShell reads `.ConnectionString` on a `DbConnectionStringBuilder` (a dictionary) as a key, so setting it parses nothing | Use `set_ConnectionString(...)` and `get_ConnectionString()` (`publish.ps1`) |
+| Windows PowerShell 5.1's `Join-Path` takes two parts only, and PowerShell 7 on Linux has no `System.Data.SqlClient` | Build paths with `[System.IO.Path]::Combine`; parse connection strings with `DbConnectionStringBuilder` |
+| Git Bash rewrites `/opt/...` arguments to `C:/Program Files/Git/opt/...` for `docker exec` | Prefix the command with `MSYS_NO_PATHCONV=1` |
+| Visual Studio keeps `src/Database/Database.dbmdl` and `.jfm` locked while the solution is open | Leave them out when copying the repository (they are local caches) |
 | Hangfire stores a generic method call but cannot load it back (`does not contain a method with signature …`); a direct call in a test works | Job methods are never generic (jobs go by name through `TenantJobRegistry`); `The_scheduled_job_and_the_jobs_it_queues_survive_hangfires_storage_format` round-trips them |
 | To see a job run without waiting for its schedule | `dotnet run --project src/Web -- --Jobs:LockDueGroups="* * * * *"` (the next normal start resets the schedule) |
 | MARS is on in the connection string, so EF cannot use savepoints inside the outbox transaction and warns on every save | The warning `SavepointsDisabledBecauseOfMARS` is ignored in `AddInfrastructure`: a failed save rolls the outbox transaction back whole |
@@ -495,6 +534,10 @@ git push                                          # main tracks origin/main
 | The integration database holds hundreds of waiting Mirpur orders from earlier runs | Tests that count what is waiting use shops of their own in another zone (Uttara), and lists must not assume a short backlog |
 | Test classes that count what waits on the Uttara pickup route (`PickupRouteTests`) race any class opening an Uttara shop (`HubScanTests`) | They share the xUnit collection `"Uttara pickups"`; a new class using Uttara pickup points joins it. Trip tests build a hub, zone and area of their own instead |
 | `chrome --headless --window-size=390,…` lays pages out wider than 390 px (a minimum window width), so a screenshot looks cut off | Use DevTools mobile emulation (`Emulation.setDeviceMetricsOverride`, width 390, `mobile: true`) and compare `scrollWidth` with `clientWidth` |
+| Razor's HTML encoder also turns `+` and `=` into `&#x2B;` and `&#x3D;`, so a base64 secret is not found as written in a page's HTML | Tests `WebUtility.HtmlDecode` the page before looking for it |
+| `IHttpClientFactory` logs every request at Information, with a full stack trace for a refused connection | `System.Net.Http.HttpClient` is set to Warning in `appsettings.json`; `SendWebhooksJob` logs one line per failed webhook |
+| The phone sign-in allows 10 requests a minute per address, and every test request comes from the same (no) address | A test that signs customers in sends `ClientAddressFilter.Header` (`X-Test-Client`) with an address of its own (`TripTests.CustomerCookieAsync`) |
+| curl keeps no cookies for `*.localhost` hosts in its cookie jar, and in Development the sign-in page carries one anti-forgery token per demo-login button | For live checks, pass cookies in a `Cookie` header taken from `Set-Cookie`, and take the first token only |
 | The link to ras-x2 is sometimes slow (DNS takes seconds): sqlpackage can stall before connecting, tests can hit a login timeout | Check `sys.dm_exec_sessions` for the process; if it has no session, stop it and run again. Do not pipe `publish.ps1` into `Select-Object -Last`, which hides its progress |
 
 ---

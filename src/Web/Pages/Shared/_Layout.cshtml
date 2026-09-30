@@ -44,6 +44,7 @@
                         <a asp-page="/Merchant/NewOrder" class="@Active("/Merchant/NewOrder")">New order</a>
                         <a asp-page="/Merchant/Labels" class="@Active("/Merchant/Labels")">Print labels</a>
                         <a asp-page="/Merchant/Payouts" class="@Active("/Merchant/Payouts")">Payouts</a>
+                        <a asp-page="/Merchant/Webhook" class="@Active("/Merchant/Webhook")">Order updates</a>
                     }
                     if (user.IsInRole(Roles.Customer))
                     {
@@ -99,6 +100,7 @@
                 <span>No real SMS or money is sent. These pages play the customer's phone:</span>
                 <a asp-page="/Dev/Sms">SMS inbox</a>
                 <a asp-page="/Dev/Payments">bKash / Nagad wallet</a>
+                <a asp-page="/Dev/Webhooks">Shop webhooks</a>
             </div>
         </div>
     }

@@ -6,6 +6,7 @@
 --          sets NextAttemptOn; NULL means send as soon as possible. Created is when the event happened.
 -- Author: Courier team
 -- Date: 2026-09-28
+-- 2026-09-30: Status 4 Skipped (task 4.2): an order status change for a shop with no webhook
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Notifications].[OutboxMessage] (
     [Id]            BIGINT          IDENTITY (1, 1) NOT NULL,

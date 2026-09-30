@@ -15,8 +15,8 @@ progress and daily log live in [Plans/Implementation-Plan.md](Plans/Implementati
 |---|---|---|
 | 1 — Foundation | Solution, tenancy (catalog, resolvers, filters, save guard), domain + database, Identity with roles and phone OTP, seeded tenants/zones/hubs, merchant API key + Create Order | **Done** |
 | 2 — Grouping core | Customer matching, delivery groups + 3-day rule, quote (৳60 / +৳25), lock job + Ship now, outbox + fake SMS, customer group page | **Done** |
-| 3 — Operations & money | Pickup routes + QR labels, hub scan/shelves/shuttle, rider trips, market pricing (joinable fast deliveries, Ship now as an upgrade, weight allowance, staggered pickups), door payment, confirmation and advance payment, ledger + settlement, trust (advance after a refusal until 3 good deliveries; late shops drop off at the hub) | In progress (3.1–3.8 done) |
-| 4 — Polish & proof | SignalR dashboards, webhooks, Row-Level Security, Docker, CI, simulator | |
+| 3 — Operations & money | Pickup routes + QR labels, hub scan/shelves/shuttle, rider trips, market pricing (joinable fast deliveries, Ship now as an upgrade, weight allowance, staggered pickups), door payment, confirmation and advance payment, ledger + settlement, trust (advance after a refusal until 3 good deliveries; late shops drop off at the hub) | **Done** |
+| 4 — Polish & proof | SignalR dashboards, webhooks, Row-Level Security, Docker, CI, simulator | In progress (4.1–4.6 done) |
 
 ## Run it
 
@@ -55,6 +55,32 @@ Tenants are subdomains. Browsers resolve `*.localhost` to your machine, so no ho
 | http://localhost:5080 | Platform (OneDrop company) |
 | http://dhaka.localhost:5080 | OneDrop Dhaka — 7 zones, 5 hubs, ৳60 + ৳25, fast ৳70 |
 | http://chattogram.localhost:5080 | OneDrop Chattogram — 5 zones, 2 hubs, ৳70 + ৳30, fast ৳80 |
+
+### Fill it with demo orders
+
+With the app running, the simulator makes up shops for each operator and sends their orders through the API, from
+customers who buy at several shops, so deliveries group as they would in real life:
+
+```powershell
+dotnet run --project tools/Simulator -- --orders 40               # both operators, 40 orders each
+dotnet run --project tools/Simulator -- --tenant dhaka --pace 2   # one order every 2 seconds: watch /Admin fill up
+```
+
+`--shops` (up to 8), `--seed` (the same customers again) and `--url` (default http://localhost:5080) are optional. It
+uses the app's database for the shops (the same connection string as the app) and gives each a new API key per run.
+
+### Run it in Docker
+
+No SQL Server or SDK needed, only Docker:
+
+```powershell
+copy .env.example .env          # then choose a SQL Server password in .env (git-ignored)
+docker compose up --build       # SQL Server 2025, the database deployed from nothing, then the app
+```
+
+The same addresses as above work (http://dhaka.localhost:5080). The `database` service runs `publish.ps1` against the
+container's SQL Server and exits; the app starts once it has succeeded. SQL Server is on `localhost,14330` for
+your own queries; `docker compose down -v` deletes its data.
 
 ### Demo logins (Development only, password `OneDrop#2026`)
 
@@ -102,6 +128,23 @@ curl http://localhost:5080/api/v1/orders \
 | `GET /api/v1/areas` | The area list an address must pick from |
 | `GET /api/v1/quote?phone=&area=&line1=` | The delivery fee for the checkout: `{ fee, currency, joinsDelivery }` (৳60 for a new delivery, +৳25 when one is already on its way, the fast fee for `speed=fast`). Optional `weightGrams` adds each started kg above the shop's allowance (Dhaka 2 kg, then ৳15); optional `pickupPointId` (default: the shop's default point) |
 
+### Order updates by webhook
+
+A shop sets its webhook address on **Order updates** (`/Merchant/Webhook`, https only; plain http only to localhost)
+and gets a `whsec_` secret there. Each status change of its orders (`pickedUp`, `atHub`, `outForDelivery`,
+`delivered`, `refused`, `returnedToMerchant`, `cancelled`) is posted through the outbox:
+
+```json
+{ "type": "order.status_changed", "timestamp": "2026-09-30T05:38:12Z",
+  "data": { "number": "OD-100108", "externalReference": "FB-2001", "status": "atHub" } }
+```
+
+Signed as [Standard Webhooks](https://www.standardwebhooks.com/): headers `webhook-id` (the same on a retry),
+`webhook-timestamp` and `webhook-signature` = `v1,` + base64 HMAC-SHA256 of `{id}.{timestamp}.{body}` keyed with the
+base64-decoded secret. Any 2xx answer counts; otherwise it is retried after 1, 2, 4 and 8 minutes. The body never
+names the delivery or the customer's other shops. In Development, set the address to
+`http://localhost:5080/Dev/Webhooks` to see what arrives and whether its signature checks.
+
 Background jobs run on Hangfire in the web app; the dashboard is at http://localhost:5080/jobs (platform admin).
 
 ## Layout
@@ -133,7 +176,9 @@ test `SchemaMatchesModelTests` fails if the two disagree. Full rules: [Documenta
 1. **EF Core query filters** — every tenant-owned entity gets `WHERE TenantId = @current`, and merchant-owned
    ones also `WHERE MerchantId = @merchant` for merchant callers. No tenant set means no rows.
 2. **Save interceptor** — stamps `TenantId` on new rows and refuses writes to another tenant's rows.
-3. **SQL Server Row-Level Security** — Week 4.
+3. **SQL Server Row-Level Security** — the policy `Platform.TenantIsolation` filters every table with a `TenantId`
+   by the tenant each application connection names in `SESSION_CONTEXT`, and refuses rows written for another
+   tenant, so a lifted filter or raw SQL still stays inside the tenant.
 
 The tenant comes from the subdomain (portals) or the API key (merchant API).
 
@@ -150,3 +195,7 @@ dotnet test --project tests/Integration.Tests    # uses OneDrop-Test from testse
 The integration tests use their own database, `OneDrop-Test`, so their throwaway orders and customers never
 reach the development database `OneDrop`. Set `INTEGRATION_TEST_DB` to point them somewhere else (CI, another
 developer's database).
+
+**CI** (`.github/workflows/ci.yml`, on pushes to `main` and `day*` and on pull requests): builds, starts a throwaway
+SQL Server 2025 with a password made up for the run, deploys the database into it from nothing with `publish.ps1`,
+runs the three suites (failing if the integration tests were skipped) and builds the Docker images.

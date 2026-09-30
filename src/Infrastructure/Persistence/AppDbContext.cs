@@ -26,7 +26,8 @@ namespace Infrastructure.Persistence;
 /// <see cref="MerchantFilter"/>. The filters read <see cref="CurrentTenantId"/> and
 /// <see cref="CurrentMerchantId"/> when each query runs, so one cached model serves every tenant. Code that
 /// genuinely needs to see across tenants (the API key lookup, the platform portal) must say so with
-/// IgnoreQueryFilters([TenantFilter]).
+/// IgnoreQueryFilters([TenantFilter]), and to the database (layer 3, Row-Level Security) with
+/// <see cref="AcrossTenantsAsync"/>.
 /// </summary>
 public class AppDbContext(
     DbContextOptions<AppDbContext> options,
@@ -91,6 +92,32 @@ public class AppDbContext(
 
     /// <summary>Read by the merchant filter at query time. Null means the caller is not a merchant.</summary>
     public long? CurrentMerchantId => currentUser.MerchantId;
+
+    /// <summary>
+    /// Until the returned scope is disposed, this context's connection sees every tenant's rows in the database
+    /// (Row-Level Security, <see cref="TenantSessionInterceptor"/>); the query filter must still be lifted with
+    /// IgnoreQueryFilters([TenantFilter]). Only for reads whose point is to cross tenants: the API key lookup and the
+    /// platform page. Keep it short, and set no tenant inside it.
+    /// </summary>
+    public async Task<IAsyncDisposable> AcrossTenantsAsync(CancellationToken cancellationToken = default)
+    {
+        await Database.OpenConnectionAsync(cancellationToken);
+        await Database.ExecuteSqlRawAsync(
+            $"EXEC sys.sp_set_session_context @key = N'{TenantSessionInterceptor.AllTenantsKey}', @value = 1;",
+            cancellationToken);
+
+        return new AcrossTenants(this);
+    }
+
+    private sealed class AcrossTenants(AppDbContext db) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                $"EXEC sys.sp_set_session_context @key = N'{TenantSessionInterceptor.AllTenantsKey}', @value = NULL;");
+            await db.Database.CloseConnectionAsync();
+        }
+    }
 
     /// <summary>
     /// Saves, and writes every domain event raised by the saved entities to the outbox in the same transaction:

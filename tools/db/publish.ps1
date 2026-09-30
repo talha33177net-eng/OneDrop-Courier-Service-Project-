@@ -24,35 +24,41 @@ param(
 
 # Native tools write progress to stderr; failures are detected from $LASTEXITCODE below instead
 $ErrorActionPreference = 'Continue'
-$root = Resolve-Path (Join-Path $PSScriptRoot '..\..')
+# Paths are built with Path.Combine and the connection string with DbConnectionStringBuilder, so the script runs the
+# same in Windows PowerShell 5.1 and in PowerShell 7 on Linux (the Docker database image and CI)
+$root = (Resolve-Path ([System.IO.Path]::Combine($PSScriptRoot, '..', '..'))).Path
 
 if (-not $ConnectionString) {
     # Git-ignored: the connection string (with its password) never goes into the repository
-    $settings = Join-Path $root 'src\Web\appsettings.Local.json'
+    $settings = [System.IO.Path]::Combine($root, 'src', 'Web', 'appsettings.Local.json')
     if (-not (Test-Path $settings)) {
         throw "Missing $settings. Create it with { ""ConnectionStrings"": { ""Database"": ""Server=...;Database=OneDrop;..."" } } (see README)."
     }
     $ConnectionString = (Get-Content $settings -Raw | ConvertFrom-Json).ConnectionStrings.Database
 }
 
-$builder = New-Object System.Data.SqlClient.SqlConnectionStringBuilder $ConnectionString
+$builder = New-Object System.Data.Common.DbConnectionStringBuilder
+$builder.set_ConnectionString($ConnectionString)  # set_ and get_: PowerShell reads .ConnectionString on a dictionary as a key
 if ($Database) {
+    $null = $builder.Remove('Initial Catalog')
     $builder['Database'] = $Database
 }
-$ConnectionString = $builder.ConnectionString
-Write-Host "Target: $($builder['Data Source']) / $($builder['Database'])" -ForegroundColor Cyan
+$ConnectionString = $builder.get_ConnectionString()
+$server = @('Server', 'Data Source') | Where-Object { $builder.ContainsKey($_) } | ForEach-Object { $builder[$_] } | Select-Object -First 1
+$name = @('Database', 'Initial Catalog') | Where-Object { $builder.ContainsKey($_) } | ForEach-Object { $builder[$_] } | Select-Object -First 1
+Write-Host "Target: $server / $name" -ForegroundColor Cyan
 
-$project = Join-Path $root 'src\Database\Database.sqlproj'
-$dacpac = Join-Path $root 'src\Database\bin\Debug\Database.dacpac'
-$profile = Join-Path $root 'src\Database\Local.publish.xml'
-$dbup = Join-Path $root 'src\Database Update\Database Update.csproj'
+$project = [System.IO.Path]::Combine($root, 'src', 'Database', 'Database.sqlproj')
+$dacpac = [System.IO.Path]::Combine($root, 'src', 'Database', 'bin', 'Debug', 'Database.dacpac')
+$profile = [System.IO.Path]::Combine($root, 'src', 'Database', 'Local.publish.xml')
+$dbup = [System.IO.Path]::Combine($root, 'src', 'Database Update', 'Database Update.csproj')
 
 Write-Host 'Building the database project...' -ForegroundColor Cyan
 dotnet build $project --nologo -v q
 if ($LASTEXITCODE -ne 0) { throw 'Database project build failed.' }
 
 if ($ScriptOnly) {
-    $output = Join-Path $root 'src\Database\bin\Debug\Database.publish.sql'
+    $output = [System.IO.Path]::Combine($root, 'src', 'Database', 'bin', 'Debug', 'Database.publish.sql')
     sqlpackage /Action:Script /SourceFile:$dacpac /Profile:$profile /TargetConnectionString:$ConnectionString /OutputPath:$output
     if ($LASTEXITCODE -ne 0) { throw 'Script generation failed.' }
     Write-Host "Publish script written to $output" -ForegroundColor Green

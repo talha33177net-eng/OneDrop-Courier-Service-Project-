@@ -8,6 +8,7 @@
   -->
   <ItemGroup>
     <ProjectReference Include="..\..\src\Web\Web.csproj" />
+    <ProjectReference Include="..\..\tools\Simulator\Simulator.csproj" />
   </ItemGroup>
 
   <ItemGroup>

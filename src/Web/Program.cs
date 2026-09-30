@@ -12,6 +12,7 @@ using Application.Abstractions;
 using Web.Authentication;
 using Web.Live;
 using Web.MultiTenancy;
+using Web.Pages.Dev;
 using Web.Pages.Hub;
 using Serilog;
 
@@ -67,6 +68,7 @@ builder.Services
 builder.Services.AddProblemDetails();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IOperationsFeed, OperationsFeed>();
+builder.Services.AddSingleton<ReceivedWebhooks>();
 builder.Services.AddRazorPages(options =>
 {
     options.Conventions.AuthorizeFolder("/Merchant", Policies.MerchantPortal);

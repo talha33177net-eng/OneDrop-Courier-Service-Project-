@@ -1,0 +1,77 @@
+# Build, deploy the database from nothing into a throwaway SQL Server, and run every test suite; and check that the
+# Docker images still build. The SQL Server password is made up for each run and masked in the log, so there is no
+# secret to store.
+name: CI
+
+on:
+  push:
+    branches: [main, "day*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Start a throwaway SQL Server
+        run: |
+          password="Ci$(openssl rand -hex 12)!"
+          echo "::add-mask::$password"
+          connection="Server=localhost,1433;Database=OneDrop-CI;User Id=sa;Password=$password;TrustServerCertificate=true;MultipleActiveResultSets=true"
+          echo "SA_PASSWORD=$password" >> "$GITHUB_ENV"
+          echo "INTEGRATION_TEST_DB=$connection" >> "$GITHUB_ENV"
+          docker run --detach --name sql --env ACCEPT_EULA=Y --env "MSSQL_SA_PASSWORD=$password" \
+            --publish 1433:1433 mcr.microsoft.com/mssql/server:2025-latest
+
+      - name: Install sqlpackage
+        run: |
+          dotnet tool install --global microsoft.sqlpackage
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Build
+        run: dotnet build Courier.sln
+
+      - name: Wait for SQL Server
+        run: |
+          for attempt in $(seq 1 60); do
+            if docker exec sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "SELECT 1" > /dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs sql
+          exit 1
+
+      - name: Deploy the database from nothing
+        shell: pwsh
+        run: ./tools/db/publish.ps1 -ConnectionString $env:INTEGRATION_TEST_DB
+
+      - name: Domain tests
+        run: dotnet test --project tests/Domain.Tests --no-build
+
+      - name: Architecture tests
+        run: dotnet test --project tests/Architecture.Tests --no-build
+
+      # A run with the database missing reports every test skipped, which is not a pass
+      - name: Integration tests
+        run: |
+          dotnet test --project tests/Integration.Tests --no-build | tee integration.log
+          grep -q "skipped: 0" integration.log
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the images
+        run: SA_PASSWORD=unused docker compose build

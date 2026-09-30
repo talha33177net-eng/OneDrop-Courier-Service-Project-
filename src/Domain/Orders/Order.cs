@@ -305,6 +305,7 @@ public class Order : TenantEntity, IMerchantOwned
 
         Status = status;
         history.Add(new OrderStatusHistory(this, status, note));
+        Raise(new OrderStatusChanged(this, status));
 
         return Result.Success();
     }
