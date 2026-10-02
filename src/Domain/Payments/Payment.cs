@@ -146,6 +146,20 @@ public class Payment : TenantEntity
         return Result.Success();
     }
 
+    /// <summary>
+    /// The delivery an advance was paid for was combined into another (<see cref="Grouping.DeliveryGroup.Combine"/>):
+    /// the advance now covers that one. A door payment stays with its visit.
+    /// </summary>
+    public void CoverInstead(long deliveryGroupId)
+    {
+        if (Purpose != PaymentPurpose.Advance)
+        {
+            throw new InvalidOperationException("Only an advance moves to another delivery.");
+        }
+
+        DeliveryGroupId = deliveryGroupId;
+    }
+
     /// <summary>Drops a QR that was not paid. A paid payment is never cancelled.</summary>
     public void Cancel()
     {

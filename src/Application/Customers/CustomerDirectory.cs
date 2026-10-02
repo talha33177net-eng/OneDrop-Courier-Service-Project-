@@ -43,6 +43,12 @@ public class CustomerDirectory(IAppDbContext db)
             a => a.CustomerId == customer.Id && a.AreaId == areaId && a.MatchKey == matchKey,
             cancellationToken);
 
+        // A spelling the customer said is another of their addresses stands for it
+        if (address?.SameAsId is { } sameAs)
+        {
+            return await db.CustomerAddresses.SingleAsync(a => a.Id == sameAs, cancellationToken);
+        }
+
         return address ?? await InsertOrReloadAsync(
             new CustomerAddress(customer.Id, areaId, line1, line2, landmark),
             () => db.CustomerAddresses.FirstOrDefaultAsync(

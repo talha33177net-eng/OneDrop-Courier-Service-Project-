@@ -100,14 +100,14 @@ The user supplied two PDFs (not stored in the repo): *OneDrop Implementation Pla
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
 | 3 | Operations and money | Group delivered, merchants settled | ✅ Done 2026-09-30 |
-| 4 | Polish and proof | Full demo runs end to end | 🔄 4.1–4.6 done, next 4.7 (combine deliveries and learn addresses) |
+| 4 | Polish and proof | Full demo runs end to end | 🔄 4.1–4.7 done, next 4.8 (the open delivery as a shopping window) |
 
 Task-level detail, the cut list, the job schedule, must-pass tests and the daily log are in
 [Plans/Implementation-Plan.md](../Plans/Implementation-Plan.md). **That file is the source of truth for progress.**
 
 ---
 
-## 3. What exists today (Weeks 1–3, tasks 4.1–4.6)
+## 3. What exists today (Weeks 1–3, tasks 4.1–4.7)
 
 ### Solution layout (`Courier.sln`)
 | Project | Path | Contents |
@@ -118,7 +118,7 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 | Web | `src/Web` | Razor Pages portals (merchant, customer, hub, operator admin, platform), `Live` (SignalR `OperationsHub`, `OperationsFeed`), `Labels/LabelQrCode` (QRCoder), `Api/V1` (orders, quote, areas by API key; deliveries by customer cookie), `Authentication/ApiKeyAuthenticationHandler`, `MultiTenancy` middleware, `Program.cs` |
 | Database | `src/Database` | SQL project (Microsoft.Build.Sql 2.1.0) → `Database.dacpac`. Owns the schema |
 | Database Update | `src/Database Update` | DbUp console (`dbup.exe`): data migrations in `Scripts/<Year>/`, data-loss scripts in `Scripts/Pre/` |
-| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 258 + 6 + 131 = **395 tests, all passing** |
+| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 269 + 6 + 135 = **410 tests, all passing** |
 | Tools | `tools/db/publish.ps1` | Deploys a database: `dbup pre` → dacpac publish → `dbup` (Windows PowerShell 5.1 and PowerShell 7 on Linux) |
 | Simulator | `tools/Simulator` | Demo data (4.6): made-up shops per operator (a new API key each run), then orders from customers who buy at several shops, sent through the running app's quote and Create Order: `dotnet run --project tools/Simulator -- --orders 40 --pace 2` |
 | Docker and CI | `Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml` | Images `web` and `database` (runs `publish.ps1`); compose = SQL Server 2025 + deploy + app on `localhost:5080`, password in git-ignored `.env`; CI deploys a throwaway SQL Server from nothing and runs every suite (4.5) |
@@ -310,12 +310,25 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   crosses tenants on purpose (API key lookup, the platform's Operators page, `/Dev/Webhooks`) wraps itself in
   `AppDbContext.AcrossTenantsAsync()` besides lifting the EF filter. `RowLevelSecurityTests` fails for a tenant table
   missing from the policy.
+- **Combining deliveries and learning addresses** (4.7, `Application/Grouping/CombineDeliveries`): a customer with
+  deliveries on their way (open or locked, never on a trip) to two addresses in the **same area** is asked "Same address
+  as your delivery DG-…?" about the newer spelling: in the order's "placed" SMS (Create Order gives the order a link,
+  `Order.AskCustomer`, when such a delivery exists), on the order page the link opens (`/Customer/Order?token=…`, now
+  also for orders that wait for nothing) and on the card in "My deliveries". Worked out from the data when shown; no
+  stored question. **Combine** (`DeliveryGroup.Combine`): the delivery leaving sooner goes on with every order
+  (`Order.CombineInto`: its group and address, `AddedFee` unchanged, history "Delivery address confirmed by the
+  customer"), the other is cancelled and hidden from the customer, its shelf passes to the kept one (two saves in one
+  transaction, shelves being unique), its advance moves with it (`Payment.CoverInstead`); the cancelled spelling, and
+  any spelling standing for it, gets `CustomerAddress.SameAsId` = the kept address, which Create Order and the quote
+  follow, so the next order typed that way joins by itself. **Keep separate**: `KeptApartOn` on the newer address, never
+  asked again. Not offered when both deliveries hold a shelf or both have an advance. Deliveries in other areas are never
+  asked about.
 - **Not yet:** a screen to add riders or change a bike's limit, a screen to change route times or weight settings, Ship now by SMS "reply 1" (needs an inbound SMS gateway), a screen for failed outbox messages or webhooks,
   merchant screens to create API keys, tenant admin screens.
 
 ### Database
 - Schemas: `Platform` (Tenant), `Identity` (User, Role, UserRole, UserClaim, UserLogin, UserToken, RoleClaim),
-  `Network` (Hub, Zone, Area, PickupRoute), `Customers` (Customer, CustomerAddress, PhoneOtp), `Merchants` (Merchant
+  `Network` (Hub, Zone, Area, PickupRoute), `Customers` (Customer, CustomerAddress with `SameAsId` and `KeptApartOn`, PhoneOtp), `Merchants` (Merchant
   with `WebhookUrl` and `WebhookSecret`, `chk_Merchant_Webhook`; MerchantApiKey, PickupPoint), `Orders` (Order, Package, OrderStatusHistory, sequence OrderNumber → `OD-100001`),
   `Grouping` (DeliveryGroup, sequence DeliveryGroupNumber → `DG-100001`; one `Open` group per customer + address
   by filtered unique index), `Delivery` (Rider, Trip — one per rider a day, TripStop — a delivery on one trip a
@@ -446,6 +459,8 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 | A webhook address is https (plain http only to localhost), no redirects; the secret is stored as it is | Encrypted in transit; a redirect could send our request elsewhere; signing needs the secret, unlike an API key |
 | 4.3: the isolation sweep takes the routes from the running app and fails for a route with no line in it | A new page or endpoint cannot ship without its isolation check; a hand-kept list would drift |
 | UI (2026-09-29): a home per role, "Hub today" with the hub's six steps and a step bar, a folded "how this works" box per page, the hub remembered in a host-only cookie; the **New order** form uses the API's handler; demo logins as buttons in Development | The owner could not tell where to click; one path for price and grouping; the cookie is a preference, each page still checks the hub |
+| 4.7: two deliveries to addresses in one area are combined only when the customer says so; the newer spelling is the one asked about; the delivery leaving sooner goes on and the other spelling points at its address (`SameAsId`); "keep separate" is stored on the newer address | A guess could merge two flats in one building; nothing arrives later than promised; the alias makes the next order match by itself, and one answer settles the pair for good |
+| Combining keeps each order's `AddedFee` (as for an order left behind) and is offered only for deliveries not yet on a trip, not both on shelves and not both with an advance | The merchant's fee never changes under it; a trip's visit already makes one stop of them; two shelves or two advances would need sorting out by hand |
 
 ---
 
@@ -523,6 +538,7 @@ git push                                          # main tracks origin/main
 | Windows PowerShell 5.1's `Join-Path` takes two parts only, and PowerShell 7 on Linux has no `System.Data.SqlClient` | Build paths with `[System.IO.Path]::Combine`; parse connection strings with `DbConnectionStringBuilder` |
 | Git Bash rewrites `/opt/...` arguments to `C:/Program Files/Git/opt/...` for `docker exec` | Prefix the command with `MSYS_NO_PATHCONV=1` |
 | Visual Studio keeps `src/Database/Database.dbmdl` and `.jfm` locked while the solution is open | Leave them out when copying the repository (they are local caches) |
+| Since Row-Level Security (4.4) SqlPackage refuses any table rebuild ("data motion … row level security", SQL71616), e.g. a column added before the housekeeping columns | `tools/db/publish.ps1` passes `AllowUnsafeRowLevelSecurityDataMovement` (with its other settings, no longer from the git-ignored `Local.publish.xml`, which a CI checkout lacks): safe, as the predicate does not restrict SqlPackage's unmarked connection, so every row is copied (checked by row counts on the 4.7 publish) |
 | Hangfire stores a generic method call but cannot load it back (`does not contain a method with signature …`); a direct call in a test works | Job methods are never generic (jobs go by name through `TenantJobRegistry`); `The_scheduled_job_and_the_jobs_it_queues_survive_hangfires_storage_format` round-trips them |
 | To see a job run without waiting for its schedule | `dotnet run --project src/Web -- --Jobs:LockDueGroups="* * * * *"` (the next normal start resets the schedule) |
 | MARS is on in the connection string, so EF cannot use savepoints inside the outbox transaction and warns on every save | The warning `SavepointsDisabledBecauseOfMARS` is ignored in `AddInfrastructure`: a failed save rolls the outbox transaction back whole |

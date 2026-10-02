@@ -137,7 +137,10 @@ public class Order : TenantEntity, IMerchantOwned
     /// <summary>When the customer confirmed the order or paid its delivery's fee in advance.</summary>
     public DateTime? ConfirmedOn { get; private set; }
 
-    /// <summary>The secret in the SMS link that opens the order for the customer; set when the order waits for them.</summary>
+    /// <summary>
+    /// The secret in the SMS link that opens the order for the customer; set when the order waits for them or they are
+    /// asked about it (<see cref="AskCustomer"/>).
+    /// </summary>
     public string? CustomerToken { get; private set; }
 
     /// <summary>True while the customer has still to confirm the order or pay in advance.</summary>
@@ -484,6 +487,39 @@ public class Order : TenantEntity, IMerchantOwned
         Raise(new OrderPlacedInDelivery(this));
 
         return shopLate;
+    }
+
+    /// <summary>
+    /// The customer said the order's address is the same place as another delivery's (<see cref="DeliveryGroup.Combine"/>):
+    /// the order travels in that delivery, to its address. The merchant's <see cref="AddedFee"/> stays as it was given;
+    /// the customer's fee is the combined delivery's. The order's history says only that the customer confirmed the
+    /// address, never which delivery it joined.
+    /// </summary>
+    public void CombineInto(DeliveryGroup group)
+    {
+        if (group.CustomerId != CustomerId)
+        {
+            throw new InvalidOperationException("An order can only travel in its own customer's group.");
+        }
+
+        if (!IsForDelivery(Status) || Status is OrderStatus.OutForDelivery or OrderStatus.Delivered)
+        {
+            throw new InvalidOperationException($"{Number} is {Status}; only an order still waiting moves.");
+        }
+
+        DeliveryGroup = group;
+        DeliveryGroupId = group.Id;
+        AddressId = group.AddressId;
+        history.Add(new OrderStatusHistory(this, Status, "Delivery address confirmed by the customer"));
+    }
+
+    /// <summary>
+    /// The customer is asked something about the order (whether its address is the same as another delivery's), so
+    /// the SMS needs the link that opens it. An order that has a link keeps it.
+    /// </summary>
+    public void AskCustomer()
+    {
+        CustomerToken ??= Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(16));
     }
 
     /// <summary>

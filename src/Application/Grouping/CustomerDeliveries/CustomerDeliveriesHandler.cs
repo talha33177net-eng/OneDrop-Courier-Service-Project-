@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
+using Application.Grouping.CombineDeliveries;
 using Domain.Delivery;
 using Domain.Grouping;
 using Domain.Orders;
@@ -15,6 +16,7 @@ public sealed record CustomerDeliveryOrder(string Number, string Shop, OrderStat
 /// delivered. <see cref="DeliveryDay"/> is in the tenant's time zone; while the delivery is open, other shops can
 /// join until the end of the day before. <see cref="ShipNowFee"/> is what Ship now would add to the fee (the fast
 /// difference when it brings the day forward, 0 on the last day to join); null when the delivery is not open.
+/// <see cref="SameAddress"/> asks whether its address is the same place as another delivery's in the area.
 /// </summary>
 public sealed record CustomerDelivery(
     string Number,
@@ -24,7 +26,8 @@ public sealed record CustomerDelivery(
     IReadOnlyList<CustomerDeliveryOrder> Orders,
     decimal Fee,
     decimal Savings,
-    decimal? ShipNowFee)
+    decimal? ShipNowFee,
+    SameAddressQuestion? SameAddress = null)
 {
     public DateOnly LastDayToJoin => DeliveryDay.AddDays(-1);
 
@@ -55,7 +58,11 @@ public sealed record CustomerDeliveries(
 /// "My deliveries" for the signed-in customer, in the tenant's time zone and at its prices. The customer sees every
 /// shop in their own deliveries; merchants never see a delivery at all.
 /// </summary>
-public class CustomerDeliveriesHandler(IAppDbContext db, ITenantContext tenantContext, TimeProvider time)
+public class CustomerDeliveriesHandler(
+    IAppDbContext db,
+    ITenantContext tenantContext,
+    CombineDeliveriesHandler combine,
+    TimeProvider time)
 {
     public const int EarlierShown = 10;
 
@@ -72,7 +79,10 @@ public class CustomerDeliveriesHandler(IAppDbContext db, ITenantContext tenantCo
             from delivery in db.DeliveryGroups
             join address in db.CustomerAddresses on delivery.AddressId equals address.Id
             join area in db.Areas on address.AreaId equals area.Id
-            where delivery.CustomerId == customerId
+            where delivery.CustomerId == customerId &&
+
+                // A delivery combined into another has no orders left: it is not shown
+                db.Orders.Any(order => order.DeliveryGroupId == delivery.Id)
             select new DeliveryRow
             {
                 Id = delivery.Id,
@@ -119,6 +129,8 @@ public class CustomerDeliveriesHandler(IAppDbContext db, ITenantContext tenantCo
             .Select(stops => new { GroupId = stops.Key, Fee = stops.Sum(stop => stop.FeeCollected ?? 0) })
             .ToDictionaryAsync(stop => stop.GroupId, stop => stop.Fee, cancellationToken);
 
+        var questions = await combine.QuestionsAsync(customerId, cancellationToken);
+
         return new CustomerDeliveries([.. onTheWay.Select(Describe)], [.. earlier.Select(Describe)], tenant.ExtraShopFee);
 
         CustomerDelivery Describe(DeliveryRow delivery)
@@ -138,7 +150,8 @@ public class CustomerDeliveriesHandler(IAppDbContext db, ITenantContext tenantCo
                 [.. inDelivery.Select(order => order.Shown)],
                 collected.TryGetValue(delivery.Id, out var fee) ? fee : fees.GroupFee(lines, delivery.Group.Kind),
                 fees.Savings(lines, delivery.Group.Kind),
-                shipNowFee);
+                shipNowFee,
+                questions.FirstOrDefault(question => question.Delivery == delivery.Number));
         }
     }
 

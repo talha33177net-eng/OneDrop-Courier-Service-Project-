@@ -13,9 +13,9 @@ The one place to see where we are and what comes next. Built from the two projec
 
 | | |
 |---|---|
-| Current week | **Week 4 — Polish and proof** (6 of 9) |
-| Next task | 4.7 Combine deliveries and learn addresses |
-| Last session | 2026-09-30 — 4.1 committed on `day4` (`2bdb736`, not pushed); tasks 4.2 (merchant webhooks), 4.3 (tenant isolation sweep), 4.4 (Row-Level Security), 4.5 (Docker and CI) and 4.6 (simulator) on `day4`, uncommitted for review. `main` holds everything up to 3.7 and the UI upgrade (merge `54733e6`) |
+| Current week | **Week 4 — Polish and proof** (7 of 9) |
+| Next task | 4.8 The open delivery as a shopping window |
+| Last session | 2026-10-02 — task 4.7 (combine deliveries and learn addresses) on `day4`, uncommitted for review. Tasks 4.2–4.6 are committed on `day4` (`c347729`); `main` holds everything up to 3.7 and the UI upgrade (merge `54733e6`) |
 | Blockers | None |
 
 ---
@@ -47,9 +47,9 @@ A task is **not done** until all of these pass. Record the result in the daily l
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
 | 3 | Operations and money | Group delivered, merchants settled | ✅ Done 2026-09-30 |
-| 4 | Polish and proof | Full demo runs end to end | 🔄 6 of 9 |
+| 4 | Polish and proof | Full demo runs end to end | 🔄 7 of 9 |
 
-Tests today: **395 passing** (258 domain, 6 architecture, 131 integration).
+Tests today: **410 passing** (269 domain, 6 architecture, 135 integration).
 
 ---
 
@@ -831,11 +831,65 @@ next morning each merchant is settled.
       dashboard still needs handed-over deliveries (a "play the day" mode would drive the hub and door handlers); the
       live dashboard moving under `--pace` was not watched in a browser this time (the orders go through the app, which
       signals as in 4.1); simulated customers get the "Is your … order" text like real ones.
-- [ ] **4.7 Combine deliveries and learn addresses** (market review). An order with the same phone and area as an
+- [x] **4.7 Combine deliveries and learn addresses** (market review). An order with the same phone and area as an
       open delivery but another address match key asks the customer by SMS and on "My deliveries": "Same address as
       your delivery DG-…? Combine / Keep separate". Combining merges the deliveries and recalculates the fee; the
       other spelling is saved as an alias of the address, so the next order matches by itself. Deliveries in
       different areas are never combined (home and office stay apart).
+      *Done 2026-10-02:* `Application/Grouping/CombineDeliveries/CombineDeliveriesHandler` works the question out from
+      the data whenever it is shown (no stored question): for each of the customer's deliveries still waiting at the hub
+      (open or locked) and never on a trip, whose address is the newer spelling in its area and not yet settled, the
+      soonest delivery to an older address of the customer in the same area. Not offered when both hold a shelf or both
+      have an advance asked for (they would need sorting out by hand); deliveries on a trip are already one stop by the
+      rider's visit (3.5). **Asked** in the order's "placed" SMS ("Same address as your delivery DG-… (House 8, Road 3,
+      Mirpur 10)? Combine them for one delivery and one fee: link", or "Answer on the same page" after a confirmation or
+      advance question), on the page the link opens (`/Customer/Order?token=…`, which now opens any order with a link,
+      including one that waits for nothing) and on the newer delivery's card in "My deliveries". Create Order gives the
+      order its link (`Order.AskCustomer`) when such a delivery exists. **Combine:** `DeliveryGroup.Combine` keeps the
+      delivery leaving sooner (then the older) so nothing arrives later than promised, cancels the other (hidden from the
+      customer once it has no orders) and hands over its shelf, saved in a second save in the same transaction
+      (`IAppDbContext.Database`) because shelves are unique per hub; `Order.CombineInto` moves each order to the kept
+      delivery and its address, `AddedFee` unchanged, history "Delivery address confirmed by the customer" (no delivery
+      number); an advance moves with it (`Payment.CoverInstead`) and, once paid, releases every order. The fee is the
+      kept delivery's, worked out on every shop in it. **Learn:** the cancelled spelling, and any spelling already
+      standing for it, gets `CustomerAddress.SameAsId` = the kept address; `CustomerDirectory` (Create Order) and the
+      quote follow it, so the next order typed that way joins by itself and asks nothing. **Keep separate:**
+      `CustomerAddress.KeptApartOn` on the newer address; it is not asked about again. SQL: `Customers.CustomerAddress`
+      (+ `SameAsId` with `FK_CustomerAddress_CustomerAddress`, `chk_CustomerAddress_SameAs`, filtered
+      `IX_CustomerAddress_SameAsId`; + `KeptApartOn`). **Found on the way:** since 4.4 SqlPackage refuses to rebuild a
+      table under Row-Level Security (SQL71616); `tools/db/publish.ps1` now allows it
+      (`AllowUnsafeRowLevelSecurityDataMovement`), which is safe because SqlPackage's connection is not marked and sees
+      every row: the rebuild kept all 73 dev and 6,301 test addresses.
+      *Tested:* build 0 errors, no new warnings; 11 new domain tests (a spelling stands for another address of the same
+      customer and area only, never itself or another spelling; keeping apart keeps the first answer; the delivery leaving
+      sooner goes on, the same day the older; the cancelled delivery's shelf is handed over, a kept one keeps its own;
+      two shelved, another customer's, another hub's or one on its way are not combined; a combined order moves to the
+      kept address with its fee and a history note without the delivery number; only a waiting order of the same
+      customer moves; asking gives one link and waits for nothing; only an advance moves) and 4 new integration tests
+      (two spellings: two deliveries at ৳60 each, the second order's text asks with its link, "My deliveries" asks on its
+      card, Chattogram cannot answer through the link, combining keeps the first delivery with both orders at its address
+      for ৳85, the spelling points at it, the shop still sees ৳60, then a third shop typing the spelling is quoted and
+      charged +৳25 in the same delivery with no question; a neighbouring spelling kept apart is never asked again and joins
+      its own delivery, an office in Mirpur 2 is never asked, another customer's delivery is not found; the kept delivery
+      takes the cancelled one's shelf and paid advance; the SMS page asks, combines and stops asking). Mutation: not
+      following a learnt spelling fails the first test. 269 + 6 + 135 = 410 pass, none skipped. Both databases published
+      (the script reviewed first: `Customers.CustomerAddress` rebuilt with its rows, the policy dropped and re-created,
+      the usual check re-creates; row counts equal before and after). Live on dev: Rokeya Begum 01819274131 with Fashion
+      House OD-100145 ("House 8, Road 3", DG-100088) and Gadget BD OD-100146 ("Flat 2A, House 8, Road 3", DG-100089),
+      both ৳60; the SMS "… Same address as your delivery DG-100088 (House 8, Road 3, Mirpur 10)? Combine them for one
+      delivery and one fee: http://dhaka.localhost:5080/Customer/Order?token=…"; the page asked, "Same address: combine"
+      answered "Combined: everything now travels in delivery DG-100088, for one fee" and stopped asking; the token 404s
+      on Chattogram's host; Beauty Shop then quoted ৳25 `joinsDelivery` and OD-100147 charged ৳25 in DG-100088; rows:
+      three orders at address 74, the spelling 75 `SameAsId` 74, DG-100089 cancelled; Gadget BD still sees ৳60 and no
+      delivery. Jahid Khan 01819274132: OD-100148 Mirpur 10 and OD-100149 "House 12/A, Road 5" asked, OD-100150 to
+      Mirpur 2 not asked; "Different place: keep separate" → "Kept separate"; OD-100151 to the same spelling joined
+      DG-100091 with no question. No errors in the app log.
+      *Left:* an order placed at the very moment its delivery is combined away could land in the cancelled delivery (no
+      lock on the group for joining, as for orders left behind); a delivery to the same spelling as one being combined
+      but in another delivery (an open and a next-day one at that address) stays where it is; combining is not offered
+      once both deliveries hold a shelf or an advance, or once either is on a trip; no SMS confirming the combination
+      (the page says it); the customer cannot undo a combination or a "keep separate"; spellings are learnt per customer,
+      not shared between customers at one address.
 - [ ] **4.8 The open delivery as a shopping window** (market review). The "joined" SMS and "My deliveries" say
       "Your delivery is open until Tuesday: add from any OneDrop shop for +৳25" with the operator's partner shops.
       The list shows every shop, never the ones this customer bought from.
@@ -999,6 +1053,9 @@ Payments stay fake in the MVP either way.
 | 2026-09-30 | Crossing tenants on purpose takes `AppDbContext.AcrossTenantsAsync()` besides `IgnoreQueryFilters([Tenant])`: the connection stays open with `AllTenants` = 1 until the scope is disposed | One lifted EF filter alone is exactly the bug layer 3 exists for; the three places that cross tenants say so twice |
 | 2026-09-30 | The policy filters every table with a `TenantId` and blocks inserts and updates for another tenant; a test fails for a tenant table left out of it | Layer 3 also covers writes that skip the save interceptor (`ExecuteUpdate`, raw SQL) |
 | 2026-09-30 | Docker: one Dockerfile with a `web` image and a `database` image that runs the same `publish.ps1`; compose runs the app as Development with the demo data; CI starts its own SQL Server with a password made up per run and deploys from nothing | One deploy path for a laptop, a container and CI; the compose stack is the demo; no secret to store, and every run proves a fresh database still builds |
+| 2026-10-02 | Two deliveries to addresses in one area are combined only when the customer answers "same address"; the newer spelling is asked about; the delivery leaving sooner goes on and the other spelling stands for its address (`CustomerAddress.SameAsId`); "keep separate" is stored on the newer address (`KeptApartOn`) | A guess could merge two flats in one building; nothing arrives later than promised; the next order matches by itself, and one answer settles the pair for good |
+| 2026-10-02 | The question is worked out from the data whenever it is shown (SMS, order page, "My deliveries") and only for deliveries waiting at the hub and never on a trip, not both on shelves and not both with an advance; combining keeps each order's `AddedFee` | Nothing to keep in step; a trip's visit already makes them one stop; shelves and advances in both would need sorting by hand; the merchant's fee never changes under it |
+| 2026-10-02 | `publish.ps1` passes its SqlPackage settings as arguments, including `AllowUnsafeRowLevelSecurityDataMovement`, instead of reading `Local.publish.xml` | Since 4.4 any table rebuild was refused, and SqlPackage's unmarked connection copies every row; the profile is git-ignored, so CI's fresh checkout would not have had it |
 
 ## Quick reference
 
@@ -1015,6 +1072,21 @@ Payments stay fake in the MVP either way.
 ## Daily log
 
 Newest first. One entry per working day: what was done, how it was tested, what is next.
+
+### 2026-10-02
+- **Done (task 4.7):** `CustomerAddress.SameAsId` / `KeptApartOn` with `SameAs` and `KeepApart`; `DeliveryGroup.Combine`
+  and `CombinedDeliveries`; `Order.CombineInto` and `AskCustomer`; `Payment.CoverInstead`;
+  `Application/Grouping/CombineDeliveries/CombineDeliveriesHandler`; `IAppDbContext.Database`; `CustomerDirectory` and
+  the quote follow a learnt spelling; `DeliveryGrouping` gives an order its link when it may be asked; the question in
+  `CustomerTexts`, `ConfirmOrderHandler` (`AnswerSameAddressAsync`, any order with a link opens) and
+  `CustomerDeliveriesHandler` (a combined-away delivery is not listed); pages `/Customer` (Combine / Keep separate) and
+  `/Customer/Order` (the question, "Accepted" for an order that waits for nothing); SQL `Customers.CustomerAddress`;
+  `publish.ps1` allows rebuilds under Row-Level Security and passes its settings itself (the profile it read is git-ignored, so a CI checkout would have had none); README, Project-Context, Database.md.
+- **Tested:** see task 4.7 above: 11 new domain and 4 new integration tests, one mutation caught, 269 + 6 + 135 = 410
+  pass, none skipped; both databases published with row counts checked; live on dev (OD-100145–OD-100151,
+  DG-100088–DG-100092): asked by SMS, combined from the link, the spelling learnt, keep separate settled, the other area
+  never asked.
+- **Next:** task 4.8, the open delivery as a shopping window.
 
 ### 2026-09-30
 - **Decided with the owner:** after a refusal or no-show the fee is paid in advance until 3 deliveries have been

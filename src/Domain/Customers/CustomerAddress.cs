@@ -56,7 +56,39 @@ public class CustomerAddress : TenantEntity, IArchivable
     /// <summary>Normalised Line1 + Line2. Unique per customer and area.</summary>
     public string MatchKey { get; private set; } = "";
 
+    /// <summary>
+    /// Set once the customer said this spelling is the same place as another of their addresses: an order typed this
+    /// way goes to that address instead (<c>CustomerDirectory</c>), so the spelling is learnt.
+    /// </summary>
+    public long? SameAsId { get; private set; }
+
+    /// <summary>
+    /// When the customer said this address is a place of its own, not their other address in the area, so they are not
+    /// asked about it again.
+    /// </summary>
+    public DateTime? KeptApartOn { get; private set; }
+
     public bool Archived { get; private set; }
+
+    /// <summary>
+    /// The customer says this spelling is <paramref name="address"/>: from now on it stands for it. Only another
+    /// address of the same customer in the same area can be the same place (home and office stay apart).
+    /// </summary>
+    public void SameAs(CustomerAddress address)
+    {
+        if (address.Id == Id || address.CustomerId != CustomerId || address.AreaId != AreaId || address.SameAsId is not null)
+        {
+            throw new InvalidOperationException("An address is only the same as another of its customer's in its area.");
+        }
+
+        SameAsId = address.Id;
+    }
+
+    /// <summary>The customer says this is a place of its own. Saying it again keeps the first time.</summary>
+    public void KeepApart(DateTime now)
+    {
+        KeptApartOn ??= now;
+    }
 
     /// <summary>
     /// Lower-cases, drops punctuation, splits letters from digits and shortens common words, so

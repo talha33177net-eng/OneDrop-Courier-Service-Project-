@@ -7,14 +7,17 @@ namespace Web.Pages.Customer;
 
 /// <summary>
 /// Where the SMS link lands: the customer confirms one order with one tap, or pays its delivery fee in advance by
-/// bKash or Nagad. No sign-in: the token in the link is the key and names no customer. A used-up or unknown token is a
-/// 404, so a guessed link tells nobody anything.
+/// bKash or Nagad, and says whether its address is the same place as another delivery's in the area. No sign-in: the
+/// token in the link is the key and names no customer. An unknown token is a 404, so a guessed link tells nobody
+/// anything.
 /// </summary>
 public class OrderModel(ConfirmOrderHandler handler) : PageModel
 {
     public OrderToConfirm? Order { get; private set; }
 
     public string? Problem { get; private set; }
+
+    public string? Answer { get; private set; }
 
     [BindProperty(SupportsGet = true)]
     public string? Token { get; set; }
@@ -37,6 +40,20 @@ public class OrderModel(ConfirmOrderHandler handler) : PageModel
     public async Task<IActionResult> OnPostCheckAsync(CancellationToken cancellationToken)
     {
         return await ShowAsync(await handler.CheckAdvanceAsync(Token ?? "", cancellationToken));
+    }
+
+    /// <summary>"Same address as your delivery …?": combine the two deliveries, or keep them apart.</summary>
+    public async Task<IActionResult> OnPostSameAddressAsync(bool same, CancellationToken cancellationToken)
+    {
+        var answered = await handler.AnswerSameAddressAsync(Token ?? "", same, cancellationToken);
+        if (answered.IsSuccess)
+        {
+            Answer = same
+                ? $"Combined: everything now travels in delivery {answered.Value.Delivery}, for one fee."
+                : "Kept separate: we won't ask about this address again.";
+        }
+
+        return await ShowAsync(answered);
     }
 
     /// <summary>Shows the order, or the page's own 404 when the link is not valid any more.</summary>

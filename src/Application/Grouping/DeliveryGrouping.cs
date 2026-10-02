@@ -62,6 +62,7 @@ public class DeliveryGrouping(IAppDbContext db, ITenantContext tenantContext, Ti
             ?? (order.WaitsForGroup ? DeliveryGroup.Open(spec) : DeliveryGroup.OpenAlone(spec));
         order.PlaceIn(group, await AddedFeeAsync(group, line, fees, cancellationToken));
         await MatchAdvanceAsync(order, group, now, cancellationToken);
+        await AskAboutAddressAsync(order, cancellationToken);
         db.Orders.Add(order);
         try
         {
@@ -152,6 +153,33 @@ public class DeliveryGrouping(IAppDbContext db, ITenantContext tenantContext, Ti
         if (waiting)
         {
             order.WaitForAdvance();
+        }
+    }
+
+    /// <summary>
+    /// The customer may be asked whether the order's address is the same place as another delivery's on its way in the
+    /// same area (<c>CombineDeliveriesHandler</c>), so the order gets the link the SMS asks with. The text decides when
+    /// it is sent whether to ask.
+    /// </summary>
+    private async Task AskAboutAddressAsync(Order order, CancellationToken cancellationToken)
+    {
+        var asked = await (
+            from mine in db.CustomerAddresses
+            where mine.Id == order.AddressId
+            from g in db.DeliveryGroups
+            join other in db.CustomerAddresses on g.AddressId equals other.Id
+            where g.CustomerId == order.CustomerId &&
+                other.AreaId == mine.AreaId &&
+                other.Id != mine.Id &&
+                other.SameAsId == null &&
+                (g.Status == DeliveryGroupStatus.Open || g.Status == DeliveryGroupStatus.Locked) &&
+                !db.TripStops.Any(stop => stop.DeliveryGroupId == g.Id) &&
+                (other.Id < mine.Id ? mine.KeptApartOn : other.KeptApartOn) == null
+            select g.Id)
+            .AnyAsync(cancellationToken);
+        if (asked)
+        {
+            order.AskCustomer();
         }
     }
 

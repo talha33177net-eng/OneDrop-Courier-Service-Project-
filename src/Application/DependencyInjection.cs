@@ -8,6 +8,7 @@ using Application.Delivery.HubTrips;
 using Application.Delivery.PlanTrips;
 using Application.Delivery.RiderDay;
 using Application.Grouping;
+using Application.Grouping.CombineDeliveries;
 using Application.Grouping.CustomerDeliveries;
 using Application.Grouping.LockDueGroups;
 using Application.Grouping.ShipNow;
@@ -49,6 +50,7 @@ public static class DependencyInjection
         services.AddScoped<GetQuoteHandler>();
         services.AddScoped<ListAreasHandler>();
         services.AddScoped<ShipNowHandler>();
+        services.AddScoped<CombineDeliveriesHandler>();
         services.AddScoped<CustomerDeliveriesHandler>();
         services.AddScoped<PickupRoutesHandler>();
         services.AddScoped<HubScanHandler>();

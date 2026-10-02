@@ -16,7 +16,7 @@ progress and daily log live in [Plans/Implementation-Plan.md](Plans/Implementati
 | 1 — Foundation | Solution, tenancy (catalog, resolvers, filters, save guard), domain + database, Identity with roles and phone OTP, seeded tenants/zones/hubs, merchant API key + Create Order | **Done** |
 | 2 — Grouping core | Customer matching, delivery groups + 3-day rule, quote (৳60 / +৳25), lock job + Ship now, outbox + fake SMS, customer group page | **Done** |
 | 3 — Operations & money | Pickup routes + QR labels, hub scan/shelves/shuttle, rider trips, market pricing (joinable fast deliveries, Ship now as an upgrade, weight allowance, staggered pickups), door payment, confirmation and advance payment, ledger + settlement, trust (advance after a refusal until 3 good deliveries; late shops drop off at the hub) | **Done** |
-| 4 — Polish & proof | SignalR dashboards, webhooks, Row-Level Security, Docker, CI, simulator | In progress (4.1–4.6 done) |
+| 4 — Polish & proof | SignalR dashboards, webhooks, Row-Level Security, Docker, CI, simulator, combining deliveries to two spellings of one address | In progress (4.1–4.7 done) |
 
 ## Run it
 

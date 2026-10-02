@@ -58,6 +58,22 @@
             }
         </p>
 
+        @if (delivery.SameAddress is { } same)
+        {
+            <form method="post" class="notice same-address">
+                <input type="hidden" name="number" value="@delivery.Number" />
+                <strong>Same address as your delivery @same.OtherDelivery?</strong>
+                <p>
+                    That one goes to @same.OtherAddress. If it is the same place, we bring both together on
+                    @same.CombinedDay.ToString("dddd d MMMM") for one delivery fee, and remember this spelling.
+                </p>
+                <div class="same-address-buttons">
+                    <button class="button" type="submit" asp-page-handler="Combine">Same address: combine</button>
+                    <button class="button secondary" type="submit" asp-page-handler="KeepSeparate">Different place: keep separate</button>
+                </div>
+            </form>
+        }
+
         @if (stage > 0)
         {
             <ol class="tracker" aria-label="Progress">

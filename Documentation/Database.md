@@ -79,7 +79,8 @@ A new table with a `TenantId` is added to the security policy `Platform/Security
 filter predicate and two block predicates (`AFTER INSERT`, `AFTER UPDATE`) with `[Platform].[TenantAccess]([TenantId])`.
 `RowLevelSecurityTests` fails for a tenant table left out. The policy restricts only connections the application
 marks (`SESSION_CONTEXT` `TenantScoped`); DbUp, SqlPackage and `sqlcmd` see every row, so data scripts need no
-session context. SqlPackage switches the policy off around a publish, so table rebuilds copy every row.
+session context. SqlPackage drops and re-creates the policy around a publish that rebuilds a table, which
+`tools/db/publish.ps1` allows (`AllowUnsafeRowLevelSecurityDataMovement`), so table rebuilds copy every row.
 
 Column order: `Id`, `TenantId`, business columns, `Archived BIT DEFAULT ((0)) NOT NULL` (when rows are hidden
 rather than deleted), `UpdatedId BIGINT NULL` (`FK_Table_User` to `Identity.User`),

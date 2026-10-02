@@ -6,25 +6,32 @@
 --          new address arrive at once.
 -- Author: Courier team
 -- Date: 2026-09-27
+-- Updated: 2026-10-02 - Added SameAsId and KeptApartOn (task 4.7): a spelling the customer said is the same place as
+--          another of their addresses in the area stands for it from then on (orders typed this way go to SameAsId);
+--          an address the customer said is a place of its own is not asked about again
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Customers].[CustomerAddress] (
-    [Id]         BIGINT         IDENTITY (1, 1) NOT NULL,
-    [TenantId]   BIGINT         NOT NULL,
-    [CustomerId] BIGINT         NOT NULL,
-    [AreaId]     BIGINT         NOT NULL,
-    [Line1]      NVARCHAR (300) NOT NULL,
-    [Line2]      NVARCHAR (300) NULL,
-    [Landmark]   NVARCHAR (300) NULL,
-    [MatchKey]   NVARCHAR (400) NOT NULL,
-    [Archived]   BIT            DEFAULT ((0)) NOT NULL,
-    [UpdatedId]  BIGINT         NULL,
-    [UpdatedOn]  DATETIME2 (7)  DEFAULT (getutcdate()) NOT NULL,
-    [Created]    DATETIME2 (0)  DEFAULT (getutcdate()) NOT NULL,
+    [Id]          BIGINT         IDENTITY (1, 1) NOT NULL,
+    [TenantId]    BIGINT         NOT NULL,
+    [CustomerId]  BIGINT         NOT NULL,
+    [AreaId]      BIGINT         NOT NULL,
+    [Line1]       NVARCHAR (300) NOT NULL,
+    [Line2]       NVARCHAR (300) NULL,
+    [Landmark]    NVARCHAR (300) NULL,
+    [MatchKey]    NVARCHAR (400) NOT NULL,
+    [SameAsId]    BIGINT         NULL,
+    [KeptApartOn] DATETIME2 (7)  NULL,
+    [Archived]    BIT            DEFAULT ((0)) NOT NULL,
+    [UpdatedId]   BIGINT         NULL,
+    [UpdatedOn]   DATETIME2 (7)  DEFAULT (getutcdate()) NOT NULL,
+    [Created]     DATETIME2 (0)  DEFAULT (getutcdate()) NOT NULL,
     PRIMARY KEY CLUSTERED ([Id] ASC),
     CONSTRAINT [FK_CustomerAddress_Tenant] FOREIGN KEY ([TenantId]) REFERENCES [Platform].[Tenant] ([Id]),
     CONSTRAINT [FK_CustomerAddress_Customer] FOREIGN KEY ([CustomerId]) REFERENCES [Customers].[Customer] ([Id]),
     CONSTRAINT [FK_CustomerAddress_Area] FOREIGN KEY ([AreaId]) REFERENCES [Network].[Area] ([Id]),
-    CONSTRAINT [FK_CustomerAddress_User] FOREIGN KEY ([UpdatedId]) REFERENCES [Identity].[User] ([Id])
+    CONSTRAINT [FK_CustomerAddress_CustomerAddress] FOREIGN KEY ([SameAsId]) REFERENCES [Customers].[CustomerAddress] ([Id]),
+    CONSTRAINT [FK_CustomerAddress_User] FOREIGN KEY ([UpdatedId]) REFERENCES [Identity].[User] ([Id]),
+    CONSTRAINT [chk_CustomerAddress_SameAs] CHECK ([SameAsId] IS NULL OR [SameAsId] <> [Id])
 );
 
 
@@ -41,3 +48,9 @@ CREATE NONCLUSTERED INDEX [IX_CustomerAddress_TenantId]
 GO
 CREATE NONCLUSTERED INDEX [IX_CustomerAddress_AreaId]
     ON [Customers].[CustomerAddress]([AreaId] ASC);
+
+
+GO
+CREATE NONCLUSTERED INDEX [IX_CustomerAddress_SameAsId]
+    ON [Customers].[CustomerAddress]([SameAsId] ASC)
+    WHERE [SameAsId] IS NOT NULL;

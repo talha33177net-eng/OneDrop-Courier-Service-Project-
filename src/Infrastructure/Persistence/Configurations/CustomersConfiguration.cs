@@ -27,6 +27,7 @@ public class CustomerAddressConfiguration : IEntityTypeConfiguration<CustomerAdd
         builder.Property(a => a.MatchKey).HasMaxLength(CustomerAddress.MatchKeyLength);
         builder.HasOne<Customer>().WithMany().HasForeignKey(a => a.CustomerId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Area>().WithMany().HasForeignKey(a => a.AreaId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<CustomerAddress>().WithMany().HasForeignKey(a => a.SameAsId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(a => new { a.CustomerId, a.AreaId, a.MatchKey })
             .IsUnique()
             .HasDatabaseName("UX_CustomerAddress_Customer_Area_MatchKey");

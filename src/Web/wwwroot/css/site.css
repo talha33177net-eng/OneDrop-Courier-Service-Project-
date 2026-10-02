@@ -1669,3 +1669,18 @@ code.secret {
     background: none;
     padding: 0;
 }
+
+.same-address {
+    margin: 12px 0;
+}
+
+.same-address p {
+    margin: 6px 0 0;
+}
+
+.same-address-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}

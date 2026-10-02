@@ -15,6 +15,12 @@ public sealed record NewDeliveryGroup(
     int JoinDays);
 
 /// <summary>
+/// Two deliveries made one (<see cref="DeliveryGroup.Combine"/>): <see cref="Keeps"/> goes on with every order,
+/// <see cref="Ends"/> is cancelled, and <see cref="Shelf"/> is the cancelled one's shelf for the kept one to take over.
+/// </summary>
+public sealed record CombinedDeliveries(DeliveryGroup Keeps, DeliveryGroup Ends, int? Shelf);
+
+/// <summary>
 /// All of one customer's orders to one address that travel together. The group opens with the first order;
 /// orders placed before <see cref="LocksAt"/> join it, and it is delivered on the day that starts at
 /// <see cref="LocksAt"/>. The deadline is fixed when the group opens and never moves later; only Ship now brings
@@ -250,6 +256,41 @@ public class DeliveryGroup : TenantEntity
         Status = status;
 
         return Result.Success();
+    }
+
+    /// <summary>Combining two deliveries that are not both waiting at the same hub, or that hold a shelf each.</summary>
+    public static Error NotCombinable => Error.Conflict(
+        "deliveryGroup.combine.notPossible",
+        "These deliveries cannot be combined any more.");
+
+    /// <summary>
+    /// The customer says two of their deliveries go to the same place: they become one. The delivery that leaves
+    /// sooner keeps going (so nothing arrives later than promised) and takes the other's orders; the other is
+    /// cancelled, freeing its shelf. Both must be the same customer's and still waiting at the same hub (open or
+    /// locked); two deliveries that each hold a shelf are not combined, as their parcels would have to be moved by
+    /// hand. <see cref="CombinedDeliveries.Shelf"/> is the shelf the kept delivery takes over once the cancelled one
+    /// has released it (<see cref="PutOnShelf"/>, saved after, as shelves are unique per hub).
+    /// </summary>
+    public static Result<CombinedDeliveries> Combine(DeliveryGroup first, DeliveryGroup second)
+    {
+        if (first.Id == second.Id ||
+            first.CustomerId != second.CustomerId ||
+            first.HubId != second.HubId ||
+            first.Status is not (DeliveryGroupStatus.Open or DeliveryGroupStatus.Locked) ||
+            second.Status is not (DeliveryGroupStatus.Open or DeliveryGroupStatus.Locked) ||
+            (first.Shelf is not null && second.Shelf is not null))
+        {
+            return NotCombinable;
+        }
+
+        var (keeps, ends) = (first.LocksAt, first.Id).CompareTo((second.LocksAt, second.Id)) <= 0
+            ? (first, second)
+            : (second, first);
+        var shelf = ends.Shelf;
+        ends.Status = DeliveryGroupStatus.Cancelled;
+        ends.Shelf = null;
+
+        return new CombinedDeliveries(keeps, ends, shelf);
     }
 
     /// <summary>Gives a group waiting at its hub the shelf the hub chose. A group keeps the shelf it has.</summary>

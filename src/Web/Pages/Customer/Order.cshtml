@@ -14,10 +14,10 @@
 
 <section class="card narrow center">
     <p class="eyebrow">@order.Shop · @order.Number</p>
-    <h1>@(order.Done ? "All set" : order.Step == CustomerStep.Confirm ? "Is this your order?" : "Pay the delivery fee")</h1>
+    <h1>@(order.Done && order.SameAddress is not null ? "One question about the address" : order.Done ? "All set" : order.Step == CustomerStep.Confirm ? "Is this your order?" : "Pay the delivery fee")</h1>
     <ol class="tracker" aria-label="Progress">
         <li class="done">Ordered</li>
-        <li class="@(order.Done ? "done" : "now")">@(order.Step == CustomerStep.Confirm ? "You confirm" : "You pay the fee")</li>
+        <li class="@(order.Done ? "done" : "now")">@(order.Step switch { CustomerStep.Confirm => "You confirm", CustomerStep.PayInAdvance => "You pay the fee", _ => "Accepted" })</li>
         <li class="@(order.Done ? "now" : null)">Shop sends it</li>
         <li>Delivered</li>
     </ol>
@@ -48,12 +48,39 @@
         }
     </dl>
 
+    @if (Model.Answer is not null)
+    {
+        <p class="notice notice-ok">@Model.Answer</p>
+    }
+    @if (order.SameAddress is { } same)
+    {
+        var (other, otherAddress) = same.Delivery == order.Delivery
+            ? (same.OtherDelivery, same.OtherAddress)
+            : (same.Delivery, same.Address);
+        <form method="post" asp-page-handler="SameAddress" class="notice same-address">
+            <input type="hidden" name="token" value="@Model.Token" />
+            <strong>Same address as your delivery @other?</strong>
+            <p>
+                That one goes to @otherAddress. If it is the same place, we bring both together on
+                @same.CombinedDay.ToString("dddd d MMMM") for one delivery fee, and remember this spelling.
+            </p>
+            <div class="same-address-buttons">
+                <button class="button" type="submit" name="same" value="true">Same address: combine</button>
+                <button class="button secondary" type="submit" name="same" value="false">Different place: keep separate</button>
+            </div>
+        </form>
+    }
+
     @if (order.Done)
     {
         <p class="notice">
             @if (order.Step == CustomerStep.PayInAdvance)
             {
                 @:Thank you: the delivery fee is paid. Your order is on its way.
+            }
+            else if (order.Step == CustomerStep.None)
+            {
+                @:We deliver it on @order.DeliveryDate.ToString("dddd d MMMM").
             }
             else
             {

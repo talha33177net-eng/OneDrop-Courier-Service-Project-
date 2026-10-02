@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
+using Application.Grouping.CombineDeliveries;
 using Domain.Customers;
 using Domain.Grouping;
 using Domain.Notifications;
@@ -14,7 +15,12 @@ namespace Application.Notifications.SendOutbox;
 /// Writes and sends the customer's SMS for one outbox message. The text is built from the data as it is now, so a
 /// retried message never says anything stale about the delivery day. Dates are in the tenant's time zone.
 /// </summary>
-public class CustomerTexts(IAppDbContext db, ITenantContext tenantContext, ICustomerLinks links, ISmsSender sms)
+public class CustomerTexts(
+    IAppDbContext db,
+    ITenantContext tenantContext,
+    ICustomerLinks links,
+    ISmsSender sms,
+    CombineDeliveriesHandler combine)
 {
     /// <summary>The outbox messages that are texts; the others are for someone else (<c>SendWebhooksJob</c>).</summary>
     public static readonly string[] Types =
@@ -55,22 +61,34 @@ public class CustomerTexts(IAppDbContext db, ITenantContext tenantContext, ICust
                 customer.Phone,
                 order.CustomerStep,
                 order.ConfirmedOn,
-                order.CustomerToken
+                order.CustomerToken,
+                order.CustomerId
             })
             .AsNoTracking()
             .SingleAsync(cancellationToken);
 
         var deliveryDay = LocalDate(placed.LocksAt);
+
+        // Two spellings of one address in one area: ask whether it is the same place, on the order's page
+        var question = placed.CustomerToken is null
+            ? null
+            : (await combine.QuestionsAsync(placed.CustomerId, cancellationToken))
+                .FirstOrDefault(q => q.IsAbout(placed.Number));
+        var (other, otherAddress) = question is null ? ("", "")
+            : question.Delivery == placed.Number ? (question.OtherDelivery, question.OtherAddress)
+            : (question.Delivery, question.Address);
         if (placed.ConfirmedOn is null && placed.CustomerStep != CustomerStep.None)
         {
             // The order waits for the customer: ask, and say no more about it than the shop already knows
             var link = links.Order(placed.CustomerToken!);
+            var also = question is null ? ""
+                : $" Is it going to the same address as your delivery {other} ({otherAddress})? Answer on the same page.";
 
-            return (placed.Phone, placed.CustomerStep == CustomerStep.Confirm
+            return (placed.Phone, (placed.CustomerStep == CustomerStep.Confirm
                 ? $"Is your {placed.Shop} order {placed.Order} correct? Confirm it and we deliver on " +
                     $"{Format(deliveryDay)}: {link}"
                 : $"Your {placed.Shop} order {placed.Order} goes out once the OneDrop delivery fee is paid. " +
-                    $"Pay it here and we deliver on {Format(deliveryDay)}: {link}");
+                    $"Pay it here and we deliver on {Format(deliveryDay)}: {link}") + also);
         }
 
         var text = placed.Status == DeliveryGroupStatus.Open
@@ -78,6 +96,11 @@ public class CustomerTexts(IAppDbContext db, ITenantContext tenantContext, ICust
                 $"shops can join it until the end of {Format(deliveryDay.AddDays(-1))}; we deliver on {Format(deliveryDay)}."
             : $"Your {placed.Shop} order {placed.Order} is in OneDrop delivery {placed.Number}, arriving on " +
                 $"{Format(deliveryDay)}.";
+        if (question is not null)
+        {
+            text += $" Same address as your delivery {other} ({otherAddress})? Combine them for one delivery and one " +
+                $"fee: {links.Order(placed.CustomerToken!)}";
+        }
 
         return (placed.Phone, text);
     }

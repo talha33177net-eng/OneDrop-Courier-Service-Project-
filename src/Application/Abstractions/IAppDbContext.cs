@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Domain.Customers;
 using Domain.Delivery;
 using Domain.Grouping;
@@ -61,6 +62,9 @@ public interface IAppDbContext
     DbSet<LedgerEntry> LedgerEntries { get; }
 
     DbSet<Settlement> Settlements { get; }
+
+    /// <summary>For the rare change that needs two saves in one transaction (a shelf handed from one delivery to another).</summary>
+    DatabaseFacade Database { get; }
 
     EntityEntry<TEntity> Entry<TEntity>(TEntity entity)
         where TEntity : class;

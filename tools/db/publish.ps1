@@ -50,8 +50,18 @@ Write-Host "Target: $server / $name" -ForegroundColor Cyan
 
 $project = [System.IO.Path]::Combine($root, 'src', 'Database', 'Database.sqlproj')
 $dacpac = [System.IO.Path]::Combine($root, 'src', 'Database', 'bin', 'Debug', 'Database.dacpac')
-$profile = [System.IO.Path]::Combine($root, 'src', 'Database', 'Local.publish.xml')
 $dbup = [System.IO.Path]::Combine($root, 'src', 'Database Update', 'Database Update.csproj')
+
+# The publish settings live here, not in a profile: *.publish.xml is git-ignored, so a profile would be missing on a
+# fresh checkout (CI). Rebuilding a table under Row-Level Security is safe: the policy restricts only connections the
+# application marks, so SqlPackage's own connection copies every row.
+$options = @(
+    '/p:IncludeCompositeObjects=True',
+    '/p:AllowIncompatiblePlatform=True',
+    '/p:BlockOnPossibleDataLoss=True',
+    '/p:DropObjectsNotInSource=False',
+    '/p:AllowUnsafeRowLevelSecurityDataMovement=True'
+)
 
 Write-Host 'Building the database project...' -ForegroundColor Cyan
 dotnet build $project --nologo -v q
@@ -59,7 +69,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Database project build failed.' }
 
 if ($ScriptOnly) {
     $output = [System.IO.Path]::Combine($root, 'src', 'Database', 'bin', 'Debug', 'Database.publish.sql')
-    sqlpackage /Action:Script /SourceFile:$dacpac /Profile:$profile /TargetConnectionString:$ConnectionString /OutputPath:$output
+    sqlpackage /Action:Script /SourceFile:$dacpac @options /TargetConnectionString:$ConnectionString /OutputPath:$output
     if ($LASTEXITCODE -ne 0) { throw 'Script generation failed.' }
     Write-Host "Publish script written to $output" -ForegroundColor Green
     return
@@ -72,7 +82,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'dbup pre failed.' }
 
     Write-Host 'Publishing the dacpac...' -ForegroundColor Cyan
-    sqlpackage /Action:Publish /SourceFile:$dacpac /Profile:$profile /TargetConnectionString:$ConnectionString
+    sqlpackage /Action:Publish /SourceFile:$dacpac @options /TargetConnectionString:$ConnectionString
     if ($LASTEXITCODE -ne 0) { throw 'Publish failed.' }
 
     Write-Host 'dbup...' -ForegroundColor Cyan

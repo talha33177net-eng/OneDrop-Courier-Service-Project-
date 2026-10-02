@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
+using Application.Grouping.CombineDeliveries;
 using Domain.Common;
 using Domain.Customers;
 using Domain.Grouping;
@@ -23,7 +24,8 @@ public sealed record OrderToConfirm(
     bool Done,
     decimal Fee = 0,
     PaymentMethod? Method = null,
-    string? PaymentLink = null);
+    string? PaymentLink = null,
+    SameAddressQuestion? SameAddress = null);
 
 /// <summary>
 /// The customer answering the SMS link for one order: a **one-tap confirmation** for a first cash-on-delivery order,
@@ -36,6 +38,7 @@ public class ConfirmOrderHandler(
     IAppDbContext db,
     ITenantContext tenantContext,
     IPaymentGateway gateway,
+    CombineDeliveriesHandler combine,
     TimeProvider time)
 {
     public async Task<Result<OrderToConfirm>> FindAsync(string token, CancellationToken cancellationToken = default)
@@ -161,11 +164,45 @@ public class ConfirmOrderHandler(
         return await DescribeAsync(order, cancellationToken);
     }
 
+    /// <summary>
+    /// The customer answers "Same address as your delivery …?" from the order's page: <paramref name="sameAddress"/> true
+    /// makes the two deliveries one, false keeps them apart (<see cref="CombineDeliveriesHandler"/>).
+    /// </summary>
+    public async Task<Result<OrderToConfirm>> AnswerSameAddressAsync(
+        string token,
+        bool sameAddress,
+        CancellationToken cancellationToken = default)
+    {
+        var found = await FindOrderAsync(token, cancellationToken);
+        if (found.IsFailure)
+        {
+            return found.Error!;
+        }
+
+        var order = found.Value;
+        var delivery = await db.DeliveryGroups
+            .Where(g => g.Id == order.DeliveryGroupId)
+            .Select(g => g.Number)
+            .SingleAsync(cancellationToken);
+        var answered = sameAddress
+            ? await combine.CombineAsync(order.CustomerId, delivery, cancellationToken)
+            : await combine.KeepSeparateAsync(order.CustomerId, delivery, cancellationToken);
+        if (answered.IsFailure)
+        {
+            return answered.Error!;
+        }
+
+        // The order may have moved to the other delivery
+        await db.Entry(order).ReloadAsync(cancellationToken);
+
+        return await DescribeAsync(order, cancellationToken);
+    }
+
     private TenantInfo Tenant => tenantContext.Tenant ?? throw new InvalidOperationException("Confirming needs a tenant.");
 
     /// <summary>
-    /// The order the link names, whichever shop it belongs to. An order that waits for nothing, or a token that is not
-    /// one of the tenant's, is not found: the link says nothing about a customer.
+    /// The order the link names, whichever shop it belongs to. Only an order the customer was asked about has a link; a
+    /// token that is not one of the tenant's is not found: the link says nothing about a customer.
     /// </summary>
     private async Task<Result<Order>> FindOrderAsync(string token, CancellationToken cancellationToken)
     {
@@ -173,7 +210,7 @@ public class ConfirmOrderHandler(
             .IgnoreQueryFilters([QueryFilters.Merchant])
             .FirstOrDefaultAsync(o => o.CustomerToken == token, cancellationToken);
 
-        return order is null || order.CustomerStep == CustomerStep.None
+        return order is null
             ? Error.NotFound("order.confirm.notFound", "This link is not valid any more.")
             : order;
     }
@@ -219,6 +256,8 @@ public class ConfirmOrderHandler(
             ? (await PendingAdvancesAsync(order.DeliveryGroupId, cancellationToken))
                 .FirstOrDefault(payment => payment.Status == PaymentStatus.Pending)
             : null;
+        var question = (await combine.QuestionsAsync(order.CustomerId, cancellationToken))
+            .FirstOrDefault(q => q.IsAbout(about.Number));
 
         return new OrderToConfirm(
             order.Number,
@@ -232,6 +271,7 @@ public class ConfirmOrderHandler(
             !order.WaitsForCustomer,
             pending?.Fee ?? (order.WaitsForAdvance ? await FeeAsync(order, cancellationToken) : 0),
             pending?.Method,
-            pending?.PaymentLink);
+            pending?.PaymentLink,
+            question);
     }
 }

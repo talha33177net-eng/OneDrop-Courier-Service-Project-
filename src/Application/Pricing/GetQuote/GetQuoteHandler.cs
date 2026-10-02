@@ -66,7 +66,7 @@ public class GetQuoteHandler(
                 db.Customers.Where(c => c.Phone == phone),
                 address => address.CustomerId,
                 customer => customer.Id,
-                (address, customer) => new { address.CustomerId, address.Id })
+                (address, customer) => new { address.CustomerId, Id = address.SameAsId ?? address.Id })
             .AsNoTracking()
             .FirstOrDefaultAsync(cancellationToken);
 
