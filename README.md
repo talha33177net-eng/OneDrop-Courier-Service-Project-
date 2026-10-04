@@ -106,10 +106,10 @@ your own queries; `docker compose down -v` deletes its data.
 | Login | Where | Role |
 |---|---|---|
 | `admin@onedrop.test` | localhost | Platform admin |
-| `admin@dhaka.onedrop.test` / `admin@chattogram.onedrop.test` | tenant | Tenant admin (**Dashboard**: every hub live and packages per delivery by area, week by week; also every hub page) |
+| `admin@dhaka.onedrop.test` / `admin@chattogram.onedrop.test` | tenant | Tenant admin (**Dashboard**: every hub live and packages per delivery by area, week by week; **Failed messages**: texts and webhooks that did not go out, send again; also every hub page) |
 | `hub@dhaka.onedrop.test` / `hub@chattogram.onedrop.test` | tenant | Hub staff (**Hub today**: live counts and the parcels of today's deliveries not scanned in yet; **Pickup routes**: route sheets per zone; **Scan**: collect, receive, load the shuttle and return to the shop; **Shelves**; **Shuttle** manifest; **Trips**: today's riders and deliveries, Plan trips now; **Cash**: record each rider's cash handed in) |
 | `rider@dhaka.onedrop.test` (Mirpur, 30 parcels / 25 kg), `rider2@dhaka.onedrop.test` (Mirpur, 12 / 15 kg), `rider3@dhaka.onedrop.test` (Gulshan), `rider@chattogram.onedrop.test` (Agrabad) | tenant | Rider (**Today**: stops, what to collect, Start trip; at each door: refused orders, check the amount, hand over for cash or after a bKash / Nagad QR is paid (the fake wallet is paid on **Wallet payments**), or nobody home; cash to hand in) |
-| `fashion@`, `gadget@`, `beauty@` + `dhaka.onedrop.test` / `chattogram.onedrop.test` | tenant | Merchant (orders, printable QR labels; **Payouts**: COD owed, charges, payouts sent the next day, listed on **Wallet payments**) |
+| `fashion@`, `gadget@`, `beauty@` + `dhaka.onedrop.test` / `chattogram.onedrop.test` | tenant | Merchant (orders, printable QR labels; **Payouts**: COD owed, charges, payouts sent the next day, listed on **Wallet payments**; **Order updates** (webhook), **Shop window**, **API keys**: make and revoke keys) |
 | Any mobile number via **Customer sign in** | tenant | Customer (code appears on **SMS outbox**; a first cash order is confirmed, or its fee paid in advance, through the link in its text) |
 
 ### Demo merchant API keys (Development only)

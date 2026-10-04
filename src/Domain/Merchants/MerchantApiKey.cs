@@ -14,6 +14,7 @@ public class MerchantApiKey : TenantEntity, IMerchantOwned
     public const string Scheme = "od";
     public const int PrefixLength = 12;
     public const int SecretLength = 32;
+    public const int MaxNameLength = 100;
 
     private const string PrefixAlphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
     private const string SecretAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -52,6 +53,20 @@ public class MerchantApiKey : TenantEntity, IMerchantOwned
         var secret = RandomNumberGenerator.GetString(SecretAlphabet, SecretLength);
 
         return (new MerchantApiKey(merchantId, name, prefix, secret), Format(prefix, secret));
+    }
+
+    /// <summary>A key the shop asked for by name ("Website", "Shopify"). Returns the plaintext, shown once.</summary>
+    public static Result<(MerchantApiKey Key, string Plaintext)> Create(long merchantId, string? name)
+    {
+        var trimmed = name.NullIfBlank();
+        if (trimmed is null || trimmed.Length > MaxNameLength)
+        {
+            return Error.Validation(
+                "apikey.name",
+                $"Give the key a name, at most {MaxNameLength} characters, such as the website that will use it.");
+        }
+
+        return Issue(merchantId, trimmed);
     }
 
     /// <summary>Registers a known plaintext key. Used to give demo merchants stable, documented keys.</summary>

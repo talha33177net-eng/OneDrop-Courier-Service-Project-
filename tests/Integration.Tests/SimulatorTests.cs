@@ -18,8 +18,14 @@ public class SimulatorTests(WebAppFactory factory)
         using var api = factory.CreateClient();
         var log = new List<string>();
 
+        // A new seed each run: the same customers again would join the open deliveries of an earlier run
         var result = await Simulation.RunAsync(
-            factory.Services, api, tenant, new SimulationOptions(3, 12, TimeSpan.Zero, Seed: 11), log.Add, Cancel);
+            factory.Services,
+            api,
+            tenant,
+            new SimulationOptions(3, 12, TimeSpan.Zero, Seed: Random.Shared.Next()),
+            log.Add,
+            Cancel);
 
         Assert.Equal(12, result.Sent);
         Assert.Empty(result.Refused);

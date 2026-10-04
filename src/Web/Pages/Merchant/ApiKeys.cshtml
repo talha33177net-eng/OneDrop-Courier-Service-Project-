@@ -1,0 +1,104 @@
+@page
+@model Web.Pages.Merchant.ApiKeysModel
+@using Domain.Merchants
+@{
+    ViewData["Title"] = "API keys";
+}
+
+<div class="page-head">
+    <div>
+        <h1>API keys</h1>
+        <p class="lead">
+            Your website sends orders to OneDrop with a key. Make one key per website or app, so you can stop one
+            without stopping the others.
+        </p>
+    </div>
+    <a class="button ghost" asp-page="/Merchant/Orders">My orders</a>
+</div>
+
+<details class="help">
+    <summary>For your website developer</summary>
+    <ul>
+        <li>
+            Send orders with <code>POST /api/v1/orders</code> and the whole key in the <code>X-Api-Key</code> header. The
+            checkout price comes from <code>GET /api/v1/quote</code>, the area list from <code>GET /api/v1/areas</code>.
+        </li>
+        <li>
+            We show a new key once. We keep only its start (<code>od_abc…</code>) and a fingerprint of the rest, so a lost
+            key cannot be shown again: make a new one and revoke the old.
+        </li>
+        <li>A revoked key is refused at once, on its next call.</li>
+    </ul>
+</details>
+
+@if (Model.Issued is not null)
+{
+    <section class="card notice notice-ok" role="status">
+        <h2>Your new key</h2>
+        <p>Copy it now and put it in your website's settings. We will not show it again.</p>
+        <p><code class="secret">@Model.Issued</code></p>
+    </section>
+}
+
+@if (Model.Done is not null)
+{
+    <div class="notice notice-ok" role="status">@Model.Done</div>
+}
+
+@if (Model.Problem is not null)
+{
+    <div class="notice notice-problem" role="alert">@Model.Problem</div>
+}
+
+<section class="card">
+    <h2>Make a new key</h2>
+    <form method="post" asp-page-handler="Issue">
+        <label asp-for="Name">What will use it</label>
+        <input asp-for="Name" maxlength="@MerchantApiKey.MaxNameLength" placeholder="Website" required />
+        <div class="door-actions">
+            <button type="submit" class="button">Make the key</button>
+        </div>
+    </form>
+</section>
+
+<div class="table-wrap card">
+    <table>
+        <thead>
+            <tr><th>Name</th><th>Key starts</th><th>Made</th><th>Last used</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody>
+            @if (Model.Keys.Count == 0)
+            {
+                <tr><td colspan="6" class="muted">No keys yet.</td></tr>
+            }
+            @foreach (var key in Model.Keys)
+            {
+                <tr>
+                    <td>@key.Name</td>
+                    <td><code>od_@(key.Prefix)_…</code></td>
+                    <td>@key.Created.ToString("d MMM yyyy")</td>
+                    <td>@(key.LastUsed?.ToString("d MMM HH:mm") ?? "Never")</td>
+                    <td>
+                        @if (key.Revoked is { } revoked)
+                        {
+                            <span class="status status-quiet">Revoked @revoked.ToString("d MMM")</span>
+                        }
+                        else
+                        {
+                            <span class="status status-done">Active</span>
+                        }
+                    </td>
+                    <td>
+                        @if (key.Revoked is null)
+                        {
+                            <form method="post" asp-page-handler="Revoke">
+                                <input type="hidden" name="prefix" value="@key.Prefix" />
+                                <button type="submit" class="button ghost compact">Revoke</button>
+                            </form>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

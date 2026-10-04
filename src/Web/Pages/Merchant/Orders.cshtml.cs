@@ -17,8 +17,6 @@ public class OrdersModel(IAppDbContext db, ShopDropOffs dropOffs) : PageModel
 
     public IReadOnlyList<OrderRow> Orders { get; private set; } = [];
 
-    public IReadOnlyList<KeyRow> Keys { get; private set; } = [];
-
     /// <summary>Set while the shop has been late too often and brings its parcels to the hub itself.</summary>
     public OwnDropOff? DropOff { get; private set; }
 
@@ -45,12 +43,6 @@ public class OrdersModel(IAppDbContext db, ShopDropOffs dropOffs) : PageModel
             .Take(100)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
-
-        Keys = await db.MerchantApiKeys
-            .OrderBy(k => k.Id)
-            .Select(k => new KeyRow(k.Name, k.Prefix, k.LastUsedOn, k.RevokedOn == null))
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
     }
 
     public sealed record OrderRow(
@@ -63,6 +55,4 @@ public class OrdersModel(IAppDbContext db, ShopDropOffs dropOffs) : PageModel
         decimal Cod,
         DateTime Created,
         CustomerStep Waits);
-
-    public sealed record KeyRow(string Name, string Prefix, DateTime? LastUsed, bool Active);
 }

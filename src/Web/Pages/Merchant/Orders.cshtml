@@ -132,28 +132,6 @@
     }
 </div>
 
-<details class="help">
-    <summary>For your website developer: API keys</summary>
-    <p>
-        Your website sends orders with <code>POST /api/v1/orders</code> and the full key in the <code>X-Api-Key</code>
-        header. Only the start of each key is stored in clear.
-    </p>
-    <div class="table-wrap card">
-        <table>
-            <thead>
-                <tr><th>Name</th><th>Prefix</th><th>Last used (UTC)</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-                @foreach (var key in Model.Keys)
-                {
-                    <tr>
-                        <td>@key.Name</td>
-                        <td><code>od_@(key.Prefix)_…</code></td>
-                        <td>@(key.LastUsed?.ToString("d MMM HH:mm") ?? "Never")</td>
-                        <td>@(key.Active ? "Active" : "Revoked")</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</details>
+<p class="muted">
+    Selling on your own website? Its developer connects it with an <a asp-page="/Merchant/ApiKeys">API key</a>.
+</p>

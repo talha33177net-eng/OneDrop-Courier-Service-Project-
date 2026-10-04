@@ -102,6 +102,7 @@ The user supplied two PDFs (not stored in the repo): *OneDrop Implementation Pla
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
 | 3 | Operations and money | Group delivered, merchants settled | ✅ Done 2026-09-30 |
 | 4 | Polish and proof | Full demo runs end to end | ✅ Done 2026-10-04: the final demo runs end to end ([Demo.md](Demo.md)) |
+| 5 | After the MVP | The owner's list of gaps closed | 🔄 5.1–5.2 done (see the plan's Week 5) |
 
 Task-level detail, the cut list, the job schedule, must-pass tests and the daily log are in
 [Plans/Implementation-Plan.md](../Plans/Implementation-Plan.md). **That file is the source of truth for progress.**
@@ -332,8 +333,14 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   the operator's host (404 on the platform's) and the same for everyone, so it names no customer or delivery; "My
   deliveries" shows each open delivery's window without the shops already in it (`CustomerDelivery.MoreShops`). No
   shop ever sees the window's customers.
-- **Not yet:** a screen to add riders or change a bike's limit, a screen to change route times or weight settings, Ship now by SMS "reply 1" (needs an inbound SMS gateway), a screen for failed outbox messages or webhooks,
-  merchant screens to create API keys, tenant admin screens.
+- **API keys** (5.1, `Application/Merchants/ApiKeys`): a shop makes keys on **API keys** (`/Merchant/ApiKeys`;
+  `MerchantApiKey.Create`, the plaintext shown once on the form's answer, never stored or kept in a cookie) and revokes
+  them; a revoked key is refused on its next call. Another shop's key is not found.
+- **Failed messages** (5.2, `Application/Notifications/FailedMessages`): tenant admins see the operator's texts and
+  webhooks that are retrying or given up (`/Admin/Messages`): what each was about, to whom, tries, last error; a given-up
+  one is sent again (`OutboxMessage.SendAgain`: pending at once, fresh attempts).
+- **Not yet:** a screen to add riders or change a bike's limit, a screen to change route times or weight settings, Ship
+  now by SMS "reply 1" (needs an inbound SMS gateway), tenant admin screens (Week 5 tasks 5.3–5.7 in the plan).
 
 ### Database
 - Schemas: `Platform` (Tenant), `Identity` (User, Role, UserRole, UserClaim, UserLogin, UserToken, RoleClaim),

@@ -13,9 +13,9 @@ The one place to see where we are and what comes next. Built from the two projec
 
 | | |
 |---|---|
-| Current week | **The 4-week MVP is complete** (Week 4 done 2026-10-04) |
-| Next task | None in the plan. After the MVP (owner's list): API key screens, tenant admin screens, SMS "reply 1", a failed-message screen, the app's own SQL login; merge `day5` into `main` |
-| Last session | 2026-10-04 — task 4.8 committed (`90669ca`) and `day5` pushed (first CI run on GitHub green); task 4.9 (documents and the recorded demo) on `day5`, uncommitted for review. `main` holds everything up to 3.7 and the UI upgrade (merge `54733e6`) |
+| Current week | **Week 5 — After the MVP** (the 4-week MVP is complete) |
+| Next task | 5.3 Operator admin: prices and rules |
+| Last session | 2026-10-04 — tasks 4.8 and 4.9 and the CI action update committed and pushed on `day5` (CI green); Week 5 (owner's after-MVP list) under way, 5.1–5.2 committed as they are done. `main` holds everything up to 3.7 and the UI upgrade (merge `54733e6`) |
 | Blockers | None |
 
 ---
@@ -48,8 +48,9 @@ A task is **not done** until all of these pass. Record the result in the daily l
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
 | 3 | Operations and money | Group delivered, merchants settled | ✅ Done 2026-09-30 |
 | 4 | Polish and proof | Full demo runs end to end | ✅ Done 2026-10-04 |
+| 5 | After the MVP | The owner's list of gaps closed | 🔄 2 of 8 |
 
-Tests today: **425 passing** (281 domain, 6 architecture, 138 integration).
+Tests today: **433 passing** (287 domain, 6 architecture, 140 integration).
 
 ---
 
@@ -964,6 +965,53 @@ next morning each merchant is settled.
 5. The rider delivers and collects ৳95 + COD (৳60 + ৳25, and +৳10 because Ship now on Day 1 brings the day forward; ৳85 when pressed on Day 2).
 6. Next morning, both merchants are settled.
 7. Switch to OneDrop Chattogram: same phone number, completely separate data and its own prices.
+
+---
+
+## Week 5 — After the MVP 🔄
+
+The owner's list of gaps left after the MVP (2026-10-04: "do them and finish it"), one task at a time with the same test
+routine.
+
+- [x] **5.1 Shops manage their own API keys.** *Done 2026-10-04:* `MerchantApiKey.Create` (a name of at most 100
+      characters, `apikey.name`), `Application/Merchants/ApiKeys/MerchantApiKeysHandler` (list in the operator's time zone,
+      issue, revoke by prefix; another shop's key is not found). Page **API keys** (`/Merchant/ApiKeys`, nav "API keys"):
+      make a key (its plaintext shown once, on the answer to the form, never stored or put in a cookie), every key with its
+      start, made, last used and status, **Revoke**. "My orders" links to it instead of its old read-only key list. A revoked
+      key is refused on its next call (the API key check already reads `IsActive`).
+      *Tested:* 4 new domain test cases (a named key works and is unique; a blank or too long name refused; revoking again
+      keeps the first date) and 1 new integration test (a bad name refused; a key made on the page works on the API at once,
+      is listed by its start without the secret; Gadget BD neither sees it nor revokes it (404, still working); revoked → 401;
+      anonymous redirected), a sweep line (`/Merchant/ApiKeys`: Fashion House's seeded key only on its own page, Gadget BD
+      and Chattogram 404 revoking it, still working). Live on dev: Beauty Shop made "Beauty Shop website" (`od_ufr1r7vjsn2s_…`),
+      the API answered 200, listed "last used 4 Oct 09:50", Gadget BD's revoke 404, Beauty Shop's revoke → 401, the seeded
+      key still 200.
+- [x] **5.2 A screen for texts and webhooks that failed.** *Done 2026-10-04:* `OutboxMessage.SendAgain` (only a given-up
+      message: pending at once with fresh attempts, the last error kept). `Application/Notifications/FailedMessages/
+      FailedMessagesHandler`: the operator's messages given up or still retrying after a failure, newest 100, each with what it
+      was about ("Order OD-… placed", "Delivery DG-… closed", "Receipt for delivery DG-…", "Order OD-… status atHub"), to whom
+      (the customer's phone or the shop), tries and last error, in the operator's time zone; **Send again**. Page **Failed
+      messages** (`/Admin/Messages`, policy `OperatorAdmin`, nav for tenant admins).
+      *Tested:* 2 new domain tests (sent again: due at once, fresh attempts, the next failure waits a minute; only a failed
+      message) and 1 new integration test (a given-up and a retrying text listed with order, phone and error, only the given-up
+      one with a button; Chattogram's admin sees neither and gets 404 sending it; sent again → pending with no attempts and off
+      the list; hub staff refused), a sweep line (`/Admin/Messages`). Also fixed `SimulatorTests`, which failed on a second run
+      the same day: its fixed seed made the same customers, whose deliveries from the first run were still open; it now takes a
+      new seed each run (run twice in a row, green). 287 + 6 + 140 = 433 pass, none skipped (5.1 and 5.2 together). No schema
+      change. Live on dev: Fashion House's webhook pointed at a dead address (`localhost:5999`), OD-100158 collected → the page
+      showed "Website update · Order OD-100158 status pickedUp · Fashion House · 1 · No answer: … actively refused it ·
+      Retrying", tries counting up as it retried; after the fifth "Given up" with **Send again**. The webhook put back to
+      `/Dev/Webhooks`, **Send again** (message 220) → on `/Dev/Webhooks` within seconds as `pickedUp` for OD-100158 and off
+      the list; Chattogram's admin never listed it. No errors in the app log but the expected webhook failures.
+- [ ] **5.3 Operator admin: prices and rules.** The operator's fees, join days, weight allowance, trust counts, shop charges
+      and drop-off rule on a page instead of SQL.
+- [ ] **5.4 Operator admin: hubs, zones, pickup times and areas.**
+- [ ] **5.5 Operator admin: shops and riders.** Add a shop with its sign-in and default pickup point; add a rider with a
+      sign-in and bike limits; change a bike's limits.
+- [ ] **5.6 Ship now by replying "1".** An inbound SMS endpoint behind a gateway adapter (a fake one in Development).
+- [ ] **5.7 The app's own SQL login.** A login without `ALTER ANY SECURITY POLICY`, so the app cannot switch off
+      Row-Level Security (on ras-x2: shown to the owner before it is created).
+- [ ] **5.8 Merge into `main`.**
 
 ---
 

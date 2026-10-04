@@ -46,6 +46,7 @@
                         <a asp-page="/Merchant/Payouts" class="@Active("/Merchant/Payouts")">Payouts</a>
                         <a asp-page="/Merchant/Webhook" class="@Active("/Merchant/Webhook")">Order updates</a>
                         <a asp-page="/Merchant/Window" class="@Active("/Merchant/Window")">Shop window</a>
+                        <a asp-page="/Merchant/ApiKeys" class="@Active("/Merchant/ApiKeys")">API keys</a>
                     }
                     if (user.IsInRole(Roles.Customer))
                     {
@@ -54,6 +55,7 @@
                     if (user.IsInRole(Roles.TenantAdmin))
                     {
                         <a asp-page="/Admin/Index" class="@Active("/Admin/Index")">Dashboard</a>
+                        <a asp-page="/Admin/Messages" class="@Active("/Admin/Messages")">Failed messages</a>
                     }
                     if (operations)
                     {

@@ -1,0 +1,78 @@
+@page
+@model Web.Pages.Admin.MessagesModel
+@{
+    ViewData["Title"] = "Failed messages";
+}
+
+<div class="page-head">
+    <div>
+        <h1>Failed messages</h1>
+        <p class="lead">Texts to customers and updates to shops' websites that have not gone out.</p>
+    </div>
+    <a class="button ghost" asp-page="/Admin/Index">Dashboard</a>
+</div>
+
+<details class="help">
+    <summary>How sending works</summary>
+    <ul>
+        <li>Every text and website update is saved with the change it is about, then sent within seconds.</li>
+        <li>
+            When sending fails it is tried again after 1, 2, 4 and 8 minutes. Until then it shows here as
+            <strong>Retrying</strong>.
+        </li>
+        <li>
+            After five failed attempts it is <strong>Given up</strong>. Fix the cause (the SMS gateway, or the shop's
+            website: the error says which), then press <strong>Send again</strong>.
+        </li>
+        <li>A text is written when it is sent, so one sent again says what is true now.</li>
+    </ul>
+</details>
+
+@if (Model.Done is not null)
+{
+    <div class="notice notice-ok" role="status">@Model.Done</div>
+}
+
+@if (Model.Messages.Count == 0)
+{
+    <div class="card">
+        <p class="muted">Nothing has failed. Every text and website update has gone out.</p>
+    </div>
+}
+else
+{
+    <div class="table-wrap card">
+        <table>
+            <thead>
+                <tr><th>When</th><th>What</th><th>About</th><th>To</th><th>Tries</th><th>Last error</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var message in Model.Messages)
+                {
+                    <tr>
+                        <td>@message.Created.ToString("d MMM HH:mm")</td>
+                        <td>@(message.Text ? "Text" : "Website update")</td>
+                        <td>@message.About</td>
+                        <td>@message.To</td>
+                        <td>@message.Attempts</td>
+                        <td class="muted">@message.LastError</td>
+                        <td>
+                            @if (message.GivenUp)
+                            {
+                                <span class="status status-problem">Given up</span>
+                                <form method="post" asp-page-handler="SendAgain">
+                                    <input type="hidden" name="id" value="@message.Id" />
+                                    <button type="submit" class="button compact">Send again</button>
+                                </form>
+                            }
+                            else
+                            {
+                                <span class="status status-quiet">Retrying</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

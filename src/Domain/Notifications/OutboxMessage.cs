@@ -71,6 +71,24 @@ public class OutboxMessage : TenantEntity
         NextAttemptOn = null;
     }
 
+    /// <summary>
+    /// Someone has looked at a message that failed for good (the shop fixed its server, the SMS gateway is back) and
+    /// sends it again: it is due at once with a fresh set of attempts. The last error stays until it is sent.
+    /// </summary>
+    public Result SendAgain()
+    {
+        if (Status != OutboxStatus.Failed)
+        {
+            return Error.Conflict("outbox.notFailed", "Only a message that failed can be sent again.");
+        }
+
+        Status = OutboxStatus.Pending;
+        Attempts = 0;
+        NextAttemptOn = null;
+
+        return Result.Success();
+    }
+
     /// <summary>Records a failed attempt: waits longer after each one and gives up after <see cref="MaxAttempts"/>.</summary>
     public void MarkFailed(string error, DateTime now)
     {

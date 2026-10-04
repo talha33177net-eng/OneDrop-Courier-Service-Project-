@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Controllers;
@@ -11,9 +12,11 @@ using Microsoft.AspNetCore.StaticAssets;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Application.Abstractions;
+using Application.Notifications;
 using Domain.Customers;
 using Domain.Delivery;
 using Domain.Grouping;
+using Domain.Notifications;
 using Domain.Orders;
 using Domain.Payments;
 using Infrastructure.Persistence;
@@ -228,6 +231,32 @@ public partial class TripTests
                         Assert.DoesNotContain(secret, page);
                     }
                 }
+            }),
+            ("/Admin/Messages", async () =>
+            {
+                // The delivery's order with its "placed" text given up: Dhaka's admin sees it, Chattogram's cannot
+                var id = await GiveUpPlacedTextAsync(sent);
+                Assert.Contains(sent, await dhakaAdmin.PageAsync("/Admin/Messages"));
+                Assert.DoesNotContain(sent, await ctgAdmin.PageAsync("/Admin/Messages"));
+                var posted = await ctgAdmin.PostFormAsync("/Admin/Messages", "/Admin/Messages?handler=SendAgain", ("id", id.ToString()));
+                Assert.Equal(HttpStatusCode.NotFound, posted.StatusCode);
+            }),
+            ("/Merchant/ApiKeys", async () =>
+            {
+                // Fashion House's seeded key: on its own page, on no other shop's, and nobody else can revoke it
+                const string prefix = "dhkfashion01";
+                Assert.Contains(prefix, await fashion.PageAsync("/Merchant/ApiKeys"));
+                Assert.DoesNotContain(prefix, await gadget.PageAsync("/Merchant/ApiKeys"));
+                Assert.DoesNotContain(prefix, await ctgShop.PageAsync("/Merchant/ApiKeys"));
+                foreach (var shop in new[] { gadget, ctgShop })
+                {
+                    var revoked = await shop.PostFormAsync("/Merchant/ApiKeys", "/Merchant/ApiKeys?handler=Revoke", ("prefix", prefix));
+                    Assert.Equal(HttpStatusCode.NotFound, revoked.StatusCode);
+                }
+
+                Assert.Equal(
+                    HttpStatusCode.OK,
+                    (await factory.ClientFor(WebAppFactory.DhakaFashion).GetAsync("/api/v1/areas", Cancel)).StatusCode);
             }),
             ("/Merchant/Window", async () =>
             {
@@ -567,6 +596,26 @@ public partial class TripTests
             .Where(m => m.WebhookSecret != null && !(m.TenantId == tenantId && m.Name == name))
             .Select(m => m.WebhookSecret!)
             .ToArrayAsync(Cancel);
+    }
+
+    /// <summary>Fails the order's "placed" text until it is given up, as the sender would; returns the message's id.</summary>
+    private async Task<long> GiveUpPlacedTextAsync(string number)
+    {
+        await using var scope = await ScopeAsync("dhaka");
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var orderId = await db.Orders.Where(o => o.Number == number).Select(o => o.Id).SingleAsync(Cancel);
+        var payload = JsonSerializer.Serialize(new OrderPlacedMessage(orderId));
+        var message = await db.OutboxMessages.SingleAsync(
+            m => m.Type == nameof(OrderPlacedMessage) && m.Payload == payload,
+            Cancel);
+        while (message.Status != OutboxStatus.Failed)
+        {
+            message.MarkFailed("Isolation sweep", DateTime.UtcNow);
+        }
+
+        await db.SaveChangesAsync(Cancel);
+
+        return message.Id;
     }
 
     /// <summary>Lists Dhaka's Fashion House in the shopping window with the address given, or takes it out.</summary>

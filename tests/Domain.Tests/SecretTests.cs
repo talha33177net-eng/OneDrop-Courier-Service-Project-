@@ -42,6 +42,42 @@ public class MerchantApiKeyTests
         Assert.False(key.Matches(secret));
     }
 
+    [Fact]
+    public void A_shop_names_its_key_and_gets_a_working_one()
+    {
+        var created = MerchantApiKey.Create(3, "  Shopify store  ");
+
+        var (key, plaintext) = created.Value;
+        Assert.Equal("Shopify store", key.Name);
+        Assert.Equal(3, key.MerchantId);
+        Assert.True(MerchantApiKey.TryParse(plaintext, out _, out var secret));
+        Assert.True(key.Matches(secret));
+        Assert.NotEqual(plaintext, MerchantApiKey.Create(3, "Shopify store").Value.Plaintext);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("   ")]
+    public void A_key_needs_a_name_of_reasonable_length(string? name)
+    {
+        Assert.Equal("apikey.name", MerchantApiKey.Create(3, name).Error!.Code);
+        Assert.Equal("apikey.name", MerchantApiKey.Create(3, new string('a', MerchantApiKey.MaxNameLength + 1)).Error!.Code);
+        Assert.True(MerchantApiKey.Create(3, new string('a', MerchantApiKey.MaxNameLength)).IsSuccess);
+    }
+
+    [Fact]
+    public void Revoking_again_keeps_the_first_date()
+    {
+        var (key, _) = MerchantApiKey.Issue(3, "Website");
+        var first = new DateTime(2026, 10, 4, 9, 0, 0, DateTimeKind.Utc);
+
+        key.Revoke(first);
+        key.Revoke(first.AddHours(1));
+
+        Assert.Equal(first, key.RevokedOn);
+        Assert.False(key.IsActive);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

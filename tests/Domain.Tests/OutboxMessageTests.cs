@@ -17,6 +17,39 @@ public class OutboxMessageTests
     }
 
     [Fact]
+    public void A_failed_message_sent_again_is_due_at_once_with_fresh_attempts()
+    {
+        var message = OutboxMessage.Create("OrderPlacedMessage", """{"OrderId":1}""");
+        for (var attempt = 0; attempt < OutboxMessage.MaxAttempts; attempt++)
+        {
+            message.MarkFailed("Gateway down", Now);
+        }
+
+        Assert.True(message.SendAgain().IsSuccess);
+
+        Assert.Equal((OutboxStatus.Pending, 0, null), (message.Status, message.Attempts, message.NextAttemptOn));
+        Assert.Equal("Gateway down", message.LastError);
+        message.MarkFailed("Still down", Now);
+        Assert.Equal(OutboxStatus.Pending, message.Status);
+        Assert.Equal(Now.AddMinutes(1), message.NextAttemptOn);
+    }
+
+    [Fact]
+    public void Only_a_failed_message_is_sent_again()
+    {
+        var pending = OutboxMessage.Create("OrderPlacedMessage", """{"OrderId":1}""");
+        var sent = OutboxMessage.Create("OrderPlacedMessage", """{"OrderId":1}""");
+        sent.MarkSent(Now);
+        var skipped = OutboxMessage.Create("OrderStatusChangedMessage", """{"OrderId":1}""");
+        skipped.MarkSkipped();
+
+        Assert.All(
+            new[] { pending, sent, skipped },
+            message => Assert.Equal("outbox.notFailed", message.SendAgain().Error!.Code));
+        Assert.Equal(OutboxStatus.Sent, sent.Status);
+    }
+
+    [Fact]
     public void A_sent_message_records_when()
     {
         var message = OutboxMessage.Create("OrderPlacedMessage", """{"OrderId":1}""");
