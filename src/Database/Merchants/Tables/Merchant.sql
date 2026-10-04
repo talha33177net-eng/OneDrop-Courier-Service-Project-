@@ -1,37 +1,37 @@
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 -- TABLE: Merchants.Merchant
--- Purpose: An online shop that offers our delivery at checkout. Merchants pay nothing. ZoneId is the zone whose
---          pickup route collects from them. Merchant users only ever see their own row and parcels.
+-- Purpose: A shop that sends parcels with the courier. Status is a TINYINT enum (Domain.Merchants.MerchantStatus):
+--          1 Pending (signed up, waiting for approval), 2 Active, 3 Suspended; only an active merchant books parcels.
+--          PayoutMethod (1 bKash, 2 Nagad, 3 Bank) and PayoutAccount say where payouts go. WebhookUrl and
+--          WebhookSecret: where the shop's parcel status changes are posted, and the whsec_ secret they are signed
+--          with (kept as it is: signing needs it). Merchant users only ever see their own row and parcels.
 -- Author: Courier team
--- Date: 2026-09-27
--- 2026-09-30: ReliabilityScore dropped (task 3.8, Pre/004): whether a shop brings its parcels to the hub is worked
---             out from its recent late handovers (Orders.Order.ShopLateOn)
--- 2026-09-30: WebhookUrl and WebhookSecret (task 4.2): where the shop's order status changes are posted, and the
---             whsec_ secret they are signed with (kept as it is: signing needs it)
--- 2026-10-04: ShopUrl and ShopAbout (task 4.8): where customers shop and what the shop sells, set by the shop to be
---             listed in the operator's shopping window (NULL: not listed)
+-- Date: 2026-10-04
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Merchants].[Merchant] (
-    [Id]            BIGINT         IDENTITY (1, 1) NOT NULL,
-    [TenantId]      BIGINT         NOT NULL,
-    [Name]          NVARCHAR (200) NOT NULL,
-    [ZoneId]        BIGINT         NOT NULL,
-    [ContactPhone]  NVARCHAR (20)  NOT NULL,
-    [ContactEmail]  NVARCHAR (320) NULL,
-    [WebhookUrl]    NVARCHAR (500) NULL,
-    [WebhookSecret] NVARCHAR (100) NULL,
-    [ShopUrl]       NVARCHAR (500) NULL,
-    [ShopAbout]     NVARCHAR (120) NULL,
-    [Archived]      BIT            DEFAULT ((0)) NOT NULL,
-    [UpdatedId]     BIGINT         NULL,
-    [UpdatedOn]     DATETIME2 (7)  DEFAULT (getutcdate()) NOT NULL,
-    [Created]       DATETIME2 (0)  DEFAULT (getutcdate()) NOT NULL,
+    [Id]                BIGINT         IDENTITY (1, 1) NOT NULL,
+    [TenantId]          BIGINT         NOT NULL,
+    [Name]              NVARCHAR (200) NOT NULL,
+    [OwnerName]         NVARCHAR (200) NOT NULL,
+    [ContactPhone]      NVARCHAR (20)  NOT NULL,
+    [ContactEmail]      NVARCHAR (320) NULL,
+    [Address]           NVARCHAR (500) NOT NULL,
+    [Status]            TINYINT        NOT NULL,
+    [PayoutMethod]      TINYINT        NULL,
+    [PayoutAccount]     NVARCHAR (30)  NULL,
+    [PayoutAccountName] NVARCHAR (200) NULL,
+    [WebhookUrl]        NVARCHAR (500) NULL,
+    [WebhookSecret]     NVARCHAR (100) NULL,
+    [Archived]          BIT            DEFAULT ((0)) NOT NULL,
+    [UpdatedId]         BIGINT         NULL,
+    [UpdatedOn]         DATETIME2 (7)  DEFAULT (getutcdate()) NOT NULL,
+    [Created]           DATETIME2 (0)  DEFAULT (getutcdate()) NOT NULL,
     PRIMARY KEY CLUSTERED ([Id] ASC),
     CONSTRAINT [FK_Merchant_Tenant] FOREIGN KEY ([TenantId]) REFERENCES [Platform].[Tenant] ([Id]),
-    CONSTRAINT [FK_Merchant_Zone] FOREIGN KEY ([ZoneId]) REFERENCES [Network].[Zone] ([Id]),
     CONSTRAINT [FK_Merchant_User] FOREIGN KEY ([UpdatedId]) REFERENCES [Identity].[User] ([Id]),
-    CONSTRAINT [chk_Merchant_Webhook] CHECK ([WebhookUrl] IS NULL OR [WebhookSecret] IS NOT NULL),
-    CONSTRAINT [chk_Merchant_ShopWindow] CHECK ([ShopUrl] IS NOT NULL OR [ShopAbout] IS NULL)
+    CONSTRAINT [chk_Merchant_Status] CHECK ([Status] BETWEEN 1 AND 3),
+    CONSTRAINT [chk_Merchant_Payout] CHECK (([PayoutMethod] IS NULL AND [PayoutAccount] IS NULL) OR ([PayoutMethod] BETWEEN 1 AND 3 AND [PayoutAccount] IS NOT NULL)),
+    CONSTRAINT [chk_Merchant_Webhook] CHECK ([WebhookUrl] IS NULL OR [WebhookSecret] IS NOT NULL)
 );
 
 
@@ -41,5 +41,5 @@ CREATE UNIQUE NONCLUSTERED INDEX [UX_Merchant_Tenant_Name]
 
 
 GO
-CREATE NONCLUSTERED INDEX [IX_Merchant_ZoneId]
-    ON [Merchants].[Merchant]([ZoneId] ASC);
+CREATE NONCLUSTERED INDEX [IX_Merchant_Tenant_Status]
+    ON [Merchants].[Merchant]([TenantId] ASC, [Status] ASC);

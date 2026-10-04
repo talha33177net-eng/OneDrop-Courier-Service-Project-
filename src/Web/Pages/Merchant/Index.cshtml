@@ -1,0 +1,90 @@
+@page
+@using Domain.Merchants
+@model Web.Pages.Merchant.IndexModel
+@{
+    ViewData["Title"] = "Dashboard";
+    var d = Model.Data;
+    var s = d.Stages;
+}
+
+<div class="page-head">
+    <div>
+        <h1>Hello, @d.Merchant</h1>
+        <p>Here is how your parcels are doing today.</p>
+    </div>
+    <div class="page-actions">
+        <a class="btn btn-outline" asp-page="/Merchant/Pickups">@Icons.Get("truck") Request pickup</a>
+        <a class="btn btn-primary" asp-page="/Merchant/NewParcel">@Icons.Get("plus") Book a parcel</a>
+    </div>
+</div>
+
+@if (d.Status == MerchantStatus.Pending)
+{
+    <div class="alert alert-warning">@Icons.Get("clock")<div><strong>Your account is waiting for approval.</strong> We check new merchants within a working day. You can look around now, and book parcels once it is approved.</div></div>
+}
+else if (d.Status == MerchantStatus.Suspended)
+{
+    <div class="alert alert-error">@Icons.Get("alert")<div><strong>Your account is suspended.</strong> You cannot book new parcels. Call the hotline to sort it out.</div></div>
+}
+@if (!d.HasPayoutAccount)
+{
+    <div class="alert alert-info">@Icons.Get("wallet")<div>Add a bKash, Nagad or bank account in <a asp-page="/Merchant/Settings">Settings</a> so we can pay you the cash we collect.</div></div>
+}
+
+<div class="stats">
+    <a class="stat" asp-page="/Merchant/Parcels" asp-route-tab="Pending">
+        <div class="stat-icon amber">@Icons.Get("clock")</div>
+        <div><div class="stat-label">Waiting for pickup</div><div class="stat-value">@s.Pending</div></div>
+    </a>
+    <a class="stat" asp-page="/Merchant/Parcels" asp-route-tab="InTransit">
+        <div class="stat-icon blue">@Icons.Get("truck")</div>
+        <div><div class="stat-label">In transit</div><div class="stat-value">@s.InTransit</div></div>
+    </a>
+    <a class="stat" asp-page="/Merchant/Parcels" asp-route-tab="OutForDelivery">
+        <div class="stat-icon violet">@Icons.Get("bike")</div>
+        <div><div class="stat-label">Out for delivery</div><div class="stat-value">@s.OutForDelivery</div></div>
+    </a>
+    <a class="stat" asp-page="/Merchant/Parcels" asp-route-tab="Delivered">
+        <div class="stat-icon green">@Icons.Get("check-circle")</div>
+        <div><div class="stat-label">Delivered</div><div class="stat-value">@s.Delivered</div></div>
+    </a>
+    <a class="stat" asp-page="/Merchant/Parcels" asp-route-tab="Returns">
+        <div class="stat-icon red">@Icons.Get("return")</div>
+        <div><div class="stat-label">Returns</div><div class="stat-value">@s.Returns</div></div>
+    </a>
+</div>
+
+<div class="grid grid-main">
+    <div class="card">
+        <div class="card-head">
+            <div><h2>Last 7 days</h2><p>Parcels booked, delivered and returned each day</p></div>
+        </div>
+        <div class="card-body">
+            <partial name="_WeekChart" model="d.Week" />
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-head"><h2>@Icons.Get("wallet") Your money</h2></div>
+        <div class="card-body">
+            <div class="stat-label">Waiting for your next payout</div>
+            <div class="stat-value @(d.Unpaid < 0 ? "negative" : "")">@Money.Taka(d.Unpaid)</div>
+            <div class="money-list mt">
+                <div><span class="muted">Collected in the last 30 days</span><span>@Money.Taka(d.CollectedLast30Days)</span></div>
+                <div><span class="muted">Paid to you this month</span><span>@Money.Taka(d.PaidThisMonth)</span></div>
+                <div>
+                    <span class="muted">Delivery success</span>
+                    <span>@(d.Stages.SuccessRate is { } rate ? $"{rate}%" : "—")</span>
+                </div>
+            </div>
+            <a class="btn btn-outline btn-block mt" asp-page="/Merchant/Payments">See payments</a>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-lg">
+    <div class="card-head">
+        <div><h2>Latest parcels</h2><p>@s.Total parcels in all, @s.Active on their way</p></div>
+        <a class="btn btn-ghost btn-sm" asp-page="/Merchant/Parcels">View all @Icons.Get("arrow-right")</a>
+    </div>
+    @await Html.PartialAsync("_ParcelTable", (d.Recent, "/Merchant/Parcel/", false, false))
+</div>

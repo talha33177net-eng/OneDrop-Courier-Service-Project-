@@ -1,0 +1,62 @@
+@page
+@using Domain.Merchants
+@model Web.Pages.Admin.MerchantsModel
+@{
+    ViewData["Title"] = "Merchants";
+}
+
+<div class="page-head">
+    <div>
+        <h1>Merchants</h1>
+        <p>The shops that send parcels with you.</p>
+    </div>
+    <div class="page-actions">
+        <a class="btn btn-primary" asp-page="/Admin/NewMerchant">@Icons.Get("plus") Add merchant</a>
+    </div>
+</div>
+
+<partial name="_Alerts" />
+
+<div class="card">
+    <form class="filters" method="get">
+        <div class="segmented" style="align-self:center">
+            <a class="@(Model.Status is null ? "active" : "")" asp-route-search="@Model.Search">All</a>
+            <a class="@(Model.Status == MerchantStatus.Pending ? "active" : "")" asp-route-status="Pending" asp-route-search="@Model.Search">Awaiting approval</a>
+            <a class="@(Model.Status == MerchantStatus.Active ? "active" : "")" asp-route-status="Active" asp-route-search="@Model.Search">Active</a>
+            <a class="@(Model.Status == MerchantStatus.Suspended ? "active" : "")" asp-route-status="Suspended" asp-route-search="@Model.Search">Suspended</a>
+        </div>
+        <input type="hidden" name="status" value="@Model.Status" />
+        <div class="field grow">
+            <label for="search" class="sr-only">Search</label>
+            <input type="search" id="search" name="search" value="@Model.Search" placeholder="Business, owner or phone" />
+        </div>
+        <button class="btn btn-outline" type="submit">@Icons.Get("search") Search</button>
+    </form>
+    @if (Model.Rows.Count == 0)
+    {
+        <div class="empty">@Icons.Get("store")<h3>No merchants here</h3></div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Merchant</th><th>Phone</th><th>Status</th><th class="num">Parcels</th><th class="num">Delivered</th><th class="num">Returned</th><th class="num">Owed now</th><th>Joined</th></tr></thead>
+                <tbody>
+                    @foreach (var m in Model.Rows)
+                    {
+                        <tr>
+                            <td><a class="cell-main" asp-page="/Admin/Merchant" asp-route-id="@m.Id">@m.Name</a><div class="cell-sub">@m.OwnerName</div></td>
+                            <td>@Money.Phone(m.Phone)</td>
+                            <td>@Statuses.Badge(m.Status)</td>
+                            <td class="num">@m.Parcels</td>
+                            <td class="num">@m.Delivered</td>
+                            <td class="num">@m.Returned</td>
+                            <td class="num @(m.Unpaid < 0 ? "negative" : "")">@Money.Taka(m.Unpaid)</td>
+                            <td class="nowrap">@m.Joined.ToString("d MMM yyyy")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

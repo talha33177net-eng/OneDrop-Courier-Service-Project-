@@ -11,14 +11,16 @@ public class MerchantConfiguration : IEntityTypeConfiguration<Merchant>
     {
         builder.MapTenantOwned(Schemas.Merchants);
         builder.Property(m => m.Name).HasMaxLength(200);
+        builder.Property(m => m.OwnerName).HasMaxLength(200);
         builder.Property(m => m.ContactPhone).HasMaxLength(20);
         builder.Property(m => m.ContactEmail).HasMaxLength(320);
+        builder.Property(m => m.Address).HasMaxLength(500);
+        builder.Property(m => m.PayoutAccount).HasMaxLength(30);
+        builder.Property(m => m.PayoutAccountName).HasMaxLength(200);
         builder.Property(m => m.WebhookUrl).HasMaxLength(Merchant.MaxWebhookUrlLength);
         builder.Property(m => m.WebhookSecret).HasMaxLength(100);
-        builder.Property(m => m.ShopUrl).HasMaxLength(Merchant.MaxShopUrlLength);
-        builder.Property(m => m.ShopAbout).HasMaxLength(Merchant.MaxShopAboutLength);
-        builder.Ignore(m => m.IsListed);
-        builder.HasOne<Zone>().WithMany().HasForeignKey(m => m.ZoneId).OnDelete(DeleteBehavior.Restrict);
+        builder.Ignore(m => m.CanBook);
+        builder.Ignore(m => m.HasPayoutAccount);
         builder.HasIndex(m => new { m.TenantId, m.Name }).IsUnique().HasDatabaseName("UX_Merchant_Tenant_Name");
     }
 }

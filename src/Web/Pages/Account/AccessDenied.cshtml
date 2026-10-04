@@ -3,8 +3,14 @@
     ViewData["Title"] = "Access denied";
 }
 
-<div class="card narrow">
-    <h1>Not for this login</h1>
-    <p class="lead">Your account cannot open that page. Sign in with a different account or go back home.</p>
-    <a class="button secondary" href="/">Home</a>
+<div class="auth-page">
+    <div class="auth-card text-center">
+        <div class="stat-icon red" style="margin:0 auto 14px">@Icons.Get("lock")</div>
+        <h1>Not for this account</h1>
+        <p class="sub">Your account cannot open that page. Sign in with another account, or go back to your panel.</p>
+        <div class="gap" style="justify-content:center">
+            <a class="btn btn-primary" href="/">Go to my panel</a>
+            <a class="btn btn-outline" asp-page="/Account/Login">Sign in as someone else</a>
+        </div>
+    </div>
 </div>

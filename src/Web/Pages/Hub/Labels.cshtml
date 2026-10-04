@@ -1,0 +1,24 @@
+@page
+@model Web.Pages.Hub.LabelsModel
+@{
+    ViewData["Title"] = "Reprint labels";
+}
+
+<div class="page-head no-print">
+    <div>
+        <h1>Reprint labels</h1>
+        <p>Labels for the parcels named in the link.</p>
+    </div>
+    <div class="page-actions">
+        <button class="btn btn-primary" type="button" onclick="window.print()">@Icons.Get("printer") Print</button>
+    </div>
+</div>
+
+@if (Model.Labels.Count == 0)
+{
+    <div class="card"><div class="empty">@Icons.Get("printer")<h3>No labels</h3><p>Open a parcel and press "Reprint label".</p></div></div>
+}
+else
+{
+    @await Html.PartialAsync("_Labels", (Model.Labels, Model.Courier, Model.Hotline))
+}

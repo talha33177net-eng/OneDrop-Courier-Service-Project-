@@ -1,0 +1,72 @@
+@page
+@using Domain.Delivery
+@model Web.Pages.Hub.RunsModel
+@{
+    ViewData["Title"] = "Rider closing";
+}
+
+<div class="page-head">
+    <div>
+        <h1>Rider closing</h1>
+        <p>At the end of the day count each rider's cash and take back the parcels they could not deliver.</p>
+    </div>
+    <div class="page-actions">@await Html.PartialAsync("_HubSwitch", (Model.Hubs, Model.Hub))</div>
+</div>
+
+<partial name="_Alerts" />
+
+<div class="card">
+    @if (Model.Runs.Count == 0)
+    {
+        <div class="empty">@Icons.Get("bike")<h3>No runs today</h3><p>A run opens when parcels are assigned to a rider.</p></div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Rider</th><th>Day</th><th class="num">Parcels</th><th class="num">Delivered</th><th class="num">Back</th><th class="num">Still out</th><th class="num">Cash collected</th><th>Closing</th></tr></thead>
+                <tbody>
+                    @foreach (var run in Model.Runs)
+                    {
+                        <tr>
+                            <td><div class="cell-main">@run.Rider</div><div class="cell-sub">@Money.Phone(run.RiderPhone)</div></td>
+                            <td class="nowrap">@run.Date.ToString("ddd d MMM")</td>
+                            <td class="num">@run.Assigned</td>
+                            <td class="num positive">@run.Delivered</td>
+                            <td class="num">@(run.Held + run.Refused)<div class="cell-sub">@run.Held held, @run.Refused refused</div></td>
+                            <td class="num @(run.WithoutOutcome > 0 ? "strong" : "faint")">@run.WithoutOutcome</td>
+                            <td class="num strong">@Money.Taka(run.CashCollected)</td>
+                            <td>
+                                @if (run.Status == RunStatus.Closed)
+                                {
+                                    @Statuses.Badge(run.Status)
+                                    <div class="cell-sub">
+                                        @Money.Taka(run.CashReceived) received
+                                        @if (run.Short is { } shortBy && shortBy != 0)
+                                        {
+                                            <span class="@(shortBy > 0 ? "negative" : "positive")"> · @(shortBy > 0 ? "short" : "over") @Money.Taka(Math.Abs(shortBy))</span>
+                                        }
+                                    </div>
+                                }
+                                else if (run.WithoutOutcome > 0)
+                                {
+                                    <span class="badge badge-out">Rider still out</span>
+                                }
+                                else
+                                {
+                                    <form method="post" asp-page-handler="Close" asp-route-id="@run.Id" asp-route-hub="@Model.Hub?.Code" class="gap">
+                                        <div class="input-group" style="width:150px">
+                                            <span class="prefix">৳</span>
+                                            <input type="number" name="received" value="@run.CashCollected.ToString("0")" min="0" step="1" style="height:32px" aria-label="Cash received" />
+                                        </div>
+                                        <button class="btn btn-primary btn-sm" type="submit">Close run</button>
+                                    </form>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

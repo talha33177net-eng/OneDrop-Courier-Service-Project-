@@ -1,13 +1,6 @@
-using Domain.Customers;
-using Domain.Merchants;
-using Domain.Pricing;
-
 namespace Application.Abstractions;
 
-/// <summary>
-/// A tenant and its settings, as cached by <see cref="ITenantCatalog"/>. <see cref="ReturnCharge"/> and
-/// <see cref="LateHandoverFee"/> are what a shop pays for an order that comes back and for one left behind.
-/// </summary>
+/// <summary>A tenant and its settings, as cached by <see cref="ITenantCatalog"/>. Its rate card is read from the database.</summary>
 public sealed record TenantInfo(
     long Id,
     string Name,
@@ -15,33 +8,12 @@ public sealed record TenantInfo(
     string TimeZone,
     string CurrencyCode,
     string SmsSenderName,
-    decimal BaseDeliveryFee,
-    decimal ExtraShopFee,
-    decimal FastDeliveryFee,
-    int GroupJoinDays,
-    int WeightAllowanceGrams,
-    decimal ExtraKgFee,
-    int TrustedAfterDeliveries,
-    decimal ReturnCharge,
-    decimal LateHandoverFee,
-    int TrustedAgainAfterDeliveries,
-    int DropOffAfterLateHandovers,
-    int LateHandoverWindowDays)
-{
-    /// <summary>The tenant's prices, for <see cref="DeliveryFeeCalculator"/>.</summary>
-    public FeeSchedule Fees => new(BaseDeliveryFee, ExtraShopFee, FastDeliveryFee, WeightAllowanceGrams, ExtraKgFee);
-
-    /// <summary>When a customer pays the fee in advance, for <see cref="CustomerStanding.StepFor"/>.</summary>
-    public TrustRules Trust => new(TrustedAfterDeliveries, TrustedAgainAfterDeliveries);
-
-    /// <summary>When a shop that is often late brings its parcels to the hub itself.</summary>
-    public DropOffRule DropOff => new(DropOffAfterLateHandovers, LateHandoverWindowDays);
-}
+    string SupportPhone,
+    int MaxDeliveryAttempts);
 
 /// <summary>
-/// The tenant the current request or job runs for. Resolved once per request from the subdomain, the
-/// signed-in user or the merchant's API key; background jobs receive it as a parameter. When no tenant is
-/// set, tenant-owned queries return nothing.
+/// The tenant the current request or job runs for. Resolved once per request from the subdomain or the merchant's API
+/// key; background jobs receive it as a parameter. When no tenant is set, tenant-owned queries return nothing.
 /// </summary>
 public interface ITenantContext
 {

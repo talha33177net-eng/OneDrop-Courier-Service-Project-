@@ -1,0 +1,29 @@
+@using Application.Parcels.Browse
+@model IReadOnlyDictionary<ParcelTab, int>
+@* The tabs above a parcel list; each keeps the search and filters and starts again at the first page *@
+@{
+    var current = Context.Request.Query["tab"].ToString();
+    string Url(ParcelTab tab)
+    {
+        var query = Context.Request.Query
+            .Where(pair => pair.Key is not ("tab" or "page"))
+            .SelectMany(pair => pair.Value.Select(value => $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(value ?? "")}"))
+            .Append($"tab={tab}");
+
+        return Context.Request.Path + "?" + string.Join("&", query);
+    }
+
+    (ParcelTab Tab, string Name)[] tabs =
+    [
+        (ParcelTab.All, "All"), (ParcelTab.Pending, "Pending pickup"), (ParcelTab.InTransit, "In transit"),
+        (ParcelTab.OutForDelivery, "Out for delivery"), (ParcelTab.OnHold, "On hold"), (ParcelTab.Delivered, "Delivered"),
+        (ParcelTab.Returns, "Returns"), (ParcelTab.Cancelled, "Cancelled")
+    ];
+}
+<nav class="tabs" aria-label="Parcel status">
+    @foreach (var (tab, name) in tabs)
+    {
+        var active = current.Equals(tab.ToString(), StringComparison.OrdinalIgnoreCase) || (current.Length == 0 && tab == ParcelTab.All);
+        <a class="tab @(active ? "active" : "")" href="@Url(tab)">@name <span class="tab-count">@Model[tab].ToString("N0")</span></a>
+    }
+</nav>

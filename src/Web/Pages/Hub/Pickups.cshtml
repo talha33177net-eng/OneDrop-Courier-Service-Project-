@@ -1,0 +1,65 @@
+@page
+@using Domain.Delivery
+@model Web.Pages.Hub.PickupsModel
+@{
+    ViewData["Title"] = "Pickup requests";
+}
+
+<div class="page-head">
+    <div>
+        <h1>Pickup requests</h1>
+        <p>Merchants waiting for a rider to collect their parcels. Assign a rider to each.</p>
+    </div>
+    <div class="page-actions">@await Html.PartialAsync("_HubSwitch", (Model.Hubs, Model.Hub))</div>
+</div>
+
+<partial name="_Alerts" />
+
+<div class="card">
+    @if (Model.Requests.Count == 0)
+    {
+        <div class="empty">@Icons.Get("truck")<h3>No pickups to make</h3><p>Merchants' requests for this hub show up here.</p></div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Day</th><th>Merchant</th><th>Pickup point</th><th class="num">Parcels</th><th>Status</th><th>Rider</th></tr></thead>
+                <tbody>
+                    @foreach (var request in Model.Requests)
+                    {
+                        <tr>
+                            <td class="nowrap cell-main">@request.Date.ToString("ddd d MMM")</td>
+                            <td><div class="cell-main">@request.Merchant</div><div class="cell-sub">@Money.Phone(request.MerchantPhone)</div></td>
+                            <td>
+                                <div>@request.Address</div>
+                                <div class="cell-sub">@request.Area · @Money.Phone(request.ContactPhone)@(request.Note is null ? "" : $" · {request.Note}")</div>
+                            </td>
+                            <td class="num">@(request.Picked ?? request.Expected)<div class="cell-sub">@(request.Picked is null ? $"{request.Waiting} booked" : "picked")</div></td>
+                            <td>@Statuses.Badge(request.Status)</td>
+                            <td>
+                                @if (request.Status is PickupStatus.Requested or PickupStatus.Assigned)
+                                {
+                                    <form method="post" asp-page-handler="Assign" asp-route-id="@request.Id" asp-route-hub="@Model.Hub?.Code" class="gap">
+                                        <select name="riderId" style="width:auto;height:32px" required>
+                                            <option value="">Choose a rider</option>
+                                            @foreach (var rider in Model.Riders)
+                                            {
+                                                <option value="@rider.Id" selected="@(rider.Id == request.RiderId)">@rider.Name</option>
+                                            }
+                                        </select>
+                                        <button class="btn btn-outline btn-sm" type="submit">@(request.RiderId is null ? "Assign" : "Change")</button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    @(request.Rider ?? "—")
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

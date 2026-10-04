@@ -27,7 +27,8 @@ public static class DependencyInjection
         services.AddScoped<ITenantContext>(provider => provider.GetRequiredService<TenantContext>());
         services.AddSingleton<ITenantCatalog, TenantCatalog>();
         services.AddScoped<ICurrentUser, CurrentUser>();
-        services.AddScoped<ICustomerLinks, CustomerLinks>();
+        services.AddScoped<ITrackingLinks, TrackingLinks>();
+        services.AddScoped<IUserAccounts, UserAccounts>();
 
         services.AddScoped<TenantSaveInterceptor>();
         services.AddScoped<TenantSessionInterceptor>();
@@ -50,8 +51,6 @@ public static class DependencyInjection
 
         services.AddSingleton<SmsLog>();
         services.AddSingleton<ISmsSender, FakeSmsSender>();
-        services.AddSingleton<FakePaymentLog>();
-        services.AddSingleton<IPaymentGateway, FakePaymentGateway>();
         services.AddSingleton<FakePayoutLog>();
         services.AddSingleton<IPayoutGateway, FakePayoutGateway>();
 

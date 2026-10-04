@@ -3,8 +3,9 @@ using Domain.Common;
 namespace Domain.Network;
 
 /// <summary>
-/// A neighbourhood picked from a list (e.g. "Mirpur 10"). Dhaka addresses are too messy to geocode in the
-/// MVP, so every address names an area and the area decides the zone.
+/// A neighbourhood or thana picked from a list (e.g. "Mirpur 10", "Sylhet Sadar"). Addresses are too varied to
+/// geocode, so every recipient address names an area, and the area decides the zone, the delivering hub and the
+/// charge.
 /// </summary>
 public class Area : TenantEntity, IArchivable
 {

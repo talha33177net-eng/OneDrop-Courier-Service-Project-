@@ -15,8 +15,8 @@ migrates. Follow the existing files as the reference.
 | EF mapping | `src/Infrastructure/Persistence/Configurations/<Module>Configuration.cs` |
 | Ad-hoc analysis SQL | `sql/` at the repository root (never deployed) |
 
-One schema per module: `Platform`, `Identity`, `Network`, `Customers`, `Merchants`, `Orders`, and later
-`Grouping`, `Pricing`, `Delivery`, `Payments`, `Notifications`. Schema names for C# are in `Schemas`
+One schema per module: `Platform`, `Identity`, `Network`, `Merchants`, `Parcels`, `Pricing`, `Delivery`, `Payments`,
+`Notifications`. Schema names for C# are in `Schemas`
 (`Persistence/Configurations/MappingExtensions.cs`).
 
 ## Adding a column or table
@@ -48,7 +48,7 @@ Every file in the SQL project and in DbUp starts with this block (label `TABLE`,
 
 ```sql
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
--- TABLE: Orders.Order
+-- TABLE: Parcels.Parcel
 -- Purpose: What the object is for and any non-obvious behaviour
 --          continuation lines aligned under the text
 -- Author: Courier team

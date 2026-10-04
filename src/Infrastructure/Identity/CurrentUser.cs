@@ -13,8 +13,6 @@ public class CurrentUser(IHttpContextAccessor accessor) : ICurrentUser
 
     public long? MerchantId => Read(AppClaims.MerchantId);
 
-    public long? CustomerId => Read(AppClaims.CustomerId);
-
     private long? Read(string claimType)
     {
         var value = accessor.HttpContext?.User.FindFirstValue(claimType);

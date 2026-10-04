@@ -1,0 +1,13 @@
+@using Application.Hubs
+@model (IReadOnlyList<HubItem> Hubs, HubItem? Current)
+@* Which hub the page is about; changing it reloads the page for that hub *@
+<form method="get" class="hub-switch no-print">
+    @Icons.Get("warehouse")
+    <select name="hub" aria-label="Hub" onchange="this.form.submit()">
+        @foreach (var hub in Model.Hubs)
+        {
+            <option value="@hub.Code" selected="@(hub.Code == Model.Current?.Code)">@hub.Name (@hub.Code)</option>
+        }
+    </select>
+    <noscript><button class="btn btn-outline btn-sm" type="submit">Go</button></noscript>
+</form>

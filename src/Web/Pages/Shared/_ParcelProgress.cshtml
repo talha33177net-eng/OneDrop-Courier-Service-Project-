@@ -1,0 +1,25 @@
+@model ParcelStatus
+@* Where a parcel is in its life, as five steps; a parcel going back to its merchant shows the steps in red *@
+@{
+    var reached = Model switch
+    {
+        ParcelStatus.Pending => 1,
+        ParcelStatus.PickedUp => 2,
+        ParcelStatus.AtHub or ParcelStatus.InTransit => 3,
+        ParcelStatus.OutForDelivery or ParcelStatus.OnHold => 4,
+        ParcelStatus.Delivered or ParcelStatus.PartlyDelivered => 5,
+        ParcelStatus.Returning => 3,
+        ParcelStatus.Returned => 5,
+        _ => 0
+    };
+    var problem = Model is ParcelStatus.Returning or ParcelStatus.Returned or ParcelStatus.Cancelled;
+    string[] steps = Model is ParcelStatus.Returning or ParcelStatus.Returned
+        ? ["Booked", "Picked up", "Returning", "On the way back", "Returned"]
+        : ["Booked", "Picked up", "In transit", "Out for delivery", "Delivered"];
+}
+<div class="progress-steps @(problem ? "problem" : "")">
+    @for (var i = 0; i < steps.Length; i++)
+    {
+        <span class="step @(i < reached ? "done" : "")">@steps[i]</span>
+    }
+</div>

@@ -1,0 +1,104 @@
+@page
+@using Domain.Pricing
+@model Web.Pages.Merchant.PricingModel
+@{
+    ViewData["Title"] = "Rates and calculator";
+}
+
+<div class="page-head">
+    <div>
+        <h1>Rates and calculator</h1>
+        <p>What a parcel costs depends on where it goes and how much it weighs.</p>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-head"><h2>@Icons.Get("tag") Our rates</h2></div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead><tr><th>Service</th><th class="num">First weight</th><th class="num">Charge</th><th class="num">Each extra kg</th><th class="num">COD charge</th><th class="num">Extra for a return</th></tr></thead>
+            <tbody>
+                @foreach (var rate in Model.Rates)
+                {
+                    <tr>
+                        <td class="cell-main">@rate.ServiceArea.DisplayName()</td>
+                        <td class="num">@Money.Kg(rate.IncludedWeightGrams)</td>
+                        <td class="num">@Money.Taka(rate.BaseCharge)</td>
+                        <td class="num">@Money.Taka(rate.ExtraKgCharge)</td>
+                        <td class="num">@rate.CodChargePercent.ToString("0.##")%</td>
+                        <td class="num">@Money.Taka(rate.ReturnCharge)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="card-foot muted">Inside city: picked up and delivered in the same city. Suburb: to a suburb of that city. Outside city: to any other city or district.</div>
+</div>
+
+<div class="card">
+    <div class="card-head"><h2>@Icons.Get("chart") Price calculator</h2></div>
+    <div class="card-body">
+        <form id="calc" class="form-grid-3" onsubmit="return false">
+            @if (Model.Points.Count > 1)
+            {
+                <div class="field">
+                    <label for="pickupPointId">From</label>
+                    <select id="pickupPointId" name="pickupPointId">
+                        @foreach (var point in Model.Points)
+                        {
+                            <option value="@point.Id" selected="@point.IsDefault">@point.Name, @point.Area</option>
+                        }
+                    </select>
+                </div>
+            }
+            <div class="field">
+                <label for="areaId">To</label>
+                @await Html.PartialAsync("_AreaSelect", ("areaId", (long?)null, Model.Areas))
+            </div>
+            <div class="field">
+                <label for="weightKg">Weight (kg)</label>
+                <input type="number" id="weightKg" name="weightKg" value="0.5" min="0.01" max="30" step="0.01" />
+            </div>
+            <div class="field">
+                <label for="codAmount">Cash to collect (৳)</label>
+                <input type="number" id="codAmount" name="codAmount" value="1000" min="0" step="1" />
+            </div>
+        </form>
+        <div class="stats" id="result" hidden>
+            <div class="stat"><div><div class="stat-label">Service</div><div class="stat-value" data-r="service" style="font-size:18px"></div></div></div>
+            <div class="stat"><div><div class="stat-label">Delivery charge</div><div class="stat-value" data-r="delivery"></div></div></div>
+            <div class="stat"><div><div class="stat-label">COD charge</div><div class="stat-value" data-r="cod"></div></div></div>
+            <div class="stat"><div><div class="stat-label">You pay</div><div class="stat-value" data-r="total"></div></div></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const form = document.getElementById("calc");
+            const result = document.getElementById("result");
+            const taka = n => "৳" + Math.round(n).toLocaleString("en-US");
+            const run = async () => {
+                const data = new FormData(form);
+                if (!data.get("areaId")) {
+                    return;
+                }
+
+                data.append("handler", "Quote");
+                const response = await fetch("@Url.Page("/Merchant/NewParcel")?" + new URLSearchParams(data), { credentials: "same-origin" });
+                if (!response.ok) {
+                    return;
+                }
+
+                const q = await response.json();
+                result.querySelector("[data-r=service]").textContent = q.service;
+                result.querySelector("[data-r=delivery]").textContent = taka(q.deliveryCharge);
+                result.querySelector("[data-r=cod]").textContent = taka(q.codCharge);
+                result.querySelector("[data-r=total]").textContent = taka(q.total);
+                result.hidden = false;
+            };
+            form.addEventListener("input", run);
+        })();
+    </script>
+}

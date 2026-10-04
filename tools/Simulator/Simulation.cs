@@ -8,14 +8,14 @@ using Application.Network.ListAreas;
 
 namespace Simulator;
 
-/// <param name="Sent">Orders the API accepted.</param>
-/// <param name="Joined">Of those, orders that joined a delivery already on its way (they cost the extra-shop fee or nothing).</param>
-/// <param name="Refused">Orders the API refused, with its answer.</param>
-/// <param name="Numbers">The accepted orders' numbers.</param>
+/// <param name="Sent">Parcels the API booked.</param>
+/// <param name="Charges">What the booked parcels would cost their shops if all were delivered.</param>
+/// <param name="Refused">Parcels the API refused, with its answer.</param>
+/// <param name="TrackingCodes">The booked parcels' tracking codes.</param>
 public sealed record SimulationResult(
-    string Tenant, int Sent, int Joined, IReadOnlyList<string> Refused, IReadOnlyList<string> Numbers);
+    string Tenant, int Sent, decimal Charges, IReadOnlyList<string> Refused, IReadOnlyList<string> TrackingCodes);
 
-/// <summary>One operator's run: make sure its shops exist, then send the orders through the API, one by one.</summary>
+/// <summary>One courier's run: make sure its shops exist, then book the parcels through the API, one by one.</summary>
 public static class Simulation
 {
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
@@ -42,64 +42,54 @@ public static class Simulation
         var areas = await areasResponse.Content.ReadFromJsonAsync<List<AreaItem>>(Json, cancellationToken)
             ?? throw new InvalidOperationException("The API returned no areas.");
 
-        var generator = new OrderGenerator(shops, areas, random);
-        var customers = generator.Customers(options.Orders);
-        var (sent, joined, refused, numbers) = (0, 0, new List<string>(), new List<string>());
-        for (var i = 0; i < options.Orders; i++)
+        var generator = new ParcelGenerator(shops, areas, random);
+        var (sent, charges, refused, codes) = (0, 0m, new List<string>(), new List<string>());
+        for (var i = 0; i < options.Parcels; i++)
         {
-            var order = generator.Next(customers);
-            var command = order.Command;
+            var parcel = generator.Next();
+            var command = parcel.Command;
 
-            // As a shop's checkout does: the quote first, which also says whether the order joins a delivery
-            var query = string.Join('&', new Dictionary<string, string?>
-            {
-                ["phone"] = command.Customer!.Phone,
-                ["areaId"] = command.Address!.AreaId?.ToString(CultureInfo.InvariantCulture),
-                ["line1"] = command.Address.Line1,
-                ["speed"] = command.Speed.ToString().ToLowerInvariant(),
-                ["doNotHold"] = command.DoNotHold ? "true" : "false",
-                ["weightGrams"] = command.Packages.Sum(p => p.WeightGrams).ToString(CultureInfo.InvariantCulture)
-            }.Select(p => $"{p.Key}={Uri.EscapeDataString(p.Value ?? "")}"));
-            using var quoteRequest = new HttpRequestMessage(HttpMethod.Get, $"api/v1/quote?{query}");
-            quoteRequest.Headers.Add("X-Api-Key", order.Shop.ApiKey);
-            using var quoteResponse = await api.SendAsync(quoteRequest, cancellationToken);
-            var joins = quoteResponse.IsSuccessStatusCode &&
-                (await quoteResponse.Content.ReadFromJsonAsync<JsonElement>(Json, cancellationToken))
-                    .GetProperty("joinsDelivery").GetBoolean();
+            // As a shop's system does: the charge first, then the booking
+            var query = $"areaId={command.AreaId}&weightKg={command.WeightKg.ToString(CultureInfo.InvariantCulture)}" +
+                $"&codAmount={command.CodAmount.ToString(CultureInfo.InvariantCulture)}";
+            using var chargeRequest = new HttpRequestMessage(HttpMethod.Get, $"api/v1/charge?{query}");
+            chargeRequest.Headers.Add("X-Api-Key", parcel.Shop.ApiKey);
+            using var chargeResponse = await api.SendAsync(chargeRequest, cancellationToken);
+            chargeResponse.EnsureSuccessStatusCode();
 
-            using var request = new HttpRequestMessage(HttpMethod.Post, "api/v1/orders")
+            using var request = new HttpRequestMessage(HttpMethod.Post, "api/v1/parcels")
             {
-                Content = JsonContent.Create(order.Command, options: Json)
+                Content = JsonContent.Create(command, options: Json)
             };
-            request.Headers.Add("X-Api-Key", order.Shop.ApiKey);
-            request.Headers.Add("Idempotency-Key", order.Command.IdempotencyKey);
+            request.Headers.Add("X-Api-Key", parcel.Shop.ApiKey);
+            request.Headers.Add("Idempotency-Key", command.IdempotencyKey);
             using var response = await api.SendAsync(request, cancellationToken);
             if (response.StatusCode != HttpStatusCode.Created)
             {
-                refused.Add($"{order.Shop.Kind.Name}: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync(cancellationToken)}");
+                refused.Add($"{parcel.Shop.Kind.Name}: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync(cancellationToken)}");
                 continue;
             }
 
             var created = await response.Content.ReadFromJsonAsync<JsonElement>(Json, cancellationToken);
-            var fee = created.GetProperty("fee").GetDecimal();
-            numbers.Add(created.GetProperty("number").GetString()!);
+            var code = created.GetProperty("trackingCode").GetString()!;
+            var charge = created.GetProperty("totalCharge").GetDecimal();
+            codes.Add(code);
             sent++;
-            joined += joins ? 1 : 0;
-            log($"{tenant.Slug} {created.GetProperty("number").GetString()} {order.Shop.Kind.Name} " +
-                $"for {command.Customer.Name} ({command.Customer.Phone}) {tenant.CurrencyCode} {fee:0}" +
-                (joins ? ", joins a delivery" : ""));
-            if (options.Pace > TimeSpan.Zero && i < options.Orders - 1)
+            charges += charge;
+            log($"{tenant.Slug} {code} {parcel.Shop.Kind.Name} to {created.GetProperty("area").GetString()} " +
+                $"COD {command.CodAmount:0}, charge {tenant.CurrencyCode} {charge:0}");
+            if (options.Pace > TimeSpan.Zero && i < options.Parcels - 1)
             {
                 await Task.Delay(options.Pace, cancellationToken);
             }
         }
 
-        return new SimulationResult(tenant.Slug, sent, joined, refused, numbers);
+        return new SimulationResult(tenant.Slug, sent, charges, refused, codes);
     }
 }
 
-/// <param name="Shops">How many of the made-up shops each operator gets (at most <see cref="SimulatedShops.Kinds"/>).</param>
-/// <param name="Orders">Orders per operator.</param>
-/// <param name="Pace">Wait between orders, so a dashboard can be watched filling up.</param>
-/// <param name="Seed">Repeats a run's customers and orders; none for a new set each time.</param>
-public sealed record SimulationOptions(int Shops, int Orders, TimeSpan Pace, int? Seed);
+/// <param name="Shops">How many of the made-up shops each courier gets (at most <see cref="SimulatedShops.Kinds"/>).</param>
+/// <param name="Parcels">Parcels per courier.</param>
+/// <param name="Pace">Wait between parcels, so a dashboard can be watched filling up.</param>
+/// <param name="Seed">Repeats a run's parcels; none for a new set each time.</param>
+public sealed record SimulationOptions(int Shops, int Parcels, TimeSpan Pace, int? Seed);

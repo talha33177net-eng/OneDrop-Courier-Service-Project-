@@ -1,0 +1,113 @@
+@page
+@using Application.Parcels.BulkImport
+@model Web.Pages.Merchant.BulkUploadModel
+@{
+    ViewData["Title"] = "Bulk upload";
+}
+
+<div class="page-head">
+    <div>
+        <div class="breadcrumb"><a asp-page="/Merchant/Parcels">Parcels</a> <span>/</span> <span>Bulk upload</span></div>
+        <h1>Bulk upload</h1>
+        <p>Book up to @BulkImportHandler.MaxRows parcels at once from a CSV file.</p>
+    </div>
+    <div class="page-actions">
+        <a class="btn btn-outline" asp-page-handler="Template">@Icons.Get("download") Download the template</a>
+    </div>
+</div>
+
+@if (Model.Problem is not null)
+{
+    <div class="alert alert-error">@Icons.Get("alert")<div>@Model.Problem</div></div>
+}
+
+@if (Model.Result is { } result)
+{
+    if (result.Problems.Count > 0)
+    {
+        <div class="card mb">
+            <div class="card-head">
+                <div><h2>@Icons.Get("alert") Fix these rows and upload again</h2><p>Nothing was booked: a file is booked only when every row is good.</p></div>
+            </div>
+            <div class="table-wrap">
+                <table class="table compact">
+                    <thead><tr><th>Line</th><th>Problem</th></tr></thead>
+                    <tbody>
+                        @foreach (var problem in result.Problems)
+                        {
+                            <tr><td class="nowrap">Line @problem.Line</td><td>@problem.Message</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-success">@Icons.Get("check-circle")<div><strong>@result.Booked.Count parcels booked.</strong> Charges come to @Money.Taka(result.Booked.Sum(p => p.TotalCharge)) if all are delivered.</div></div>
+        <div class="card mb">
+            <div class="card-head">
+                <h2>Booked parcels</h2>
+                <a class="btn btn-outline btn-sm" href="@Url.Page("/Merchant/Labels", new { codes = result.Booked.Select(p => p.TrackingCode).ToArray() })">@Icons.Get("printer") Print their labels</a>
+            </div>
+            <div class="table-wrap">
+                <table class="table compact">
+                    <thead><tr><th>Tracking code</th><th>Invoice</th><th>Area</th><th class="num">COD</th><th class="num">Charge</th></tr></thead>
+                    <tbody>
+                        @foreach (var parcel in result.Booked)
+                        {
+                            <tr>
+                                <td><a class="code-link" asp-page="/Merchant/Parcel" asp-route-code="@parcel.TrackingCode">@parcel.TrackingCode</a></td>
+                                <td>@(parcel.MerchantReference ?? "—")</td>
+                                <td>@parcel.Area</td>
+                                <td class="num">@Money.Taka(parcel.CodAmount)</td>
+                                <td class="num">@Money.Taka(parcel.TotalCharge)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+}
+
+<div class="grid grid-main">
+    <div class="card">
+        <div class="card-head"><h2>@Icons.Get("upload") Upload a file</h2></div>
+        <div class="card-body">
+            <form method="post" enctype="multipart/form-data">
+                <div class="field">
+                    <label for="file">CSV file</label>
+                    <input type="file" id="file" name="file" accept=".csv,text/csv" required />
+                    <span class="hint">Save your spreadsheet as "CSV UTF-8". At most 1 MB.</span>
+                </div>
+                <button class="btn btn-primary" type="submit">@Icons.Get("upload") Check and book</button>
+            </form>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-head"><h2>@Icons.Get("info") Columns</h2></div>
+        <div class="card-body">
+            <dl class="kv">
+                <dt><code>invoice</code></dt><dd>Your order number (optional)</dd>
+                <dt><code>recipient_name</code></dt><dd>Required</dd>
+                <dt><code>recipient_phone</code></dt><dd>Required, such as 01712345678</dd>
+                <dt><code>recipient_address</code></dt><dd>Required</dd>
+                <dt><code>area</code></dt><dd>Required, exactly as in the area list</dd>
+                <dt><code>cod_amount</code></dt><dd>Cash to collect, 0 if paid</dd>
+                <dt><code>weight_kg</code></dt><dd>Such as 0.5</dd>
+                <dt><code>item_description</code></dt><dd>Optional</dd>
+                <dt><code>note</code></dt><dd>Optional, for the rider</dd>
+            </dl>
+            <details class="mt">
+                <summary class="link-btn">Show the @Model.Areas.Count area names</summary>
+                <div class="pill-row mt">
+                    @foreach (var area in Model.Areas.OrderBy(a => a.Name))
+                    {
+                        <span class="pill">@area.Name</span>
+                    }
+                </div>
+            </details>
+        </div>
+    </div>
+</div>

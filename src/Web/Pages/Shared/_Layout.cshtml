@@ -1,133 +1,68 @@
-@using System.Security.Claims
-@using Web.Pages.Hub
 @inject ITenantContext TenantContext
-@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Environment
 @{
     var tenant = TenantContext.Tenant;
-    var user = Context.User;
-    var signedIn = user.Identity?.IsAuthenticated == true;
-    var page = ViewContext.RouteData.Values["page"]?.ToString() ?? "";
-    var operations = user.IsInRole(Roles.HubStaff) || user.IsInRole(Roles.TenantAdmin);
-    var role = user.IsInRole(Roles.PlatformAdmin) ? "Platform admin"
-        : user.IsInRole(Roles.TenantAdmin) ? "Operator admin"
-        : user.IsInRole(Roles.HubStaff) ? "Hub staff"
-        : user.IsInRole(Roles.Rider) ? "Rider"
-        : user.IsInRole(Roles.Merchant) ? "Shop"
-        : user.IsInRole(Roles.Customer) ? "Customer"
-        : "";
-    var name = user.FindFirstValue(ClaimTypes.GivenName) ?? user.Identity?.Name;
-    var hub = operations && page.StartsWith("/Hub/") ? RememberHub.Of(Context) : null;
-    string? Active(params string[] pages) => pages.Contains(page) ? "active" : null;
+    var signedIn = Context.User.Identity?.IsAuthenticated == true;
 }
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#26215c" />
+    <meta name="theme-color" content="#0b8f6a" />
     <title>@ViewData["Title"] · @(tenant?.Name ?? "OneDrop")</title>
     <link rel="icon" href="~/icons/icon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+    @* Only the taka sign, which Inter lacks *@
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@500;700&text=%E0%A7%B3&display=swap" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     @await RenderSectionAsync("Head", required: false)
 </head>
 <body>
-    <header class="topbar">
-        <div class="topbar-inner">
-            <a class="brand" href="/"><span class="brand-dot"></span>OneDrop</a>
-            <span class="tenant-badge">@(tenant?.Name ?? "Platform")</span>
-            <nav aria-label="Main">
+    <header class="site-header">
+        <div class="site-header-inner">
+            <a class="site-brand" href="/">
+                <span class="brand-mark">@Icons.Get("package")</span>
+                @(tenant?.Name ?? "OneDrop")
+            </a>
+            @if (tenant is not null)
+            {
+                <nav class="site-nav" aria-label="Main">
+                    <a href="/#services">Services</a>
+                    <a href="/#pricing">Pricing</a>
+                    <a asp-page="/Coverage">Coverage</a>
+                    <a asp-page="/Track">Track a parcel</a>
+                </nav>
+            }
+            <div class="site-actions">
                 @if (signedIn)
                 {
-                    if (user.IsInRole(Roles.Merchant))
-                    {
-                        <a asp-page="/Merchant/Orders" class="@Active("/Merchant/Orders")">My orders</a>
-                        <a asp-page="/Merchant/NewOrder" class="@Active("/Merchant/NewOrder")">New order</a>
-                        <a asp-page="/Merchant/Labels" class="@Active("/Merchant/Labels")">Print labels</a>
-                        <a asp-page="/Merchant/Payouts" class="@Active("/Merchant/Payouts")">Payouts</a>
-                        <a asp-page="/Merchant/Webhook" class="@Active("/Merchant/Webhook")">Order updates</a>
-                        <a asp-page="/Merchant/Window" class="@Active("/Merchant/Window")">Shop window</a>
-                        <a asp-page="/Merchant/ApiKeys" class="@Active("/Merchant/ApiKeys")">API keys</a>
-                    }
-                    if (user.IsInRole(Roles.Customer))
-                    {
-                        <a asp-page="/Customer/Index" class="@Active("/Customer/Index")">My deliveries</a>
-                    }
-                    if (user.IsInRole(Roles.TenantAdmin))
-                    {
-                        <a asp-page="/Admin/Index" class="@Active("/Admin/Index")">Dashboard</a>
-                        <a asp-page="/Admin/Messages" class="@Active("/Admin/Messages")">Failed messages</a>
-                    }
-                    if (operations)
-                    {
-                        <a asp-page="/Hub/Index" asp-route-hub="@hub" class="@(page.StartsWith("/Hub/") ? "active" : null)">Hub today</a>
-                    }
-                    if (user.IsInRole(Roles.Rider))
-                    {
-                        <a asp-page="/Rider/Index" class="@Active("/Rider/Index")">Today's trip</a>
-                    }
-                    if (user.IsInRole(Roles.PlatformAdmin))
-                    {
-                        <a asp-page="/Platform/Tenants" class="@Active("/Platform/Tenants")">Operators</a>
-                        <a href="/jobs">Background jobs</a>
-                    }
-                }
-                <a asp-page="/Guide" class="@Active("/Guide")">How it works</a>
-            </nav>
-            <div class="user">
-                @if (signedIn)
-                {
-                    <span class="user-name">
-                        <strong>@name</strong>
-                        <span class="user-role">@role</span>
-                    </span>
-                    <form method="post" asp-page="/Account/Logout">
-                        <button type="submit">Sign out</button>
-                    </form>
+                    <a class="btn btn-primary" href="/">Go to my panel @Icons.Get("arrow-right")</a>
                 }
                 else
                 {
+                    <a class="btn btn-ghost" asp-page="/Account/Login">Sign in</a>
                     @if (tenant is not null)
                     {
-                        <a class="signin" asp-page="/Account/PhoneLogin">Track my delivery</a>
+                        <a class="btn btn-primary" asp-page="/Account/Register">Become a merchant</a>
                     }
-                    <a class="signin primary" asp-page="/Account/Login">Staff sign in</a>
                 }
             </div>
         </div>
     </header>
-    @if (Environment.IsDevelopment())
-    {
-        <div class="demo-bar no-print">
-            <div class="demo-bar-inner">
-                <strong>Demo mode</strong>
-                <span>No real SMS or money is sent. These pages play the customer's phone:</span>
-                <a asp-page="/Dev/Sms">SMS inbox</a>
-                <a asp-page="/Dev/Payments">bKash / Nagad wallet</a>
-                <a asp-page="/Dev/Webhooks">Shop webhooks</a>
-            </div>
-        </div>
-    }
-    @if (operations && page.StartsWith("/Hub/"))
-    {
-        <nav class="steps-bar no-print" aria-label="The hub's day, in order">
-            <div class="steps-bar-inner">
-                <a asp-page="/Hub/Index" asp-route-hub="@hub" class="steps-home @Active("/Hub/Index")">@(hub is null ? "Hub today" : $"{hub} today")</a>
-                <a asp-page="/Hub/Routes" class="@Active("/Hub/Routes", "/Hub/RouteSheet")"><span class="step-no">1</span>Pick up from shops</a>
-                <span class="steps-arrow" aria-hidden="true">›</span>
-                <a asp-page="/Hub/Scan" asp-route-hub="@hub" class="@Active("/Hub/Scan")"><span class="step-no">2</span>Scan parcels</a>
-                <span class="steps-arrow" aria-hidden="true">›</span>
-                <a asp-page="/Hub/Shelves" asp-route-hub="@hub" class="@Active("/Hub/Shelves")"><span class="step-no">3</span>Shelves</a>
-                <span class="steps-arrow" aria-hidden="true">›</span>
-                <a asp-page="/Hub/Shuttle" asp-route-hub="@hub" class="@Active("/Hub/Shuttle")"><span class="step-no">4</span>Shuttle</a>
-                <span class="steps-arrow" aria-hidden="true">›</span>
-                <a asp-page="/Hub/Trips" asp-route-hub="@hub" class="@Active("/Hub/Trips")"><span class="step-no">5</span>Send riders out</a>
-                <span class="steps-arrow" aria-hidden="true">›</span>
-                <a asp-page="/Hub/Cash" asp-route-hub="@hub" class="@Active("/Hub/Cash")"><span class="step-no">6</span>Riders' cash</a>
-            </div>
-        </nav>
-    }
     <main>
         @RenderBody()
     </main>
+    <footer class="site-footer">
+        <div class="site-footer-inner">
+            <span>© @DateTime.UtcNow.Year @(tenant?.Name ?? "OneDrop"). Doorstep delivery and cash on delivery across Bangladesh.</span>
+            @if (tenant is not null)
+            {
+                <span>Hotline @tenant.SupportPhone · <a asp-page="/Track">Track a parcel</a> · <a asp-page="/Coverage">Coverage</a></span>
+            }
+        </div>
+    </footer>
+    @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

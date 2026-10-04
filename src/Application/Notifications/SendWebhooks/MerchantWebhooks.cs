@@ -2,12 +2,19 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Application.Abstractions;
 using Domain.Merchants;
-using Domain.Orders;
+using Domain.Parcels;
 
 namespace Application.Notifications.SendWebhooks;
 
-/// <summary>What a <see cref="MerchantWebhooks.StatusChanged"/> webhook says about an order; never its delivery.</summary>
-public sealed record OrderStatusData(string Number, string? ExternalReference, OrderStatus Status);
+/// <summary>What a <see cref="MerchantWebhooks.StatusChanged"/> webhook says about a parcel.</summary>
+public sealed record ParcelStatusData(
+    string TrackingCode,
+    string? MerchantReference,
+    ParcelStatus Status,
+    decimal CodAmount,
+    decimal? CollectedAmount,
+    decimal DeliveryCharge,
+    string? Reason);
 
 /// <summary>
 /// What a shop's webhook receives and how it is signed. The body is JSON <c>{ type, timestamp, data }</c>, the
@@ -16,7 +23,7 @@ public sealed record OrderStatusData(string Number, string? ExternalReference, O
 /// </summary>
 public class MerchantWebhooks(IWebhookSender sender, TimeProvider time)
 {
-    public const string StatusChanged = "order.status_changed";
+    public const string StatusChanged = "parcel.status_changed";
     public const string Test = "webhook.test";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)

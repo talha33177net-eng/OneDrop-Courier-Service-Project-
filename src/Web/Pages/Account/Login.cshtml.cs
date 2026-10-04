@@ -10,8 +10,8 @@ using Infrastructure.Identity;
 namespace Web.Pages.Account;
 
 /// <summary>
-/// Staff sign in. Users are filtered to the current host's tenant, so dhaka.* only finds Dhaka logins and the
-/// bare domain only finds platform staff.
+/// Sign in, for merchants, hub staff, riders and admins. Users are filtered to the current host's tenant, so a courier's
+/// site only finds its own logins and the bare domain only finds platform staff.
 /// </summary>
 public class LoginModel(
     SignInManager<AppUser> signInManager,
@@ -19,14 +19,16 @@ public class LoginModel(
     IWebHostEnvironment environment,
     IConfiguration configuration) : PageModel
 {
-    // The order a newcomer tries the demo in: the hub's day first, the platform last
+    // The order a newcomer tries the demo in
     private static readonly string[] RoleOrder =
-        [Roles.HubStaff, Roles.Rider, Roles.Merchant, Roles.TenantAdmin, Roles.PlatformAdmin];
+        [Roles.Merchant, Roles.TenantAdmin, Roles.HubStaff, Roles.Rider, Roles.PlatformAdmin];
 
     [BindProperty]
     public InputModel Input { get; set; } = new();
 
     public string Where => tenantContext.Tenant?.Name ?? "the OneDrop platform";
+
+    public bool OnCourierSite => tenantContext.HasTenant;
 
     /// <summary>Development only: the seeded logins of this host, each signed in with one press.</summary>
     public IReadOnlyList<DemoLogin> DemoLogins { get; private set; } = [];
@@ -78,9 +80,9 @@ public class LoginModel(
             return;
         }
 
-        // The user query filter keeps this to the host's own operator (platform staff on the bare domain)
+        // The user query filter keeps this to the host's own courier (platform staff on the bare domain)
         var users = await signInManager.UserManager.Users
-            .Where(user => user.Email!.EndsWith(".onedrop.test"))
+            .Where(user => user.Email!.EndsWith(".test"))
             .OrderBy(user => user.Email)
             .ToListAsync();
         var logins = new List<DemoLogin>();
@@ -104,19 +106,19 @@ public class LoginModel(
         {
             Roles.HubStaff => "Hub staff",
             Roles.Rider => "Rider",
-            Roles.Merchant => "Shop",
-            Roles.TenantAdmin => "Operator admin",
+            Roles.Merchant => "Merchant",
+            Roles.TenantAdmin => "Admin",
             _ => "Platform admin"
         };
     }
 
     public class InputModel
     {
-        [Required]
-        [EmailAddress]
+        [Required(ErrorMessage = "Enter your email.")]
+        [EmailAddress(ErrorMessage = "Enter a valid email address.")]
         public string Email { get; set; } = "";
 
-        [Required]
+        [Required(ErrorMessage = "Enter your password.")]
         [DataType(DataType.Password)]
         public string Password { get; set; } = "";
 

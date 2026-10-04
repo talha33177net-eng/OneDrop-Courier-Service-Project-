@@ -1,364 +1,279 @@
 using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
+using Application.Common;
 using Domain.Common;
-using Domain.Customers;
 using Domain.Delivery;
-using Domain.Grouping;
-using Domain.Orders;
+using Domain.Parcels;
 using Domain.Payments;
-using Domain.Pricing;
 
 namespace Application.Delivery.RiderDay;
 
-/// <summary>
-/// One shop's order at a stop. <see cref="Ready"/> while the trip is planned: every parcel is on the shelf. Once the
-/// trip has left, only the orders the rider took are listed, with what became of them at the door.
-/// </summary>
-public sealed record RiderStopOrder(string Number, string Shop, OrderStatus Status, IReadOnlyList<string> Labels, bool Ready);
+/// <summary>A parcel waiting at a pickup point, for the rider to tick off.</summary>
+public sealed record PickupParcel(string TrackingCode, string RecipientName, string Area, decimal CodAmount);
 
-/// <summary>
-/// A stop on the rider's trip: one door, where the customer takes every delivery the trip has for them in that area
-/// and pays one fee (<see cref="Fee"/>, on what is handed over, with the shops' cash on delivery). <see cref="Key"/>
-/// names the stop in the rider's forms. <see cref="Outcome"/> is null until the rider has been there; then
-/// <see cref="Fee"/> and <see cref="Cod"/> are what was collected and <see cref="PaidBy"/> how it was paid.
-/// </summary>
-public sealed record RiderStop(
-    int Number,
-    string Key,
-    IReadOnlyList<string> Deliveries,
-    StopOutcome? Outcome,
-    IReadOnlyList<string> Shelves,
-    string Recipient,
-    string Phone,
+public sealed record RiderPickup(
+    long Id,
+    string Merchant,
+    string PickupPoint,
     string Address,
-    string? Landmark,
     string Area,
-    IReadOnlyList<RiderStopOrder> Orders,
-    decimal Fee,
-    decimal Cod,
-    PaymentMethod? PaidBy = null)
-{
-    public decimal ToCollect => Fee + Cod;
+    string ContactPhone,
+    DateOnly Date,
+    int Expected,
+    string? Note,
+    IReadOnlyList<PickupParcel> Parcels);
 
-    public int Parcels => Orders.Sum(order => order.Labels.Count);
-}
+/// <summary>A parcel the rider has to deliver, with everything needed at the door.</summary>
+public sealed record RiderDelivery(
+    string TrackingCode,
+    string Merchant,
+    string MerchantPhone,
+    string RecipientName,
+    string RecipientPhone,
+    string RecipientAddress,
+    string Area,
+    decimal CodAmount,
+    int WeightGrams,
+    string? ItemDescription,
+    string? Note,
+    int Attempts,
+    int MaxAttempts);
 
-/// <summary>
-/// The rider's day: their trip for today (none yet while <see cref="Status"/> is null) and its stops, neighbours
-/// together, against the bike's limit. <see cref="Cash"/> is the cash collected so far, which the rider hands in at
-/// the hub (the rest was paid by bKash or Nagad); <see cref="CashHandedIn"/> is what hub staff received from them, null
-/// until then.
-/// </summary>
+public sealed record RiderDone(string TrackingCode, string RecipientName, string Area, AttemptOutcome Outcome, decimal Collected, string? Reason);
+
+/// <summary>The rider's day on their phone: pickups to make, parcels to deliver, what is done and the cash in hand.</summary>
 public sealed record RiderToday(
     string Rider,
     string Hub,
-    DateOnly Day,
-    TripStatus? Status,
-    TripLoad Limit,
-    IReadOnlyList<RiderStop> Stops,
-    decimal Cash = 0,
-    decimal? CashHandedIn = null)
-{
-    /// <summary>What the stops still to do will collect.</summary>
-    public decimal ToCollect => Stops.Where(stop => stop.Outcome is null).Sum(stop => stop.ToCollect);
-
-    /// <summary>What the rider has collected so far, in cash and by wallet.</summary>
-    public decimal Collected => Stops.Where(stop => stop.Outcome is not null).Sum(stop => stop.ToCollect);
-}
+    DateOnly Date,
+    IReadOnlyList<RiderPickup> Pickups,
+    IReadOnlyList<RiderDelivery> Deliveries,
+    IReadOnlyList<RiderDone> Done,
+    decimal CashInHand);
 
 /// <summary>
-/// What starting the trip did: deliveries taken out, deliveries left at the hub with nothing ready, and orders not
-/// ready of a delivery that went out, which follow in a later delivery.
+/// What the signed-in rider does: collect at pickup points and record what happened at each door: delivered (with the
+/// cash collected), partly delivered, held for another day, or refused. A delivery writes the merchant's ledger lines in
+/// the same save. A rider only ever sees and changes their own work.
 /// </summary>
-public sealed record StartedTrip(int Deliveries, int Orders, int LeftBehind, int OrdersFollowing);
-
-/// <summary>
-/// The signed-in rider's screen. Starting the trip hands over every order whose parcels are all on the shelf
-/// (<see cref="Order.HandToRider"/>): its delivery goes out and frees its shelf. An order not ready moves to a later
-/// delivery (<see cref="Order.FollowUpIn"/>): the customer's open one to that address, or a follow-up delivered the
-/// next day at the extra-shop fee. A delivery with nothing ready comes off the trip and waits for the next one.
-/// </summary>
-public class RiderDayHandler(IAppDbContext db, ITenantContext tenantContext, TimeProvider time)
+public class RiderDayHandler(IAppDbContext db, ITenantContext tenantContext, ICurrentUser currentUser, TimeProvider time)
 {
-    public static Error NoTrip => Error.NotFound("trip.none", "You have no trip today.");
+    public static readonly Error NotYours = Error.NotFound("rider.parcel", "That parcel is not with you.");
 
-    /// <summary>Null when the user is not one of the operator's riders.</summary>
-    public async Task<RiderToday?> TodayAsync(long userId, CancellationToken cancellationToken = default)
+    public async Task<RiderToday?> TodayAsync(CancellationToken cancellationToken = default)
     {
-        var (tenant, timeZone) = TenantAndTimeZone();
-        var today = timeZone.LocalDay(time.GetUtcNow().UtcDateTime);
-        var (rider, trip) = await db.TodaysTripAsync(userId, today, cancellationToken);
+        var tenant = tenantContext.Require();
+        var rider = await RiderAsync(cancellationToken);
         if (rider is null)
         {
             return null;
         }
 
-        var hub = await db.Hubs.AsNoTracking().SingleAsync(h => h.Id == rider.HubId, cancellationToken);
-        if (trip is null)
-        {
-            return new RiderToday(rider.Name, hub.Name, today, null, rider.Limit, []);
-        }
+        var today = tenant.Today(time.GetUtcNow().UtcDateTime);
+        var hub = await db.Hubs.Where(h => h.Id == rider.HubId).Select(h => h.Name).SingleAsync(cancellationToken);
 
-        var visits = await db.VisitsAsync(trip.Id, cancellationToken);
-        var merchantIds = visits
-            .SelectMany(visit => visit.Deliveries)
-            .SelectMany(delivery => delivery.Orders)
-            .Select(order => order.MerchantId)
-            .Distinct()
-            .ToList();
-        var shops = await db.Merchants
-            .Where(merchant => merchantIds.Contains(merchant.Id))
-            .ToDictionaryAsync(merchant => merchant.Id, merchant => merchant.Name, cancellationToken);
-        var fees = new DeliveryFeeCalculator(tenant.Fees);
-        var paid = await db.Payments
+        var parcels = db.Parcels.AsQueryable();
+        var pickups = await (
+            from request in db.PickupRequests
+            join merchant in db.Merchants on request.MerchantId equals merchant.Id
+            join point in db.PickupPoints on request.PickupPointId equals point.Id
+            join area in db.Areas on point.AreaId equals area.Id
+            where request.RiderId == rider.Id && request.Status == PickupStatus.Assigned
+            orderby request.PickupDate, request.Id
+            select new { request, Merchant = merchant.Name, Point = point.Name, point.Address, Area = area.Name, point.ContactPhone })
             .AsNoTracking()
-            .Where(p => p.TripId == trip.Id && p.Status == PaymentStatus.Paid)
-            .ToDictionaryAsync(p => p.Id, cancellationToken);
+            .ToListAsync(cancellationToken);
+        var pointIds = pickups.Select(p => p.request.PickupPointId).ToList();
+        var waiting = await (
+            from parcel in parcels
+            join area in db.Areas on parcel.AreaId equals area.Id
+            where pointIds.Contains(parcel.PickupPointId) && parcel.Status == ParcelStatus.Pending
+            orderby parcel.Id
+            select new { parcel.PickupPointId, Row = new PickupParcel(parcel.TrackingCode, parcel.RecipientName, area.Name, parcel.CodAmount) })
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
 
-        // Fees paid in advance (3.6b) come off what is still to collect at the door
-        var deliveryIds = visits.SelectMany(visit => visit.Deliveries).Select(delivery => delivery.Group.Id).ToList();
-        var advances = await db.Payments
+        var deliveries = await (
+            from attempt in db.DeliveryAttempts
+            join parcel in parcels on attempt.ParcelId equals parcel.Id
+            join merchant in db.Merchants on parcel.MerchantId equals merchant.Id
+            join area in db.Areas on parcel.AreaId equals area.Id
+            where attempt.RiderId == rider.Id && attempt.Outcome == null
+            orderby area.Name, parcel.Id
+            select new RiderDelivery(
+                parcel.TrackingCode,
+                merchant.Name,
+                merchant.ContactPhone,
+                parcel.RecipientName,
+                parcel.RecipientPhone,
+                parcel.RecipientAddress,
+                area.Name,
+                parcel.CodAmount,
+                parcel.WeightGrams,
+                parcel.ItemDescription,
+                parcel.Note,
+                parcel.Attempts,
+                tenant.MaxDeliveryAttempts))
             .AsNoTracking()
-            .Where(p => deliveryIds.Contains(p.DeliveryGroupId) &&
-                p.Purpose == PaymentPurpose.Advance &&
-                p.Status == PaymentStatus.Paid)
-            .GroupBy(p => p.DeliveryGroupId)
-            .Select(delivery => new { Id = delivery.Key, Paid = delivery.Sum(p => p.Fee) })
-            .ToDictionaryAsync(delivery => delivery.Id, delivery => delivery.Paid, cancellationToken);
+            .ToListAsync(cancellationToken);
+
+        var openRuns = db.DeliveryRuns.Where(r => r.RiderId == rider.Id && (r.Status == RunStatus.Open || r.RunDate == today));
+        var done = await (
+            from attempt in db.DeliveryAttempts
+            join run in openRuns on attempt.RunId equals run.Id
+            join parcel in parcels on attempt.ParcelId equals parcel.Id
+            join area in db.Areas on parcel.AreaId equals area.Id
+            where attempt.Outcome != null
+            orderby attempt.CompletedOn descending
+            select new RiderDone(parcel.TrackingCode, parcel.RecipientName, area.Name, attempt.Outcome!.Value, attempt.CollectedAmount, attempt.Reason))
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        var cash = await (
+            from attempt in db.DeliveryAttempts
+            join run in db.DeliveryRuns on attempt.RunId equals run.Id
+            where run.RiderId == rider.Id && run.Status == RunStatus.Open
+            select (decimal?)attempt.CollectedAmount)
+            .SumAsync(cancellationToken) ?? 0;
 
         return new RiderToday(
             rider.Name,
-            hub.Name,
+            hub,
             today,
-            trip.Status,
-            rider.Limit,
-            [.. visits.Select((visit, index) => Describe(visit, index + 1))],
-            paid.Values.Where(p => p.Method == PaymentMethod.Cash).Sum(p => p.Amount),
-            trip.CashReceived);
-
-        RiderStop Describe(Visit visit, int number)
-        {
-            var carried = visit.Deliveries
-                .Select(delivery => (delivery.Group.Kind, Orders: delivery.Carried(trip.Status).ToList()))
-                .ToList();
-
-            // Still to do: what the door will cost for what is carried; once done, what was collected
-            var due = carried
-                .Select(delivery => (delivery.Kind, Orders: delivery.Orders.Where(order => Order.IsForDelivery(order.Status)).ToList()))
-                .ToList();
-            var fee = visit.Outcome is null
-                ? fees.VisitFees(
-                    [
-                        .. due.Select(delivery => new FeeDelivery(
-                            delivery.Kind,
-                            [.. delivery.Orders.Select(FeeLine.Of)]))
-                    ])
-                    .Select((share, index) =>
-                        Math.Max(0, share - advances.GetValueOrDefault(visit.Deliveries[index].Group.Id)))
-                    .Sum()
-                : visit.Deliveries.Sum(delivery => delivery.Stop.FeeCollected ?? 0);
-            var cod = visit.Outcome is null
-                ? due.Sum(delivery => delivery.Orders.Sum(order => order.CodAmount))
-                : visit.Deliveries.Sum(delivery => delivery.Stop.CodCollected ?? 0);
-            var orders = carried
-                .SelectMany(delivery => delivery.Orders)
-                .Select(order => (Order: order, Shop: shops[order.MerchantId]))
-                .OrderBy(row => row.Shop)
-                .ThenBy(row => row.Order.Number)
-                .ToList();
-
-            return new RiderStop(
-                number,
-                visit.Key,
-                [.. visit.Deliveries.Select(delivery => delivery.Group.Number)],
-                visit.Outcome,
-                [
-                    .. visit.Deliveries
-                        .Where(delivery => delivery.Group.Shelf is not null)
-                        .Select(delivery => DeliveryGroup.ShelfCode(hub.Code, delivery.Group.Shelf!.Value))
-                ],
-                string.Join(" / ", orders.Select(row => row.Order.RecipientName).Distinct().DefaultIfEmpty(visit.Place.Name ?? "")),
-                PhoneNumber.Parse(visit.Place.Phone).Value.Local,
-                visit.Place.Address,
-                visit.Place.Landmark,
-                visit.Place.Area,
-                [
-                    .. orders.Select(row => new RiderStopOrder(
-                        row.Order.Number,
-                        row.Shop,
-                        row.Order.Status,
-                        [.. row.Order.Packages.OrderBy(p => p.Sequence).Select(p => new PackageLabel(row.Order.Number, p.Sequence).ToString())],
-                        row.Order.IsReadyAt(hub.Id)))
-                ],
-                fee,
-                cod,
-                visit.Deliveries[0].Stop.PaymentId is { } paymentId ? paid[paymentId].Method : null);
-        }
+            [
+                .. pickups.Select(p => new RiderPickup(
+                    p.request.Id,
+                    p.Merchant,
+                    p.Point,
+                    p.Address,
+                    p.Area,
+                    p.ContactPhone,
+                    p.request.PickupDate,
+                    p.request.ExpectedParcels,
+                    p.request.Note,
+                    [.. waiting.Where(w => w.PickupPointId == p.request.PickupPointId).Select(w => w.Row)]))
+            ],
+            deliveries,
+            done,
+            cash);
     }
 
-    /// <summary>
-    /// The rider leaves with every order ready on the shelves; orders not ready of a delivery that goes out follow in
-    /// a later delivery. Refused when nothing on the trip is ready.
-    /// </summary>
-    public async Task<Result<StartedTrip>> StartAsync(long userId, CancellationToken cancellationToken = default)
+    public Task<Result> DeliverAsync(string trackingCode, decimal collected, string? reason, CancellationToken cancellationToken = default)
     {
-        var (tenant, timeZone) = TenantAndTimeZone();
-        var now = time.GetUtcNow().UtcDateTime;
-        var (rider, trip) = await db.TodaysTripAsync(userId, timeZone.LocalDay(now), cancellationToken);
-        if (rider is null || trip is null)
+        return RecordAsync(
+            trackingCode,
+            (parcel, now) => parcel.Deliver(collected, reason, now),
+            parcel => parcel.Status == ParcelStatus.Delivered ? AttemptOutcome.Delivered : AttemptOutcome.PartlyDelivered,
+            parcel => parcel.CollectedAmount ?? 0,
+            reason,
+            cancellationToken);
+    }
+
+    public Task<Result> HoldAsync(string trackingCode, string? reason, DateOnly? until, CancellationToken cancellationToken = default)
+    {
+        var max = tenantContext.Require().MaxDeliveryAttempts;
+
+        return RecordAsync(trackingCode, (parcel, _) => parcel.Hold(reason, until, max), _ => AttemptOutcome.Hold, _ => 0, reason, cancellationToken);
+    }
+
+    public Task<Result> RefuseAsync(string trackingCode, string? reason, CancellationToken cancellationToken = default)
+    {
+        return RecordAsync(trackingCode, (parcel, _) => parcel.Refuse(reason), _ => AttemptOutcome.Refused, _ => 0, reason, cancellationToken);
+    }
+
+    /// <summary>The rider collected <paramref name="trackingCodes"/> at the pickup point; the rest stay with the merchant.</summary>
+    public async Task<Result<int>> CompletePickupAsync(
+        long requestId,
+        IReadOnlyCollection<string> trackingCodes,
+        CancellationToken cancellationToken = default)
+    {
+        var rider = await RiderAsync(cancellationToken);
+        var request = rider is null
+            ? null
+            : await db.PickupRequests.SingleOrDefaultAsync(r => r.Id == requestId && r.RiderId == rider.Id, cancellationToken);
+        if (request is null)
         {
-            return NoTrip;
+            return Pickups.PickupsHandler.NotFound;
         }
 
-        if (trip.Status != TripStatus.Planned)
-        {
-            return Trip.NotPlanned;
-        }
-
-        var stops = await db.TripStops.Where(stop => stop.TripId == trip.Id).ToListAsync(cancellationToken);
-        var groupIds = stops.Select(stop => stop.DeliveryGroupId).ToList();
-        var groups = await db.DeliveryGroups.Where(g => groupIds.Contains(g.Id)).ToListAsync(cancellationToken);
-        var orders = await db.Orders
-            .Include(order => order.Packages)
-            .Where(order => groupIds.Contains(order.DeliveryGroupId))
+        var codes = trackingCodes.Select(c => c.Trim().ToUpperInvariant()).ToList();
+        var picked = await db.Parcels
+            .Where(p => p.PickupPointId == request.PickupPointId && p.MerchantId == request.MerchantId &&
+                p.Status == ParcelStatus.Pending && codes.Contains(p.TrackingCode))
             .ToListAsync(cancellationToken);
-
-        var taken = 0;
-        var leftBehind = 0;
-        var ordersFollowing = 0;
-        var following = new List<(DeliveryGroup Later, int? Shelf)>();
-        foreach (var stop in stops)
+        foreach (var parcel in picked)
         {
-            var group = groups.Single(g => g.Id == stop.DeliveryGroupId);
-            var inGroup = orders.Where(order => order.DeliveryGroupId == group.Id).ToList();
-            var handed = inGroup.Count(order => order.HandToRider(trip.HubId));
-            if (handed == 0)
-            {
-                db.TripStops.Remove(stop);
-                leftBehind++;
-
-                continue;
-            }
-
-            var shelf = group.Shelf;
-            group.MoveTo(DeliveryGroupStatus.Dispatched, now);
-            taken += handed;
-
-            var notReady = inGroup
-                .Where(order => Order.IsForDelivery(order.Status) && order.Status != OrderStatus.OutForDelivery)
-                .ToList();
-            if (notReady.Count == 0)
-            {
-                continue;
-            }
-
-            var later = await LaterDeliveryAsync(group, now, (tenant, timeZone), cancellationToken);
-            foreach (var order in notReady)
-            {
-                // The shop pays for the second trip when it had not handed the order over (Order.FollowUpIn decides)
-                if (order.FollowUpIn(later, now) && tenant.LateHandoverFee > 0)
-                {
-                    db.LedgerEntries.Add(LedgerEntry.LateHandoverFee(order, tenant.LateHandoverFee, trip.DeliveryDate));
-                }
-            }
-
-            ordersFollowing += notReady.Count;
-
-            // Parcels already here stay where they are: the follow-up takes over the shelf the delivery frees
-            if (notReady.Any(order => order.Packages.Any(p => p.HubId == trip.HubId)))
-            {
-                following.Add((later, shelf));
-            }
+            parcel.PickUp();
         }
 
-        if (taken == 0)
+        var completed = request.Complete(picked.Count, time.GetUtcNow().UtcDateTime);
+        if (completed.IsFailure)
         {
-            return Error.Conflict("trip.nothingReady", "No parcel on this trip is on its shelf yet.");
+            return completed.Error!;
         }
 
-        trip.Start(now);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return picked.Count;
+    }
+
+    private async Task<Result> RecordAsync(
+        string trackingCode,
+        Func<Parcel, DateTime, Result> change,
+        Func<Parcel, AttemptOutcome> outcome,
+        Func<Parcel, decimal> collected,
+        string? reason,
+        CancellationToken cancellationToken)
+    {
+        var tenant = tenantContext.Require();
+        var rider = await RiderAsync(cancellationToken);
+        if (rider is null)
+        {
+            return NotYours;
+        }
+
+        var code = trackingCode.Trim().ToUpperInvariant();
+        var found = await (
+            from attempt in db.DeliveryAttempts
+            join parcel in db.Parcels on attempt.ParcelId equals parcel.Id
+            where attempt.RiderId == rider.Id && attempt.Outcome == null && parcel.TrackingCode == code
+            select new { Attempt = attempt, Parcel = parcel })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (found is null)
+        {
+            return NotYours;
+        }
+
+        var now = time.GetUtcNow().UtcDateTime;
+        var changed = change(found.Parcel, now);
+        if (changed.IsFailure)
+        {
+            return changed;
+        }
+
+        found.Attempt.Complete(outcome(found.Parcel), collected(found.Parcel), reason, now);
+        if (found.Parcel.IsFinal)
+        {
+            db.LedgerEntries.AddRange(LedgerEntry.For(found.Parcel, tenant.Today(now)));
+        }
+
         try
         {
             await db.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
-            return Error.Conflict("trip.changed", "The trip changed while you were starting it. Open it again.");
+            return Error.Conflict("rider.changed", "This parcel changed at the hub just now. Reload your list.");
         }
 
-        await ShelveFollowUpsAsync(trip.HubId, following, cancellationToken);
-
-        return new StartedTrip(
-            stops.Count - leftBehind,
-            taken,
-            leftBehind,
-            ordersFollowing);
+        return Result.Success();
     }
 
-    /// <summary>
-    /// Where orders not ready go when their delivery leaves: the customer's open delivery to the same address if it
-    /// can still take them, else a new follow-up delivered the next day.
-    /// </summary>
-    private async Task<DeliveryGroup> LaterDeliveryAsync(
-        DeliveryGroup group,
-        DateTime now,
-        (TenantInfo Tenant, TimeZoneInfo TimeZone) settings,
-        CancellationToken cancellationToken)
+    private Task<Rider?> RiderAsync(CancellationToken cancellationToken)
     {
-        var open = await db.DeliveryGroups.FirstOrDefaultAsync(
-            g => g.CustomerId == group.CustomerId && g.AddressId == group.AddressId && g.Status == DeliveryGroupStatus.Open,
-            cancellationToken);
-        if (open is not null && open.CanJoin(now))
-        {
-            return open;
-        }
+        var userId = currentUser.UserId;
 
-        var followUp = DeliveryGroup.FollowUp(new NewDeliveryGroup(
-            group.CustomerId,
-            group.AddressId,
-            group.HubId,
-            now,
-            settings.TimeZone,
-            settings.Tenant.GroupJoinDays));
-        db.DeliveryGroups.Add(followUp);
-
-        return followUp;
-    }
-
-    /// <summary>
-    /// Puts each follow-up whose parcels are already at the hub on the shelf its delivery freed, or the lowest free
-    /// one if a scan took that meanwhile. A shelf lost to a scan at the same moment is left to the next scan-in.
-    /// </summary>
-    private async Task ShelveFollowUpsAsync(
-        long hubId,
-        IReadOnlyList<(DeliveryGroup Later, int? Shelf)> following,
-        CancellationToken cancellationToken)
-    {
-        foreach (var (later, freed) in following.Where(f => f.Later.NeedsShelf))
-        {
-            var taken = (await db.DeliveryGroups
-                .Where(g => g.HubId == hubId && g.Shelf != null)
-                .Select(g => g.Shelf!.Value)
-                .ToListAsync(cancellationToken)).ToHashSet();
-            var shelf = freed is { } kept && !taken.Contains(kept)
-                ? kept
-                : Enumerable.Range(1, taken.Count + 1).First(n => !taken.Contains(n));
-            later.PutOnShelf(shelf);
-            try
-            {
-                await db.SaveChangesAsync(cancellationToken);
-            }
-            catch (DbUpdateException)
-            {
-                await db.Entry(later).ReloadAsync(cancellationToken);
-            }
-        }
-    }
-
-    private (TenantInfo Tenant, TimeZoneInfo TimeZone) TenantAndTimeZone()
-    {
-        var tenant = tenantContext.Tenant ?? throw new InvalidOperationException("Riders need a tenant.");
-
-        return (tenant, TimeZoneInfo.FindSystemTimeZoneById(tenant.TimeZone));
+        return userId is null
+            ? Task.FromResult<Rider?>(null)
+            : db.Riders.SingleOrDefaultAsync(r => r.UserId == userId && !r.Archived, cancellationToken);
     }
 }

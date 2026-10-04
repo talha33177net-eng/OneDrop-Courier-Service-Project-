@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net;
+using Microsoft.Data.SqlClient;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -14,16 +15,18 @@ namespace Integration.Tests;
 
 /// <summary>
 /// The real web app against the test database: INTEGRATION_TEST_DB when set (CI, another developer's database),
-/// otherwise ConnectionStrings:Database in testsettings.Local.json (git-ignored; OneDrop-Test on ras-x2).
-/// Development settings are used, so the demo seeder creates the two tenants' merchants and API keys on first
-/// start (the launch tenants come from dbup).
+/// otherwise ConnectionStrings:Database in testsettings.Local.json (git-ignored; OneDrop-Test on the shared server).
+/// Development settings are used, so the demo seeder creates both couriers' logins, merchants and API keys on first
+/// start (the launch courier comes from dbup, the rival courier from <see cref="InitializeAsync"/>).
 /// </summary>
 public sealed class WebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    public const string DhakaFashion = "od_dhkfashion01_DevOnlyKeyDoNotUseInProduction01";
-    public const string DhakaGadget = "od_dhkgadget001_DevOnlyKeyDoNotUseInProduction02";
-    public const string DhakaBeauty = "od_dhkbeauty001_DevOnlyKeyDoNotUseInProduction03";
-    public const string ChattogramFashion = "od_ctgfashion01_DevOnlyKeyDoNotUseInProduction04";
+    public const string Fashion = "od_odfashion001_DevOnlyKeyDoNotUseInProduction01";
+    public const string Gadget = "od_odgadget0001_DevOnlyKeyDoNotUseInProduction02";
+    public const string Beauty = "od_odbeauty0001_DevOnlyKeyDoNotUseInProduction03";
+    public const string Rival = "od_rivalshop001_DevOnlyKeyDoNotUseInProduction09";
+
+    public const string Password = "OneDrop#2026";
 
     /// <summary>Every webhook the app posts, in place of real HTTP: a test's shop gets an address of its own.</summary>
     public RecordingWebhooks Webhooks { get; } = new();
@@ -49,18 +52,46 @@ public sealed class WebAppFactory : WebApplicationFactory<Program>, IAsyncLifeti
     }
 
     /// <summary>
-    /// Starts the host once, before tests run in parallel. WebApplicationFactory starts it lazily without a lock,
-    /// so parallel first calls each started a host and their demo seeders raced on an empty database.
+    /// Makes sure the second courier exists, then starts the host once, before tests run in parallel. The launch data has
+    /// one courier; the isolation tests need another, which lives in the test database only. WebApplicationFactory starts
+    /// its host lazily without a lock, so parallel first calls each started a host and their demo seeders raced on an
+    /// empty database.
     /// </summary>
-    public ValueTask InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        if (!string.IsNullOrWhiteSpace(ConnectionString))
+        if (string.IsNullOrWhiteSpace(ConnectionString))
         {
-            _ = Services;
+            return;
         }
 
-        return ValueTask.CompletedTask;
+        await using (var connection = new SqlConnection(ConnectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = new SqlCommand(RivalCourier, connection);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        _ = Services;
     }
+
+    /// <summary>The rival courier: one hub, zone and area, and a rate card of its own (other prices than the launch one).</summary>
+    private const string RivalCourier = """
+        IF NOT EXISTS (SELECT 1 FROM Platform.Tenant WHERE Slug = N'rival')
+        BEGIN
+            DECLARE @Rival BIGINT;
+            INSERT INTO Platform.Tenant ([Name], Slug, TimeZone, CurrencyCode, SmsSenderName, SupportPhone, MaxDeliveryAttempts)
+            VALUES (N'Rival Courier', N'rival', N'Asia/Dhaka', N'BDT', N'Rival', N'09610-999999', 2);
+            SET @Rival = SCOPE_IDENTITY();
+            INSERT INTO Network.Hub (TenantId, Code, [Name], [Address], Phone)
+            VALUES (@Rival, N'RVL', N'Rival hub', N'Main Road, Rivalton', N'01799000000');
+            INSERT INTO Network.Zone (TenantId, Code, [Name], HubId, City, IsSuburb)
+            SELECT @Rival, N'RVL', N'Rivalton', Id, N'Rivalton', 0 FROM Network.Hub WHERE TenantId = @Rival;
+            INSERT INTO Network.Area (TenantId, ZoneId, [Name])
+            SELECT @Rival, Id, N'Rival Town' FROM Network.Zone WHERE TenantId = @Rival;
+            INSERT INTO Pricing.DeliveryRate (TenantId, ServiceArea, IncludedWeightGrams, BaseCharge, ExtraKgCharge, CodChargePercent, ReturnCharge)
+            VALUES (@Rival, 1, 500, 70, 20, 0, 20), (@Rival, 2, 500, 110, 20, 0, 40), (@Rival, 3, 500, 140, 25, 0, 70);
+        END
+        """;
 
     public HttpClient ClientFor(string apiKey)
     {
@@ -78,7 +109,8 @@ public sealed class WebAppFactory : WebApplicationFactory<Program>, IAsyncLifeti
             ["Seed:DemoData"] = "true",
             // No job server: jobs are run by the tests themselves, with a fake clock
             ["Jobs:Server"] = "false",
-            ["Seed:Password"] = "OneDrop#2026"
+            ["Seed:DemoActivity"] = "false",
+            ["Seed:Password"] = Password
         };
 
         builder.UseEnvironment("Development");

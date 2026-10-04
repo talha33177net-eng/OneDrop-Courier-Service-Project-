@@ -4,7 +4,7 @@ public class TenancyOptions
 {
     /// <summary>
     /// The host tenants are subdomains of: the production domain, "localhost" in development
-    /// (browsers resolve dhaka.localhost to this machine). The bare root domain is the platform portal.
+    /// (browsers resolve onedrop.localhost to this machine). The bare root domain is the platform portal.
     /// </summary>
     public string RootDomain { get; set; } = "localhost";
 

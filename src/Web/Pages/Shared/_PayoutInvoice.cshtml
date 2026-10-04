@@ -1,0 +1,33 @@
+@using Application.Payments.MerchantPayments
+@model (PayoutDetails Details, string ParcelLink)
+@* One payout as an invoice: who was paid, how, and the parcels it covers *@
+@{
+    var p = Model.Details.Payout;
+}
+<div class="grid grid-main">
+    <div class="card">
+        <div class="card-head"><h2>Parcels in this payout</h2><span class="muted">@p.Parcels parcels</span></div>
+        @await Html.PartialAsync("_StatementLines", (Model.Details.Lines, Model.ParcelLink))
+    </div>
+    <div class="card">
+        <div class="card-head"><h2>@Icons.Get("file") Invoice @p.Number</h2>@Statuses.Badge(p.Status)</div>
+        <div class="card-body">
+            <dl class="kv">
+                <dt>Merchant</dt><dd>@p.Merchant</dd>
+                <dt>Covers</dt><dd>Parcels finished up to @p.UpToDate.ToString("d MMMM yyyy")</dd>
+                <dt>Paid to</dt><dd>@p.Method.DisplayName() @p.Account</dd>
+                <dt>Made</dt><dd>@p.Created.ToString("d MMM yyyy, h:mm tt")</dd>
+                @if (p.PaidOn is { } paid)
+                {
+                    <dt>Sent</dt><dd>@paid.ToString("d MMM yyyy, h:mm tt")</dd>
+                }
+            </dl>
+            <div class="money-list mt">
+                <div><span class="muted">Cash collected</span><span>@Money.Taka(p.CodTotal)</span></div>
+                <div><span class="muted">Charges</span><span class="negative">@Money.Taka(-p.ChargesTotal)</span></div>
+                <div class="total"><span>Paid</span><span>@Money.Taka(p.Amount)</span></div>
+            </div>
+            <button class="btn btn-outline btn-block mt no-print" type="button" onclick="window.print()">@Icons.Get("printer") Print invoice</button>
+        </div>
+    </div>
+</div>

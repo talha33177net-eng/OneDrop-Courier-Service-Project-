@@ -1,0 +1,53 @@
+@page
+@model Web.Pages.Merchant.FraudCheckModel
+@{
+    ViewData["Title"] = "Fraud check";
+}
+
+<div class="page-head">
+    <div>
+        <h1>Fraud check</h1>
+        <p>See how often a customer has taken their parcels before you send one with cash on delivery.</p>
+    </div>
+</div>
+
+<div class="grid grid-main">
+    <div class="card">
+        <div class="card-body">
+            <form method="get" class="scan-box">
+                <input type="tel" name="phone" value="@Model.Phone" placeholder="01712345678" aria-label="Customer's phone number" required style="text-transform:none" />
+                <button class="btn btn-primary" type="submit">@Icons.Get("shield") Check</button>
+            </form>
+
+            @if (Model.Problem is not null)
+            {
+                <div class="alert alert-error mt">@Icons.Get("alert")<div>@Model.Problem</div></div>
+            }
+
+            @if (Model.Result is { } r)
+            {
+                var tone = r.SuccessRate switch { null => "info", >= 80 => "success", >= 50 => "info", _ => "error" };
+                <div class="scan-answer @tone">
+                    @Icons.Get(r.SuccessRate is >= 80 ? "check-circle" : r.SuccessRate is null ? "info" : "alert")
+                    <div>
+                        <h2>@r.Verdict</h2>
+                        <p>@r.Phone: @(r.SuccessRate is { } rate ? $"{rate}% of finished parcels delivered" : "no parcels with us yet")</p>
+                    </div>
+                </div>
+                <div class="stats mt">
+                    <div class="stat"><div><div class="stat-label">Parcels in all</div><div class="stat-value">@r.Total</div></div></div>
+                    <div class="stat"><div><div class="stat-label">Delivered</div><div class="stat-value positive">@r.Delivered</div></div></div>
+                    <div class="stat"><div><div class="stat-label">Returned</div><div class="stat-value negative">@r.Returned</div></div></div>
+                    <div class="stat"><div><div class="stat-label">On the way</div><div class="stat-value">@r.InProgress</div></div></div>
+                </div>
+            }
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-head"><h2>@Icons.Get("info") How it works</h2></div>
+        <div class="card-body">
+            <p>We count every parcel sent to this number with us, from all our merchants. You see only the counts, never who sent them or what they were.</p>
+            <p class="mb-0">For a high-risk number, ask the customer to pay the delivery charge in advance, or confirm the order by phone before booking.</p>
+        </div>
+    </div>
+</div>

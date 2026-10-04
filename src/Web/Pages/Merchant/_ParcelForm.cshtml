@@ -1,0 +1,150 @@
+@using Application.Network.ListAreas
+@using Application.Merchants.Admin
+@model (ParcelForm Form, IReadOnlyList<AreaItem> Areas, IReadOnlyList<PickupPointView> Points, bool Editing)
+@* The booking form's fields; the summary on the right is filled in by the page's script from the quote *@
+@{
+    var f = Model.Form;
+}
+<div class="grid grid-side">
+    <div class="stack">
+        <div class="card">
+            <div class="card-head"><h2>@Icons.Get("user") Recipient</h2></div>
+            <div class="card-body">
+                <div class="form-grid">
+                    <div class="field">
+                        <label for="Input_RecipientName">Name</label>
+                        <input type="text" id="Input_RecipientName" name="Input.RecipientName" value="@f.RecipientName" maxlength="200" required />
+                        @Html.ValidationMessage("Input.RecipientName", null, new { @class = "field-error" })
+                    </div>
+                    <div class="field">
+                        <label for="Input_RecipientPhone">Mobile number</label>
+                        <input type="tel" id="Input_RecipientPhone" name="Input.RecipientPhone" value="@f.RecipientPhone" placeholder="01712345678" required />
+                        @Html.ValidationMessage("Input.RecipientPhone", null, new { @class = "field-error" })
+                    </div>
+                    <div class="field field-full">
+                        <label for="Input_RecipientAddress">Full address</label>
+                        <input type="text" id="Input_RecipientAddress" name="Input.RecipientAddress" value="@f.RecipientAddress" maxlength="500" placeholder="House, road, block, landmark" required />
+                        @Html.ValidationMessage("Input.RecipientAddress", null, new { @class = "field-error" })
+                    </div>
+                    <div class="field">
+                        <label for="Input_AreaId">Delivery area</label>
+                        @await Html.PartialAsync("_AreaSelect", ("Input.AreaId", f.AreaId, Model.Areas))
+                        @Html.ValidationMessage("Input.Area", null, new { @class = "field-error" })
+                    </div>
+                    @if (!Model.Editing && Model.Points.Count > 1)
+                    {
+                        <div class="field">
+                            <label for="Input_PickupPointId">Pickup from</label>
+                            <select id="Input_PickupPointId" name="Input.PickupPointId">
+                                @foreach (var point in Model.Points)
+                                {
+                                    <option value="@point.Id" selected="@(point.Id == f.PickupPointId || (f.PickupPointId is null && point.IsDefault))">@point.Name, @point.Area</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><h2>@Icons.Get("package") Parcel</h2></div>
+            <div class="card-body">
+                <div class="form-grid">
+                    <div class="field">
+                        <label for="Input_CodAmount">Cash to collect</label>
+                        <div class="input-group">
+                            <span class="prefix">৳</span>
+                            <input type="number" id="Input_CodAmount" name="Input.CodAmount" value="@f.CodAmount.ToString("0.##")" min="0" step="1" required />
+                        </div>
+                        <span class="hint">Enter 0 if the customer has already paid.</span>
+                        @Html.ValidationMessage("Input.CodAmount", null, new { @class = "field-error" })
+                    </div>
+                    <div class="field">
+                        <label for="Input_WeightKg">Weight</label>
+                        <div class="input-group">
+                            <input type="number" id="Input_WeightKg" name="Input.WeightKg" value="@f.WeightKg.ToString("0.##")" min="0.01" max="30" step="0.01" required />
+                            <span class="suffix">kg</span>
+                        </div>
+                        @Html.ValidationMessage("Input.WeightKg", null, new { @class = "field-error" })
+                    </div>
+                    <div class="field">
+                        <label for="Input_ItemDescription">What is inside</label>
+                        <input type="text" id="Input_ItemDescription" name="Input.ItemDescription" value="@f.ItemDescription" maxlength="200" placeholder="e.g. 2 T-shirts" />
+                    </div>
+                    <div class="field">
+                        <label for="Input_MerchantReference">Your invoice or order number</label>
+                        <input type="text" id="Input_MerchantReference" name="Input.MerchantReference" value="@f.MerchantReference" maxlength="100" disabled="@Model.Editing" />
+                    </div>
+                    <div class="field field-full">
+                        <label for="Input_Note">Note for the rider</label>
+                        <textarea id="Input_Note" name="Input.Note" maxlength="500" rows="2" placeholder="e.g. Call before coming, deliver after 5 PM">@f.Note</textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <div class="card" style="position:sticky;top:76px">
+            <div class="card-head"><h2>@Icons.Get("tag") Charges</h2></div>
+            <div class="card-body">
+                <div class="money-list">
+                    <div><span class="muted">Service</span><span data-q="area">Choose an area</span></div>
+                    <div><span class="muted">Delivery charge</span><span data-q="delivery">—</span></div>
+                    <div><span class="muted">COD charge</span><span data-q="cod">—</span></div>
+                    <div class="total"><span>You pay</span><span data-q="total">—</span></div>
+                </div>
+                <p class="hint mt" data-q="hub"></p>
+                <p class="hint">Charges are taken from the cash we collect. A returned parcel costs the delivery charge plus <span data-q="return">the return charge</span>.</p>
+                <div class="form-actions" style="flex-direction:column;align-items:stretch">
+                    <button class="btn btn-primary btn-lg btn-block" type="submit" name="next" value="">@(Model.Editing ? "Save changes" : "Book parcel")</button>
+                    @if (!Model.Editing)
+                    {
+                        <button class="btn btn-outline btn-block" type="submit" name="next" value="another">Book and add another</button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(() => {
+    const form = document.currentScript.closest("form");
+    const out = name => form.querySelector(`[data-q="${name}"]`);
+    const taka = n => "৳" + Math.round(n).toLocaleString("en-US");
+    let timer;
+    const quote = async () => {
+        const area = form.querySelector("[name='Input.AreaId']").value;
+        if (!area) {
+            return;
+        }
+
+        const params = new URLSearchParams({
+            handler: "Quote",
+            areaId: area,
+            weightKg: form.querySelector("[name='Input.WeightKg']").value || "0.5",
+            codAmount: form.querySelector("[name='Input.CodAmount']").value || "0",
+            pickupPointId: form.querySelector("[name='Input.PickupPointId']")?.value ?? ""
+        });
+        const response = await fetch("@Url.Page("/Merchant/NewParcel")?" + params, { credentials: "same-origin" });
+        if (!response.ok) {
+            return;
+        }
+
+        const q = await response.json();
+        out("area").textContent = q.service;
+        out("delivery").textContent = taka(q.deliveryCharge);
+        out("cod").textContent = taka(q.codCharge);
+        out("total").textContent = taka(q.total);
+        out("return").textContent = taka(q.returnCharge);
+        out("hub").textContent = "Delivered from " + q.deliveryHub + ".";
+    };
+    form.addEventListener("input", () => {
+        clearTimeout(timer);
+        timer = setTimeout(quote, 250);
+    });
+    quote();
+})();
+</script>

@@ -1,0 +1,95 @@
+@page
+@model Web.Pages.Hub.AssignModel
+@{
+    ViewData["Title"] = "Assign to riders";
+    var areas = Model.Waiting.Select(p => p.Area).Distinct().Order().ToList();
+    var shown = Model.Area is null ? Model.Waiting : Model.Waiting.Where(p => p.Area == Model.Area).ToList();
+}
+
+<div class="page-head">
+    <div>
+        <h1>Assign to riders</h1>
+        <p>Tick the parcels a rider takes out now and choose the rider. They go on the rider's run sheet for today.</p>
+    </div>
+    <div class="page-actions">@await Html.PartialAsync("_HubSwitch", (Model.Hubs, Model.Hub))</div>
+</div>
+
+<partial name="_Alerts" />
+
+<div class="grid grid-side">
+    <div class="card">
+        <div class="card-head">
+            <div><h2>Waiting for a rider</h2><p>@Model.Waiting.Count parcels at this hub for its areas</p></div>
+        </div>
+        @if (areas.Count > 1)
+        {
+            <div class="filters">
+                <div class="pill-row">
+                    <a class="pill" style="@(Model.Area is null ? "background:var(--brand-soft);color:var(--brand-strong)" : "")" asp-route-hub="@Model.Hub?.Code">All areas</a>
+                    @foreach (var area in areas)
+                    {
+                        <a class="pill" style="@(Model.Area == area ? "background:var(--brand-soft);color:var(--brand-strong)" : "")" asp-route-hub="@Model.Hub?.Code" asp-route-area="@area">@area (@Model.Waiting.Count(p => p.Area == area))</a>
+                    }
+                </div>
+            </div>
+        }
+        <form method="post" asp-route-hub="@Model.Hub?.Code" id="assign">
+            @if (shown.Count == 0)
+            {
+                <div class="empty">@Icons.Get("check-circle")<h3>Nothing waiting</h3><p>Scan parcels in first; those delivered from this hub show up here.</p></div>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="table compact">
+                        <thead><tr><th class="check-col"><input type="checkbox" data-select-all aria-label="Select all" /></th><th>Parcel</th><th>Recipient</th><th>Area</th><th>Status</th><th class="num">COD</th></tr></thead>
+                        <tbody>
+                            @foreach (var p in shown)
+                            {
+                                <tr>
+                                    <td class="check-col"><input type="checkbox" name="codes" value="@p.TrackingCode" aria-label="Select @p.TrackingCode" /></td>
+                                    <td><a class="code-link" asp-page="/Hub/Parcel" asp-route-code="@p.TrackingCode">@p.TrackingCode</a><div class="cell-sub">@p.Merchant</div></td>
+                                    <td>@p.RecipientName</td>
+                                    <td>@p.Area</td>
+                                    <td>@Statuses.Badge(p.Status)@if (p.Attempts > 0) { <div class="cell-sub">@p.Attempts attempt@(p.Attempts == 1 ? "" : "s")@(p.Reason is null ? "" : $": {p.Reason}")</div> }</td>
+                                    <td class="num">@Money.Taka(p.CodAmount)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </form>
+    </div>
+
+    <div class="card" style="align-self:start;position:sticky;top:76px">
+        <div class="card-head"><h2>@Icons.Get("bike") Hand to</h2></div>
+        <div class="card-body">
+            @if (Model.Riders.Count == 0)
+            {
+                <p class="muted">This hub has no active riders.</p>
+            }
+            else
+            {
+                <div class="stack">
+                    @foreach (var rider in Model.Riders)
+                    {
+                        <label class="radio-card" style="display:flex;justify-content:space-between;align-items:center">
+                            <span><input type="radio" name="riderId" value="@rider.Id" form="assign" required /> @rider.Name<small>@Money.Phone(rider.Phone)</small></span>
+                            <span class="muted" style="font-weight:500;font-size:12px;text-align:right">@rider.WithThem with them<br />@rider.DeliveredToday delivered today</span>
+                        </label>
+                    }
+                </div>
+                <button class="btn btn-primary btn-block mt" type="submit" form="assign">@Icons.Get("send") Hand over the ticked parcels</button>
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.querySelector("[data-select-all]")?.addEventListener("change", event => {
+            document.querySelectorAll("#assign input[name=codes]").forEach(box => box.checked = event.target.checked);
+        });
+    </script>
+}

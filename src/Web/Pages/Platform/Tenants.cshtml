@@ -1,40 +1,33 @@
 @page
 @model Web.Pages.Platform.TenantsModel
 @{
-    ViewData["Title"] = "Tenants";
+    ViewData["Title"] = "Couriers";
 }
 
-<h1>Tenants</h1>
-<p class="lead">Every operator on the platform. Each one only ever sees its own data.</p>
+<div class="page-head">
+    <div>
+        <h1>Couriers</h1>
+        <p>Every courier company on the platform. Each one only ever sees its own data.</p>
+    </div>
+</div>
 
-<div class="card table-wrap">
-    <table>
-        <thead>
-            <tr>
-                <th>Tenant</th>
-                <th>Subdomain</th>
-                <th>Price</th>
-                <th class="num">Hubs</th>
-                <th class="num">Zones</th>
-                <th class="num">Merchants</th>
-                <th class="num">Customers</th>
-                <th class="num">Orders</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var tenant in Model.Tenants)
-            {
-                <tr>
-                    <td><strong>@tenant.Name</strong></td>
-                    <td><code>@tenant.Slug</code></td>
-                    <td>৳@tenant.BaseFee.ToString("0") + ৳@tenant.ExtraFee.ToString("0")</td>
-                    <td class="num">@tenant.Hubs</td>
-                    <td class="num">@tenant.Zones</td>
-                    <td class="num">@tenant.Merchants</td>
-                    <td class="num">@tenant.Customers</td>
-                    <td class="num">@tenant.Orders</td>
-                </tr>
-            }
-        </tbody>
-    </table>
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead><tr><th>Courier</th><th>Subdomain</th><th class="num">Hubs</th><th class="num">Merchants</th><th class="num">Riders</th><th class="num">Parcels</th></tr></thead>
+            <tbody>
+                @foreach (var tenant in Model.Tenants)
+                {
+                    <tr>
+                        <td class="cell-main">@tenant.Name</td>
+                        <td><code>@tenant.Slug</code></td>
+                        <td class="num">@tenant.Hubs</td>
+                        <td class="num">@tenant.Merchants</td>
+                        <td class="num">@tenant.Riders</td>
+                        <td class="num">@tenant.Parcels</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
 </div>

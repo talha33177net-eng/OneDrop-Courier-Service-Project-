@@ -4,7 +4,7 @@
 --          in clear and is globally unique because it is how a key is found before the tenant is known; the
 --          secret is only stored as a SHA-256 hash. A request with a key selects the key's tenant and merchant.
 -- Author: Courier team
--- Date: 2026-09-27
+-- Date: 2026-10-04
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Merchants].[MerchantApiKey] (
     [Id]         BIGINT         IDENTITY (1, 1) NOT NULL,

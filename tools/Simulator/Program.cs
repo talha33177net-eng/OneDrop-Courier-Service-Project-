@@ -8,7 +8,7 @@ using Infrastructure;
 namespace Simulator;
 
 /// <summary>
-/// dotnet run --project tools/Simulator -- [--tenant dhaka] [--shops 6] [--orders 40] [--pace 2] [--seed 7]
+/// dotnet run --project tools/Simulator -- [--tenant onedrop] [--shops 6] [--parcels 40] [--pace 2] [--seed 7]
 ///                                         [--url http://localhost:5080]
 /// The app must be running at --url. The database is the app's: ConnectionStrings:Database from
 /// src/Web/appsettings.Local.json, or the ConnectionStrings__Database environment variable.
@@ -32,7 +32,7 @@ public static class Program
 
         var options = new SimulationOptions(
             Math.Clamp(int.Parse(arguments["shops"] ?? "6", CultureInfo.InvariantCulture), 1, SimulatedShops.Kinds.Length),
-            Math.Max(1, int.Parse(arguments["orders"] ?? "40", CultureInfo.InvariantCulture)),
+            Math.Max(1, int.Parse(arguments["parcels"] ?? "40", CultureInfo.InvariantCulture)),
             TimeSpan.FromSeconds(double.Parse(arguments["pace"] ?? "0", CultureInfo.InvariantCulture)),
             arguments["seed"] is { } seed ? int.Parse(seed, CultureInfo.InvariantCulture) : null);
 
@@ -44,7 +44,7 @@ public static class Program
             .BuildServiceProvider();
         var catalog = services.GetRequiredService<ITenantCatalog>();
         IReadOnlyList<TenantInfo> tenants = arguments["tenant"] is { } slug
-            ? [await catalog.FindBySlugAsync(slug) ?? throw new InvalidOperationException($"There is no operator '{slug}'.")]
+            ? [await catalog.FindBySlugAsync(slug) ?? throw new InvalidOperationException($"There is no courier '{slug}'.")]
             : await catalog.ListAsync();
 
         using var api = new HttpClient { BaseAddress = new Uri((arguments["url"] ?? "http://localhost:5080").TrimEnd('/') + "/") };
@@ -55,13 +55,13 @@ public static class Program
             stop.Cancel();
         };
 
-        Console.WriteLine($"Simulating {options.Orders} orders from {options.Shops} shops for " +
+        Console.WriteLine($"Simulating {options.Parcels} parcels from {options.Shops} shops for " +
             $"{string.Join(", ", tenants.Select(t => t.Name))} through {api.BaseAddress}");
         var failed = false;
         foreach (var tenant in tenants)
         {
             var result = await Simulation.RunAsync(services, api, tenant, options, Console.WriteLine, stop.Token);
-            Console.WriteLine($"{tenant.Name}: {result.Sent} orders sent, {result.Joined} joined a delivery already on its way, " +
+            Console.WriteLine($"{tenant.Name}: {result.Sent} parcels booked, {tenant.CurrencyCode} {result.Charges:0} in charges, " +
                 $"{result.Refused.Count} refused");
             result.Refused.ToList().ForEach(Console.Error.WriteLine);
             failed |= result.Refused.Count > 0;

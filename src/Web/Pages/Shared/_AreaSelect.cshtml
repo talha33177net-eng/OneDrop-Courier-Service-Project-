@@ -1,0 +1,15 @@
+@using Application.Network.ListAreas
+@model (string Name, long? Selected, IReadOnlyList<AreaItem> Areas)
+@* The area list as a drop-down, grouped by city, the courier's own cities first *@
+<select name="@Model.Name" id="@Model.Name.Replace('.', '_')" required>
+    <option value="">Choose the area</option>
+    @foreach (var city in Model.Areas.GroupBy(a => a.City).OrderByDescending(g => g.Count()).ThenBy(g => g.Key))
+    {
+        <optgroup label="@city.Key">
+            @foreach (var area in city.OrderBy(a => a.Suburb).ThenBy(a => a.Name))
+            {
+                <option value="@area.Id" selected="@(area.Id == Model.Selected)">@area.Name@(area.Suburb ? " (suburb)" : "")</option>
+            }
+        </optgroup>
+    }
+</select>

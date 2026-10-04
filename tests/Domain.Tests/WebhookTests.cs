@@ -1,41 +1,22 @@
 using Domain.Merchants;
 using Domain.Notifications;
-using Domain.Orders;
+using Domain.Parcels;
 
 namespace Domain.Tests;
 
-/// <summary>Task 4.2: a shop's webhook address and secret, the signature, and the event every status change raises.</summary>
+/// <summary>A merchant's webhook address and secret, the signature, and the event every parcel status change raises.</summary>
 public class WebhookTests
 {
-    private const long Mirpur = 1;
-
-    private static readonly DateTime Now = new(2026, 9, 30, 9, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime Now = new(2026, 10, 4, 9, 0, 0, DateTimeKind.Utc);
 
     private static Merchant NewMerchant()
     {
-        return new Merchant("Fashion House", zoneId: 1, "01711000001", null);
+        return Build.Merchant();
     }
 
-    private static Order NewOrder()
+    private static ParcelStatus[] Changes(Parcel parcel)
     {
-        var spec = new NewOrder(
-            MerchantId: 7,
-            CustomerId: 1,
-            AddressId: 1,
-            PickupPointId: 1,
-            RecipientName: "Rahim",
-            CodAmount: 0,
-            DeclaredValue: 0,
-            Speed: DeliverySpeed.Combine,
-            DoNotHold: false,
-            Packages: [new NewPackage("Box", 500), new NewPackage("Box", 500)]);
-
-        return Order.Create(spec).Value;
-    }
-
-    private static OrderStatus[] Changes(Order order)
-    {
-        return [.. order.GetDomainEvents().OfType<OrderStatusChanged>().Select(changed => changed.Status)];
+        return [.. parcel.GetDomainEvents().OfType<ParcelStatusChanged>().Select(changed => changed.Status)];
     }
 
     [Fact]
@@ -131,36 +112,37 @@ public class WebhookTests
     }
 
     [Fact]
-    public void Every_status_change_raises_one_event_with_its_status_and_a_new_order_none()
+    public void Every_status_change_raises_one_event_with_its_status_and_a_new_parcel_none()
     {
-        var order = NewOrder();
-        Assert.Empty(Changes(order));
+        var parcel = Build.Parcel(pickupHub: Build.Mirpur, deliveryHub: Build.Gulshan);
+        Assert.Empty(Changes(parcel));
 
-        // A parcel at the hub with no pickup scan passes through PickedUp: two changes, in order
-        order.ReceiveAtHub(1, Mirpur, Now);
-        order.ReceiveAtHub(2, Mirpur, Now);
-        order.ReceiveAtHub(2, Mirpur, Now);
-        order.HandToRider(Mirpur);
-        order.MoveTo(OrderStatus.Delivered);
+        parcel.PickUp();
+        parcel.ReceiveAt(Build.Mirpur);
+        parcel.ReceiveAt(Build.Mirpur);
+        parcel.DispatchTo(Build.Mirpur, Build.Gulshan);
+        parcel.ReceiveAt(Build.Gulshan);
+        parcel.AssignTo(riderId: 5, Build.Gulshan);
+        parcel.Deliver(parcel.CodAmount, null, Now);
 
         Assert.Equal(
-            [OrderStatus.PickedUp, OrderStatus.AtHub, OrderStatus.OutForDelivery, OrderStatus.Delivered],
-            Changes(order));
+            [ParcelStatus.PickedUp, ParcelStatus.AtHub, ParcelStatus.InTransit, ParcelStatus.AtHub, ParcelStatus.OutForDelivery, ParcelStatus.Delivered],
+            Changes(parcel));
     }
 
     [Fact]
     public void A_refused_move_raises_nothing()
     {
-        var order = NewOrder();
+        var parcel = Build.Parcel();
 
-        Assert.True(order.MoveTo(OrderStatus.Delivered).IsFailure);
-        Assert.Empty(Changes(order));
+        Assert.True(parcel.Deliver(0, null, Now).IsFailure);
+        Assert.Empty(Changes(parcel));
     }
 
     [Fact]
     public void A_skipped_message_is_never_due_again()
     {
-        var message = OutboxMessage.Create("OrderStatusChangedMessage", "{}");
+        var message = OutboxMessage.Create("ParcelStatusChangedMessage", "{}");
         message.MarkFailed("HTTP 500", Now);
 
         message.MarkSkipped();

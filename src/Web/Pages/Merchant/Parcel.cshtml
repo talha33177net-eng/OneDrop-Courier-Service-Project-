@@ -1,0 +1,49 @@
+@page "{code}"
+@model Web.Pages.Merchant.ParcelModel
+@{
+    ViewData["Title"] = $"Parcel {Model.Parcel.TrackingCode}";
+    var p = Model.Parcel;
+}
+
+<div class="page-head">
+    <div>
+        <div class="breadcrumb"><a asp-page="/Merchant/Parcels">Parcels</a> <span>/</span> <span>@p.TrackingCode</span></div>
+        <h1 class="mono">@p.TrackingCode</h1>
+        <p>Booked @p.Booked.ToString("d MMM yyyy, h:mm tt")@(p.MerchantReference is null ? "" : $" · invoice {p.MerchantReference}")</p>
+    </div>
+    <div class="page-actions">
+        <a class="btn btn-outline" asp-page="/Merchant/Labels" asp-route-codes="@p.TrackingCode">@Icons.Get("printer") Print label</a>
+        @if (p.CanEdit)
+        {
+            <a class="btn btn-outline" asp-page="/Merchant/EditParcel" asp-route-code="@p.TrackingCode">@Icons.Get("edit") Edit</a>
+        }
+    </div>
+</div>
+
+<partial name="_Alerts" />
+
+@if (p.CanCancel || p.CanRequestReturn)
+{
+    <div class="card mb">
+        <div class="card-body">
+            @if (p.CanCancel)
+            {
+                <form method="post" asp-page-handler="Cancel" asp-route-code="@p.TrackingCode" class="gap">
+                    <input type="text" name="reason" maxlength="200" placeholder="Why cancel? (optional)" style="max-width:360px" />
+                    <button class="btn btn-danger" type="submit" onclick="return confirm('Cancel this parcel?')">@Icons.Get("x-circle") Cancel parcel</button>
+                    <span class="muted">Possible until a rider picks it up.</span>
+                </form>
+            }
+            @if (p.CanRequestReturn)
+            {
+                <form method="post" asp-page-handler="Return" asp-route-code="@p.TrackingCode" class="gap">
+                    <input type="text" name="reason" maxlength="200" placeholder="Why do you want it back?" style="max-width:360px" />
+                    <button class="btn btn-danger" type="submit" onclick="return confirm('Ask for this parcel to come back to you?')">@Icons.Get("return") Ask for it back</button>
+                    <span class="muted">The delivery and return charges apply.</span>
+                </form>
+            }
+        </div>
+    </div>
+}
+
+<partial name="_ParcelDetails" model="p" />

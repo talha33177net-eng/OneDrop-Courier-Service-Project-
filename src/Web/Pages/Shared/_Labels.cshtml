@@ -1,0 +1,39 @@
+@using Application.Parcels.Labels
+@using Web.Labels
+@model (IReadOnlyList<ParcelLabel> Labels, string Courier, string Hotline)
+@* Labels to cut out and stick on parcels: the hub that delivers in large type, a QR code of the tracking code *@
+<div class="labels">
+    @foreach (var label in Model.Labels)
+    {
+        <div class="label-card">
+            <div class="label-top">
+                <div>
+                    <div class="label-brand">@Model.Courier</div>
+                    <div class="label-small">Hotline @Model.Hotline</div>
+                </div>
+                <div class="label-hub" title="Delivering hub">@label.DeliveryHubCode</div>
+            </div>
+            <div class="label-body">
+                <div>
+                    <div class="label-small">To</div>
+                    <div class="label-to">@label.RecipientName</div>
+                    <div>@Money.Phone(label.RecipientPhone)</div>
+                    <div class="label-small">@label.RecipientAddress, @label.Area</div>
+                    <div class="label-cod">COD @Money.Taka(label.CodAmount)</div>
+                    <div class="label-small mt" style="margin-top:6px">
+                        From @label.Merchant · @Money.Phone(label.MerchantPhone)<br />
+                        @Money.Kg(label.WeightGrams)@(label.ItemDescription is null ? "" : $" · {label.ItemDescription}")@(label.MerchantReference is null ? "" : $" · {label.MerchantReference}")
+                    </div>
+                    @if (label.Note is not null)
+                    {
+                        <div class="label-small"><strong>Note:</strong> @label.Note</div>
+                    }
+                </div>
+                <div>
+                    <div class="label-qr">@LabelQrCode.Svg(label.TrackingCode)</div>
+                    <div class="label-code">@label.TrackingCode</div>
+                </div>
+            </div>
+        </div>
+    }
+</div>

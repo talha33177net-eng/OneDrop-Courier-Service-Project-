@@ -1,343 +1,96 @@
 @page
-@model Web.Pages.Rider.IndexModel
-@using Application.Delivery.RiderDay
 @using Domain.Delivery
-@using Domain.Orders
-@using Domain.Payments
-@using Web.Labels
+@model Web.Pages.Rider.IndexModel
 @{
-    ViewData["Title"] = "Today";
-    var today = Model.Today;
+    ViewData["Title"] = "My deliveries";
+    var t = Model.Today!;
 }
-
 @section Head {
     <partial name="_RiderApp" />
 }
 
-@if (today is null)
-{
-    <h1>Today</h1>
-    <div class="card"><p class="muted">Your login is not set up as a rider yet. Ask your hub.</p></div>
-    return;
-}
-
-<h1>Today</h1>
-<p class="lead">
-    @today.Day.ToString("dddd d MMMM") · @today.Rider · from @today.Hub
-</p>
-
-@if (Model.Message is not null)
-{
-    <p class="notice">@Model.Message</p>
-}
-
-@if (Model.Problem is not null)
-{
-    <p class="notice notice-problem">@Model.Problem</p>
-}
-
-@if (today.Status is null || today.Stops.Count == 0)
-{
-    <div class="card"><p class="muted">No deliveries for you yet. The hub plans trips during the day; check again later.</p></div>
-    return;
-}
-
-@{
-    var step = today.Status switch
-    {
-        TripStatus.Planned => 1,
-        TripStatus.Out => 2,
-        _ => today.CashHandedIn is null ? 3 : 4
-    };
-}
-<section class="card no-print">
-    <ol class="tracker" aria-label="Your day">
-        <li class="@(step > 1 ? "done" : "now")">Load your bike</li>
-        <li class="@(step > 2 ? "done" : step == 2 ? "now" : null)">Door to door</li>
-        <li class="@(step > 3 ? "done" : step == 3 ? "now" : null)">Hand in the cash</li>
-    </ol>
-    <p>
-        @switch (step)
-        {
-            case 1:
-                <text><strong>Now:</strong> take each delivery below off its shelf (the shelf number is on the right), then press the orange button to leave.</text>
-                break;
-            case 2:
-                <text><strong>Now:</strong> go to the stops in order. At each door press <strong>At the door</strong>, tick anything the customer refuses, collect the amount shown, then hand over.</text>
-                break;
-            case 3:
-                <text><strong>Now:</strong> go back to the hub with the money and any parcels left, and hand in the cash to the hub staff.</text>
-                break;
-            default:
-                <text><strong>All done for today.</strong> Thank you.</text>
-                break;
-        }
-    </p>
-</section>
-
-@if (Model.Due is { } due)
-{
-    <section class="card door-due" id="door">
-        <h2>Collect ৳@due.Total.ToString("N0")</h2>
-        <dl class="money">
-            <div>
-                <dt>Delivery fee</dt>
-                <dd>৳@due.Fee.ToString("N0")</dd>
-            </div>
-            @if (due.PaidInAdvance > 0)
-            {
-                <div>
-                    <dt>Already paid in advance</dt>
-                    <dd>৳@due.PaidInAdvance.ToString("N0")</dd>
-                </div>
-            }
-            @if (due.Cod > 0)
-            {
-                <div>
-                    <dt>Cash on delivery for the shops</dt>
-                    <dd>৳@due.Cod.ToString("N0")</dd>
-                </div>
-            }
-        </dl>
-        <p>
-            @if (due.Taking.Count > 0)
-            {
-                @:Hand over @string.Join(", ", due.Taking.Select(order => $"{order.Shop} {order.Number}")).
-            }
-            @if (due.Refusing.Count > 0)
-            {
-                <br />
-                @:Keep @string.Join(", ", due.Refusing.Select(order => $"{order.Shop} {order.Number}")): refused, it goes back to the shop.
-            }
-        </p>
-        @if (due.Qr is { } qr)
-        {
-            <div class="door-qr">
-                <div class="door-qr-code">@LabelQrCode.Svg(qr.Link)</div>
-                <div>
-                    <p><strong>৳@qr.Amount.ToString("N0") by @qr.Method.DisplayName()</strong></p>
-                    <p class="muted">The customer scans this code in the @qr.Method.DisplayName() app and pays. Then check.</p>
-                    <form method="post" asp-page-handler="HandOver">
-                        <input type="hidden" name="stop" value="@due.Stop" />
-                        <input type="hidden" name="collected" value="@due.Total" />
-                        <input type="hidden" name="method" value="@qr.Method" />
-                        @foreach (var order in due.Refusing)
-                        {
-                            <input type="hidden" name="refused" value="@order.Number" />
-                        }
-                        <button class="button" type="submit">Check payment and hand over</button>
-                    </form>
-                </div>
-            </div>
-        }
-        <form method="post" asp-page-handler="HandOver" class="door-actions">
-            <input type="hidden" name="stop" value="@due.Stop" />
-            <input type="hidden" name="collected" value="@due.Total" />
-            <input type="hidden" name="method" value="@PaymentMethod.Cash" />
-            @foreach (var order in due.Refusing)
-            {
-                <input type="hidden" name="refused" value="@order.Number" />
-            }
-            @if (due.Taking.Count == 0)
-            {
-                <button class="button" type="submit">Everything refused: take it all back</button>
-            }
-            else
-            {
-                <button class="button" type="submit">Cash ৳@due.Total.ToString("N0") collected, hand over</button>
-            }
-            <a asp-page="/Rider/Index">Back</a>
-        </form>
-        @if (due.Taking.Count > 0)
-        {
-            <form method="post" asp-page-handler="Qr" class="door-actions">
-                <input type="hidden" name="stop" value="@due.Stop" />
-                <input type="hidden" name="collected" value="@due.Total" />
-                @foreach (var order in due.Refusing)
-                {
-                    <input type="hidden" name="refused" value="@order.Number" />
-                }
-                <span class="muted">Or by wallet:</span>
-                @foreach (var wallet in new[] { PaymentMethod.Bkash, PaymentMethod.Nagad })
-                {
-                    <button class="button secondary" type="submit" name="method" value="@wallet">@wallet.DisplayName() QR</button>
-                }
-            </form>
-        }
-        <p class="muted">No fee, no handover: hand the parcels over only once the customer has paid.</p>
-    </section>
-}
-
-<div class="card">
-    <dl class="money">
+<div class="rider-wrap">
+    <div class="page-head">
         <div>
-            <dt>Stops</dt>
-            <dd>@today.Stops.Count(stop => stop.Outcome is null) to do of @today.Stops.Count</dd>
+            <h1>Hello, @t.Rider</h1>
+            <p>@t.Hub · @t.Date.ToString("dddd d MMMM")</p>
         </div>
+    </div>
+
+    <partial name="_Alerts" />
+
+    <div class="cash-card">
         <div>
-            <dt>Parcels</dt>
-            <dd>@today.Stops.Sum(stop => stop.Parcels) of @today.Limit.Parcels</dd>
+            <div class="label">Cash in hand</div>
+            <div class="value">@Money.Taka(t.CashInHand)</div>
         </div>
-        @if (today.Status != TripStatus.Planned)
-        {
-            <div>
-                <dt>Collected</dt>
-                <dd>৳@today.Collected.ToString("N0")</dd>
+        <div class="text-right">
+            <div class="label">To deliver</div>
+            <div class="value">@t.Deliveries.Count</div>
+        </div>
+    </div>
+
+    @if (t.Pickups.Count > 0)
+    {
+        <a class="alert alert-info" asp-page="/Rider/Pickups" style="text-decoration:none">@Icons.Get("truck")<div><strong>@t.Pickups.Count pickup@(t.Pickups.Count == 1 ? "" : "s") to make.</strong> Open your pickups.</div></a>
+    }
+
+    <h4 class="mb">To deliver</h4>
+    @if (t.Deliveries.Count == 0)
+    {
+        <div class="card"><div class="empty">@Icons.Get("check-circle")<h3>Nothing to deliver</h3><p>The hub hands you parcels for your run.</p></div></div>
+    }
+    @foreach (var d in t.Deliveries)
+    {
+        <div class="task">
+            <div class="task-head">
+                <div>
+                    <div class="task-name">@d.RecipientName</div>
+                    <div class="mono muted" style="font-size:12.5px">@d.TrackingCode · @d.Merchant</div>
+                </div>
+                <div class="text-right">
+                    <div class="task-cod">@Money.Taka(d.CodAmount)</div>
+                    <div class="muted" style="font-size:12px">to collect</div>
+                </div>
             </div>
-            @if (today.CashHandedIn is { } handedIn)
-            {
-                <div>
-                    <dt>Cash handed in</dt>
-                    <dd>
-                        ৳@handedIn.ToString("N0")
-                        @if (handedIn < today.Cash)
-                        {
-                            <text>of ৳@today.Cash.ToString("N0")</text>
-                        }
-                    </dd>
-                </div>
-            }
-            else
-            {
-                <div>
-                    <dt>Cash to hand in</dt>
-                    <dd>৳@today.Cash.ToString("N0")</dd>
-                </div>
-            }
-        }
-        <div class="total">
-            <dt>Still to collect</dt>
-            <dd>৳@today.ToCollect.ToString("N0")</dd>
+            <div class="task-meta">
+                <div>@Icons.Get("map-pin") <span>@d.RecipientAddress, <strong>@d.Area</strong></span></div>
+                <div>@Icons.Get("phone") <a href="tel:@Money.Phone(d.RecipientPhone)">@Money.Phone(d.RecipientPhone)</a></div>
+                @if (d.Note is not null)
+                {
+                    <div>@Icons.Get("message") <span>@d.Note</span></div>
+                }
+                @if (d.Attempts > 0)
+                {
+                    <div>@Icons.Get("refresh") <span>Attempt @(d.Attempts + 1) of @d.MaxAttempts</span></div>
+                }
+            </div>
+            <div class="task-actions">
+                <a class="btn btn-primary" asp-page="/Rider/Delivery" asp-route-code="@d.TrackingCode">@Icons.Get("check") Record outcome</a>
+                <a class="btn btn-outline" href="tel:@Money.Phone(d.RecipientPhone)">@Icons.Get("phone") Call</a>
+            </div>
         </div>
-    </dl>
-    @if (today.Status == TripStatus.Planned)
-    {
-        <form method="post" asp-page-handler="Start" class="start-trip">
-            <button class="button big" type="submit">Start trip</button>
-            <span class="muted">Take every delivery from its shelf first. Anything not on its shelf stays at the hub.</span>
-        </form>
     }
-    else if (today.Status == TripStatus.Finished)
+
+    @if (t.Done.Count > 0)
     {
-        <p><span class="pill pill-ready">Done</span> <span class="muted">Every stop is done. Bring the money and any parcels back to the hub.</span></p>
-    }
-    else
-    {
-        <p><span class="pill pill-ready">Out</span> <span class="muted">You have the parcels.</span></p>
+        <h4 class="mb mt-lg">Done today</h4>
+        <div class="card">
+            <div class="table-wrap">
+                <table class="table compact">
+                    <tbody>
+                        @foreach (var done in t.Done)
+                        {
+                            <tr>
+                                <td><div class="cell-main">@done.RecipientName</div><div class="cell-sub mono">@done.TrackingCode · @done.Area</div></td>
+                                <td>@Statuses.Badge(done.Outcome)</td>
+                                <td class="num">@Money.Taka(done.Collected)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <p class="hint mt">Bring the parcels you could not deliver and the cash to the hub at the end of your run.</p>
     }
 </div>
-
-@foreach (var stop in today.Stops)
-{
-    var atTheDoor = today.Status == TripStatus.Out && stop.Outcome is null;
-    <section class="card stop @(stop.Outcome is null ? null : "stop-done")">
-        <div class="stop-head">
-            <span class="stop-number">@stop.Number</span>
-            <div>
-                <h2>@stop.Recipient</h2>
-                <div>@stop.Address, @stop.Area</div>
-                @if (stop.Landmark is not null)
-                {
-                    <div class="muted">@stop.Landmark</div>
-                }
-                <div><a href="tel:@stop.Phone">@stop.Phone</a></div>
-            </div>
-            @if (today.Status == TripStatus.Planned && stop.Shelves.Count > 0)
-            {
-                <span class="pill">Shelf @string.Join(", ", stop.Shelves)</span>
-            }
-            else if (stop.Outcome is { } outcome)
-            {
-                <span class="pill @(outcome == StopOutcome.Delivered ? "pill-ready" : null)">@OutcomeText(outcome, stop.PaidBy)</span>
-            }
-        </div>
-
-        <form method="get" asp-fragment="door">
-            <input type="hidden" name="stop" value="@stop.Key" />
-            <ul class="lines">
-                @foreach (var order in stop.Orders)
-                {
-                    <li>
-                        <div>
-                            <strong>@order.Shop</strong>
-                            <span class="muted">@string.Join(", ", order.Labels)</span>
-                        </div>
-                        @if (atTheDoor && order.Status == OrderStatus.OutForDelivery)
-                        {
-                            <label class="refuse">
-                                <input type="checkbox" name="refused" value="@order.Number"
-                                       checked="@(Model.Due?.Stop == stop.Key && Model.Due.Refusing.Any(r => r.Number == order.Number))" />
-                                Refused
-                            </label>
-                        }
-                        else
-                        {
-                            <span class="status @(today.Status == TripStatus.Planned && !order.Ready ? "status-waiting" : null)">@OrderText(order, today.Status)</span>
-                        }
-                    </li>
-                }
-            </ul>
-            <dl class="money">
-                <div>
-                    <dt>Delivery fee</dt>
-                    <dd>৳@stop.Fee.ToString("N0")</dd>
-                </div>
-                @if (stop.Cod > 0)
-                {
-                    <div>
-                        <dt>Cash on delivery for the shops</dt>
-                        <dd>৳@stop.Cod.ToString("N0")</dd>
-                    </div>
-                }
-                <div class="total">
-                    <dt>@(stop.Outcome is null ? "To collect" : "Collected")</dt>
-                    <dd>৳@stop.ToCollect.ToString("N0")</dd>
-                </div>
-            </dl>
-            @if (atTheDoor)
-            {
-                <button class="button big" type="submit">At the door</button>
-                <span class="muted">Tick what the customer refuses, then check the amount.</span>
-            }
-        </form>
-        @if (atTheDoor)
-        {
-            <form method="post" asp-page-handler="NotHome" class="door-actions">
-                <input type="hidden" name="stop" value="@stop.Key" />
-                <button class="button secondary" type="submit">Nobody home</button>
-            </form>
-        }
-        <p class="muted">@string.Join(", ", stop.Deliveries)</p>
-    </section>
-}
-
-@functions {
-    private static string OrderText(RiderStopOrder order, TripStatus? trip)
-    {
-        if (trip == TripStatus.Planned)
-        {
-            return order.Ready ? "On the shelf" : "Not all here yet";
-        }
-
-        return order.Status switch
-        {
-            OrderStatus.Delivered => "Delivered",
-            OrderStatus.Refused => "Refused: back to the shop",
-            OrderStatus.ReturnedToMerchant => "Back at the shop",
-            OrderStatus.AtHub => "Back to the hub",
-            _ => "With you"
-        };
-    }
-
-    private static string OutcomeText(StopOutcome outcome, PaymentMethod? paidBy)
-    {
-        return outcome switch
-        {
-            StopOutcome.Delivered when paidBy is { } method =>
-                method == PaymentMethod.Cash ? "Delivered, paid in cash" : $"Delivered, paid by {method.DisplayName()}",
-            StopOutcome.Delivered => "Delivered",
-            StopOutcome.Refused => "Refused",
-            _ => "Nobody home"
-        };
-    }
-}

@@ -14,12 +14,7 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.TimeZone).HasMaxLength(100);
         builder.Property(t => t.CurrencyCode).HasMaxLength(3).IsFixedLength();
         builder.Property(t => t.SmsSenderName).HasMaxLength(20);
-        builder.Property(t => t.BaseDeliveryFee).HasPrecision(10, 2);
-        builder.Property(t => t.ExtraShopFee).HasPrecision(10, 2);
-        builder.Property(t => t.FastDeliveryFee).HasPrecision(10, 2);
-        builder.Property(t => t.ExtraKgFee).HasPrecision(10, 2);
-        builder.Property(t => t.ReturnCharge).HasPrecision(10, 2);
-        builder.Property(t => t.LateHandoverFee).HasPrecision(10, 2);
+        builder.Property(t => t.SupportPhone).HasMaxLength(20);
         builder.HasIndex(t => t.Slug).IsUnique().HasDatabaseName("UX_Tenant_Slug");
     }
 }

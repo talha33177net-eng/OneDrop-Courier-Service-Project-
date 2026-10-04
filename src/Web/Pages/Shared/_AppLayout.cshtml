@@ -1,0 +1,189 @@
+@using System.Security.Claims
+@inject ITenantContext TenantContext
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Environment
+@{
+    var tenant = TenantContext.Tenant;
+    var user = Context.User;
+    var page = ViewContext.RouteData.Values["page"]?.ToString() ?? "";
+    var name = user.FindFirstValue(ClaimTypes.GivenName) ?? user.Identity?.Name ?? "";
+    var initials = string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(part => char.ToUpperInvariant(part[0])));
+    var isMerchant = user.IsInRole(Roles.Merchant);
+    var isAdmin = user.IsInRole(Roles.TenantAdmin);
+    var isHub = user.IsInRole(Roles.HubStaff);
+    var isRider = user.IsInRole(Roles.Rider);
+    var isPlatform = user.IsInRole(Roles.PlatformAdmin);
+    var panel = isMerchant ? "Merchant panel" : isAdmin ? "Admin panel" : isHub ? "Hub panel" : isRider ? "Rider app" : isPlatform ? "Platform" : "";
+    var role = isMerchant ? "Merchant" : isAdmin ? "Admin" : isHub ? "Hub staff" : isRider ? "Rider" : isPlatform ? "Platform admin" : "";
+
+    string Active(params string[] pages) => pages.Any(p => page == p || (p.EndsWith('*') && page.StartsWith(p.TrimEnd('*')))) ? "nav-link active" : "nav-link";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f1d2e" />
+    <title>@ViewData["Title"] · @(tenant?.Name ?? "OneDrop")</title>
+    <link rel="icon" href="~/icons/icon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+    @* Only the taka sign, which Inter lacks *@
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@500;700&text=%E0%A7%B3&display=swap" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    @await RenderSectionAsync("Head", required: false)
+</head>
+<body>
+    <div class="app">
+        <input type="checkbox" id="nav-open" aria-hidden="true" />
+        <aside class="sidebar" aria-label="Main menu">
+            <a class="sidebar-brand" href="/">
+                <span class="brand-mark">@Icons.Get("package")</span>
+                <span>
+                    <span class="brand-name">@(tenant?.Name ?? "OneDrop")</span>
+                    <span class="brand-sub">@panel</span>
+                </span>
+            </a>
+
+            @if (isMerchant)
+            {
+                <nav class="nav-section">
+                    <a class="@Active("/Merchant/Index")" asp-page="/Merchant/Index">@Icons.Get("dashboard") Dashboard</a>
+                </nav>
+                <nav class="nav-section">
+                    <div class="nav-label">Parcels</div>
+                    <a class="@Active("/Merchant/NewParcel")" asp-page="/Merchant/NewParcel">@Icons.Get("plus") Book a parcel</a>
+                    <a class="@Active("/Merchant/Parcels", "/Merchant/Parcel", "/Merchant/EditParcel")" asp-page="/Merchant/Parcels">@Icons.Get("package") All parcels</a>
+                    <a class="@Active("/Merchant/BulkUpload")" asp-page="/Merchant/BulkUpload">@Icons.Get("upload") Bulk upload</a>
+                    <a class="@Active("/Merchant/Pickups")" asp-page="/Merchant/Pickups">@Icons.Get("truck") Pickup requests</a>
+                    <a class="@Active("/Merchant/Labels")" asp-page="/Merchant/Labels">@Icons.Get("printer") Print labels</a>
+                </nav>
+                <nav class="nav-section">
+                    <div class="nav-label">Money and tools</div>
+                    <a class="@Active("/Merchant/Payments", "/Merchant/Payment")" asp-page="/Merchant/Payments">@Icons.Get("wallet") Payments</a>
+                    <a class="@Active("/Merchant/FraudCheck")" asp-page="/Merchant/FraudCheck">@Icons.Get("shield") Fraud check</a>
+                    <a class="@Active("/Merchant/Pricing")" asp-page="/Merchant/Pricing">@Icons.Get("tag") Rates and calculator</a>
+                </nav>
+                <nav class="nav-section">
+                    <div class="nav-label">Account</div>
+                    <a class="@Active("/Merchant/Settings")" asp-page="/Merchant/Settings">@Icons.Get("settings") Settings</a>
+                    <a class="@Active("/Merchant/ApiKeys")" asp-page="/Merchant/ApiKeys">@Icons.Get("key") API keys</a>
+                    <a class="@Active("/Merchant/Webhook")" asp-page="/Merchant/Webhook">@Icons.Get("zap") Webhooks</a>
+                </nav>
+            }
+
+            @if (isAdmin)
+            {
+                <nav class="nav-section">
+                    <a class="@Active("/Admin/Index")" asp-page="/Admin/Index">@Icons.Get("dashboard") Dashboard</a>
+                </nav>
+                <nav class="nav-section">
+                    <div class="nav-label">Operations</div>
+                    <a class="@Active("/Hub/Parcels", "/Hub/Parcel")" asp-page="/Hub/Parcels">@Icons.Get("package") Parcels</a>
+                    <a class="@Active("/Hub/Index", "/Hub/Scan", "/Hub/Assign", "/Hub/Runs", "/Hub/Pickups")" asp-page="/Hub/Index">@Icons.Get("warehouse") Hub operations</a>
+                </nav>
+                <nav class="nav-section">
+                    <div class="nav-label">People</div>
+                    <a class="@Active("/Admin/Merchants", "/Admin/Merchant", "/Admin/NewMerchant")" asp-page="/Admin/Merchants">@Icons.Get("store") Merchants</a>
+                    <a class="@Active("/Admin/Riders", "/Admin/Rider")" asp-page="/Admin/Riders">@Icons.Get("bike") Riders</a>
+                </nav>
+                <nav class="nav-section">
+                    <div class="nav-label">Money</div>
+                    <a class="@Active("/Admin/Payouts", "/Admin/Payout")" asp-page="/Admin/Payouts">@Icons.Get("wallet") Merchant payouts</a>
+                </nav>
+                <nav class="nav-section">
+                    <div class="nav-label">Setup</div>
+                    <a class="@Active("/Admin/Rates")" asp-page="/Admin/Rates">@Icons.Get("tag") Delivery rates</a>
+                    <a class="@Active("/Admin/Coverage")" asp-page="/Admin/Coverage">@Icons.Get("globe") Coverage</a>
+                    <a class="@Active("/Admin/Messages")" asp-page="/Admin/Messages">@Icons.Get("message") Failed messages</a>
+                </nav>
+            }
+            else if (isHub)
+            {
+                <nav class="nav-section">
+                    <div class="nav-label">Hub</div>
+                    <a class="@Active("/Hub/Index")" asp-page="/Hub/Index">@Icons.Get("dashboard") Hub board</a>
+                    <a class="@Active("/Hub/Scan")" asp-page="/Hub/Scan">@Icons.Get("scan") Scan parcels</a>
+                    <a class="@Active("/Hub/Pickups")" asp-page="/Hub/Pickups">@Icons.Get("truck") Pickup requests</a>
+                    <a class="@Active("/Hub/Assign")" asp-page="/Hub/Assign">@Icons.Get("send") Assign to riders</a>
+                    <a class="@Active("/Hub/Runs")" asp-page="/Hub/Runs">@Icons.Get("cash") Rider closing</a>
+                </nav>
+                <nav class="nav-section">
+                    <div class="nav-label">Find</div>
+                    <a class="@Active("/Hub/Parcels", "/Hub/Parcel")" asp-page="/Hub/Parcels">@Icons.Get("search") Parcels</a>
+                </nav>
+            }
+
+            @if (isRider)
+            {
+                <nav class="nav-section">
+                    <a class="@Active("/Rider/Index", "/Rider/Delivery")" asp-page="/Rider/Index">@Icons.Get("bike") My deliveries</a>
+                    <a class="@Active("/Rider/Pickups", "/Rider/Pickup")" asp-page="/Rider/Pickups">@Icons.Get("truck") My pickups</a>
+                </nav>
+            }
+
+            @if (isPlatform)
+            {
+                <nav class="nav-section">
+                    <a class="@Active("/Platform/Tenants")" asp-page="/Platform/Tenants">@Icons.Get("layers") Couriers</a>
+                    <a class="nav-link" href="/jobs">@Icons.Get("clock") Background jobs</a>
+                </nav>
+            }
+
+            <div class="sidebar-footer">
+                @if (tenant is not null)
+                {
+                    <a class="nav-link" asp-page="/Track">@Icons.Get("search") Track a parcel</a>
+                }
+                <form method="post" asp-page="/Account/Logout">
+                    <button type="submit" class="nav-link">@Icons.Get("logout") Sign out</button>
+                </form>
+            </div>
+        </aside>
+        <label for="nav-open" class="nav-scrim" aria-hidden="true"></label>
+
+        <div class="main">
+            <header class="topbar">
+                <label for="nav-open" class="menu-toggle" title="Menu">@Icons.Get("menu")</label>
+                <div class="topbar-company">
+                    @(tenant?.Name ?? "OneDrop platform")
+                    @if (tenant is not null)
+                    {
+                        <small>Hotline @tenant.SupportPhone</small>
+                    }
+                </div>
+                <div class="topbar-actions">
+                    @if (isAdmin || isHub || isMerchant)
+                    {
+                        <form class="topbar-search no-print" method="get" action="@(isMerchant ? "/Merchant/Parcels" : "/Hub/Parcels")" role="search">
+                            @Icons.Get("search")
+                            <input type="search" name="search" placeholder="Tracking code, phone or name" aria-label="Search parcels" />
+                        </form>
+                    }
+                    <div class="user-chip">
+                        <span class="avatar">@initials</span>
+                        <span class="user-chip-text">
+                            <span class="user-chip-name">@name</span>
+                            <span class="user-chip-role">@role</span>
+                        </span>
+                    </div>
+                </div>
+            </header>
+            @if (Environment.IsDevelopment())
+            {
+                <div class="demo-strip no-print">
+                    <strong>Demo mode</strong>
+                    <span>No real SMS or money leaves this computer.</span>
+                    <a asp-page="/Dev/Sms">SMS inbox</a>
+                    <a asp-page="/Dev/Payouts">Payouts sent</a>
+                    <a asp-page="/Dev/Webhooks">Webhooks received</a>
+                </div>
+            }
+            <main class="content">
+                @RenderBody()
+            </main>
+        </div>
+    </div>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

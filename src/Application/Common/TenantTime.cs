@@ -1,0 +1,45 @@
+using Application.Abstractions;
+
+namespace Application.Common;
+
+/// <summary>Days and times in the tenant's own time zone: runs, pickups and payouts follow the courier's calendar.</summary>
+public static class TenantTime
+{
+    public static TimeZoneInfo Zone(this TenantInfo tenant)
+    {
+        return TimeZoneInfo.FindSystemTimeZoneById(tenant.TimeZone);
+    }
+
+    public static DateOnly Today(this TenantInfo tenant, DateTime utcNow)
+    {
+        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(utcNow, tenant.Zone()));
+    }
+
+    /// <summary>A stored UTC time as the tenant's wall clock shows it.</summary>
+    public static DateTime Local(this TenantInfo tenant, DateTime utc)
+    {
+        return TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), tenant.Zone());
+    }
+
+    /// <summary>The first moment of <paramref name="day"/> in the tenant's zone, as UTC: the lower bound of a day's rows.</summary>
+    public static DateTime StartUtc(this TenantInfo tenant, DateOnly day)
+    {
+        return TimeZoneInfo.ConvertTimeToUtc(day.ToDateTime(TimeOnly.MinValue), tenant.Zone());
+    }
+
+    /// <summary>The tenant the request or job runs for; a use case that needs one cannot run without it.</summary>
+    public static TenantInfo Require(this ITenantContext context)
+    {
+        return context.Tenant ?? throw new InvalidOperationException("This needs a tenant.");
+    }
+}
+
+/// <summary>One page of a list, with the total so the page can show how many there are in all.</summary>
+public sealed record Page<T>(IReadOnlyList<T> Items, int Total, int Number, int Size)
+{
+    public int Pages => Math.Max(1, (Total + Size - 1) / Size);
+
+    public bool HasPrevious => Number > 1;
+
+    public bool HasNext => Number < Pages;
+}

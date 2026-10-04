@@ -4,70 +4,60 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Application.Abstractions;
 using Application.Common;
+using Application.Pricing.Rates;
 using Web.MultiTenancy;
 
 namespace Web.Pages;
 
+/// <summary>
+/// The front page. A signed-in user goes to their own panel; a visitor to a courier's site sees what it offers, its
+/// prices and a box to track a parcel; the bare platform domain lists the couriers.
+/// </summary>
 public class IndexModel(
     ITenantContext tenantContext,
     ITenantCatalog catalog,
     IAppDbContext db,
+    RatesHandler rates,
     IOptions<TenancyOptions> tenancy) : PageModel
 {
     public TenantInfo? Tenant => tenantContext.Tenant;
 
-    public IReadOnlyList<(TenantInfo Tenant, string Url)> Tenants { get; private set; } = [];
+    public IReadOnlyList<(TenantInfo Tenant, string Url)> Couriers { get; private set; } = [];
 
-    public IReadOnlyList<ZoneRow> Zones { get; private set; } = [];
+    public IReadOnlyList<RateRow> Rates { get; private set; } = [];
+
+    public int Cities { get; private set; }
+
+    public int Hubs { get; private set; }
+
+    public int Areas { get; private set; }
 
     public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
-        if (User.IsInRole(Roles.Merchant))
+        var home = User.IsInRole(Roles.Merchant) ? "/Merchant/Index"
+            : User.IsInRole(Roles.Rider) ? "/Rider/Index"
+            : User.IsInRole(Roles.TenantAdmin) ? "/Admin/Index"
+            : User.IsInRole(Roles.HubStaff) ? "/Hub/Index"
+            : User.IsInRole(Roles.PlatformAdmin) ? "/Platform/Tenants"
+            : null;
+        if (home is not null)
         {
-            return RedirectToPage("/Merchant/Orders");
-        }
-
-        if (User.IsInRole(Roles.Customer))
-        {
-            return RedirectToPage("/Customer/Index");
-        }
-
-        if (User.IsInRole(Roles.Rider))
-        {
-            return RedirectToPage("/Rider/Index");
-        }
-
-        if (User.IsInRole(Roles.TenantAdmin))
-        {
-            return RedirectToPage("/Admin/Index");
-        }
-
-        if (User.IsInRole(Roles.HubStaff))
-        {
-            return RedirectToPage("/Hub/Index");
-        }
-
-        if (User.IsInRole(Roles.PlatformAdmin))
-        {
-            return RedirectToPage("/Platform/Tenants");
+            return RedirectToPage(home);
         }
 
         if (Tenant is null)
         {
             var tenants = await catalog.ListAsync(cancellationToken);
-            Tenants = [.. tenants.Select(t => (t, tenancy.Value.TenantUrl(Request, t.Slug)))];
+            Couriers = [.. tenants.Select(t => (t, tenancy.Value.TenantUrl(Request, t.Slug)))];
 
             return Page();
         }
 
-        Zones = await db.Zones
-            .Where(z => !z.Archived)
-            .OrderBy(z => z.Name)
-            .Select(z => new ZoneRow(z.Name, z.Hub!.Name, db.Areas.Count(a => a.ZoneId == z.Id)))
-            .ToListAsync(cancellationToken);
+        Rates = await rates.ListAsync(cancellationToken);
+        Cities = await db.Zones.Where(z => !z.Archived).Select(z => z.City).Distinct().CountAsync(cancellationToken);
+        Hubs = await db.Hubs.CountAsync(h => !h.Archived, cancellationToken);
+        Areas = await db.Areas.CountAsync(a => !a.Archived, cancellationToken);
 
         return Page();
     }
-
-    public sealed record ZoneRow(string Zone, string Hub, int Areas);
 }

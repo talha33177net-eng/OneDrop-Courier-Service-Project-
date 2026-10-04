@@ -4,7 +4,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Application.Abstractions;
 using Application.Common;
-using Domain.Customers;
 using Domain.Delivery;
 using Domain.Merchants;
 using Infrastructure.Identity;
@@ -14,75 +13,88 @@ using Infrastructure.Persistence;
 namespace Infrastructure.Seeding;
 
 /// <summary>
-/// Development-only demo data: logins for every role and three merchants per tenant with fixed, documented
-/// API keys. Tenants, zones, areas and hubs are NOT created here - they come from the DbUp launch script -
-/// because this needs Identity to hash passwords, which SQL cannot do. Safe to run on every start: each
-/// row is created only when missing.
+/// Development-only demo data: logins for every role, merchants with fixed, documented API keys and payout accounts, and
+/// riders. Tenants, hubs, zones, areas and rates are NOT created here - they come from the DbUp seed - because this
+/// needs Identity to hash passwords, which SQL cannot do. A tenant listed here that does not exist is skipped (the
+/// "rival" courier exists only in the integration tests' database). Safe to run on every start: each row is created
+/// only when missing. With <c>Seed:DemoActivity</c>, a courier with no parcels also gets a spread of sample parcels.
 /// </summary>
-public class DemoDataSeeder(IServiceScopeFactory scopeFactory, ITenantCatalog catalog, ILogger<DemoDataSeeder> logger)
+public class DemoDataSeeder(
+    IServiceScopeFactory scopeFactory,
+    ITenantCatalog catalog,
+    ILogger<DemoDataSeeder> logger)
 {
-    private static readonly DemoMerchant[] DhakaMerchants =
+    public const string PlatformAdmin = "admin@platform.test";
+
+    private static readonly DemoTenant[] Tenants =
     [
-        new("fashion", "Fashion House", "Mirpur 10", "01711000001", "od_dhkfashion01_DevOnlyKeyDoNotUseInProduction01"),
-        new("gadget", "Gadget BD", "Mirpur 2", "01711000002", "od_dhkgadget001_DevOnlyKeyDoNotUseInProduction02"),
-        new("beauty", "Beauty Shop", "Pallabi", "01711000003", "od_dhkbeauty001_DevOnlyKeyDoNotUseInProduction03")
+        new(
+            "onedrop",
+            [
+                new("fashion", "Fashion House", "Nusrat Jahan", "Mirpur 10", "House 7, Road 2, Mirpur 10", "01711000001", PayoutMethod.Bkash, MerchantStatus.Active, "od_odfashion001_DevOnlyKeyDoNotUseInProduction01"),
+                new("gadget", "Gadget BD", "Tanvir Ahmed", "Dhanmondi", "Shop 12, Road 27, Dhanmondi", "01711000002", PayoutMethod.Bank, MerchantStatus.Active, "od_odgadget0001_DevOnlyKeyDoNotUseInProduction02"),
+                new("beauty", "Beauty Shop", "Sharmin Akter", "Uttara Sector 7", "House 30, Road 14, Uttara Sector 7", "01711000003", PayoutMethod.Nagad, MerchantStatus.Active, "od_odbeauty0001_DevOnlyKeyDoNotUseInProduction03"),
+                new("crafts", "Chattogram Crafts", "Imran Hossain", "Agrabad", "CDA Avenue, Agrabad", "01711000004", PayoutMethod.Bkash, MerchantStatus.Active, "od_odctgcraft01_DevOnlyKeyDoNotUseInProduction04"),
+                new("organic", "Organic Bazar", "Farzana Islam", "Mohammadpur", "Ring Road, Mohammadpur", "01711000005", null, MerchantStatus.Pending, null)
+            ],
+            [
+                new("rider", "Rafiq Hasan", "MIR", "01722000001"),
+                new("rider2", "Sumon Ali", "MIR", "01722000002"),
+                new("rider3", "Kamal Uddin", "GUL", "01722000003"),
+                new("rider4", "Jamal Chowdhury", "CTG", "01722000004"),
+                new("rider5", "Nasir Uddin", "DHN", "01722000005"),
+                new("rider6", "Habib Rahman", "UTT", "01722000006")
+            ]),
+        new(
+            "rival",
+            [
+                new("shop", "Rival Shop", "Rival Owner", "Rival Town", "Main Road, Rival Town", "01799000001", PayoutMethod.Bkash, MerchantStatus.Active, "od_rivalshop001_DevOnlyKeyDoNotUseInProduction09")
+            ],
+            [
+                new("rider", "Rival Rider", "RVL", "01799000002")
+            ])
     ];
 
-    private static readonly DemoMerchant[] ChattogramMerchants =
-    [
-        new("fashion", "Fashion House", "Agrabad", "01811000001", "od_ctgfashion01_DevOnlyKeyDoNotUseInProduction04"),
-        new("gadget", "Gadget BD", "GEC Circle", "01811000002", "od_ctggadget001_DevOnlyKeyDoNotUseInProduction05"),
-        new("beauty", "Beauty Shop", "Chawkbazar", "01811000003", "od_ctgbeauty001_DevOnlyKeyDoNotUseInProduction06")
-    ];
-
-    // Two Mirpur bikes of different sizes and one in Gulshan; one rider in Chattogram
-    private static readonly DemoRider[] DhakaRiders =
-    [
-        new("rider", "Rafiq Hasan", "MIR", "01722000001", new TripLoad(30, 25_000)),
-        new("rider2", "Sumon Ali", "MIR", "01722000002", new TripLoad(12, 15_000)),
-        new("rider3", "Kamal Uddin", "GUL", "01722000003", new TripLoad(30, 25_000))
-    ];
-
-    private static readonly DemoRider[] ChattogramRiders =
-    [
-        new("rider", "Jamal Chowdhury", "AGR", "01822000001", new TripLoad(30, 25_000))
-    ];
-
-    public async Task SeedAsync(string password, CancellationToken cancellationToken = default)
+    public async Task SeedAsync(string password, bool activity, CancellationToken cancellationToken = default)
     {
         await using (var platformScope = scopeFactory.CreateAsyncScope())
         {
-            await EnsureUserAsync(platformScope, "admin@onedrop.test", "OneDrop platform admin", Roles.PlatformAdmin, password, null, null);
+            await EnsureUserAsync(platformScope, PlatformAdmin, "Platform admin", Roles.PlatformAdmin, password, null, null);
         }
 
-        foreach (var (slug, merchants) in new[] { ("dhaka", DhakaMerchants), ("chattogram", ChattogramMerchants) })
+        foreach (var demo in Tenants)
         {
-            var tenant = await catalog.FindBySlugAsync(slug, cancellationToken);
+            var tenant = await catalog.FindBySlugAsync(demo.Slug, cancellationToken);
             if (tenant is null)
             {
-                logger.LogWarning("Demo seed skipped {Slug}: run dbup first, it creates the launch tenants", slug);
+                logger.LogInformation("Demo seed skipped {Slug}: no such courier here (dbup creates the launch courier; the rival exists only in the test database)", demo.Slug);
                 continue;
             }
 
             await using var scope = scopeFactory.CreateAsyncScope();
             scope.ServiceProvider.GetRequiredService<TenantContext>().Set(tenant);
 
-            await EnsureUserAsync(scope, $"admin@{slug}.onedrop.test", $"{tenant.Name} admin", Roles.TenantAdmin, password, tenant.Id, null);
-            await EnsureUserAsync(scope, $"hub@{slug}.onedrop.test", $"{tenant.Name} hub staff", Roles.HubStaff, password, tenant.Id, null);
+            await EnsureUserAsync(scope, $"admin@{demo.Slug}.test", $"{tenant.Name} admin", Roles.TenantAdmin, password, tenant.Id, null);
+            await EnsureUserAsync(scope, $"hub@{demo.Slug}.test", "Hub staff", Roles.HubStaff, password, tenant.Id, null);
 
-            foreach (var demo in merchants)
+            foreach (var merchant in demo.Merchants)
             {
-                var merchantId = await EnsureMerchantAsync(scope, demo, cancellationToken);
+                var merchantId = await EnsureMerchantAsync(scope, merchant, cancellationToken);
                 if (merchantId.HasValue)
                 {
-                    await EnsureUserAsync(scope, $"{demo.Key}@{slug}.onedrop.test", demo.Name, Roles.Merchant, password, tenant.Id, merchantId);
+                    await EnsureUserAsync(scope, $"{merchant.Key}@{demo.Slug}.test", merchant.Owner, Roles.Merchant, password, tenant.Id, merchantId);
                 }
             }
 
-            foreach (var demo in slug == "dhaka" ? DhakaRiders : ChattogramRiders)
+            foreach (var rider in demo.Riders)
             {
-                var userId = await EnsureUserAsync(scope, $"{demo.Key}@{slug}.onedrop.test", demo.Name, Roles.Rider, password, tenant.Id, null);
-                await EnsureRiderAsync(scope, userId, demo, cancellationToken);
+                var userId = await EnsureUserAsync(scope, $"{rider.Key}@{demo.Slug}.test", rider.Name, Roles.Rider, password, tenant.Id, null);
+                await EnsureRiderAsync(scope, userId, rider, cancellationToken);
+            }
+
+            if (activity && demo.Slug == "onedrop")
+            {
+                await ActivatorUtilities.CreateInstance<DemoActivity>(scope.ServiceProvider).SeedAsync(cancellationToken);
             }
         }
 
@@ -105,19 +117,32 @@ public class DemoDataSeeder(IServiceScopeFactory scopeFactory, ITenantCatalog ca
             return null;
         }
 
-        var merchant = new Merchant(demo.Name, area.ZoneId, demo.Phone, $"{demo.Key}@example.com");
+        var profile = new MerchantProfile(demo.Name, demo.Owner, demo.Phone, $"{demo.Key}@example.com", $"{demo.Address}, {area.Name}");
+        var merchant = (demo.Status == MerchantStatus.Pending ? Merchant.SignUp(profile) : Merchant.Add(profile)).Value;
+        if (demo.Payout is { } method)
+        {
+            merchant.SetPayoutAccount(
+                method,
+                method == PayoutMethod.Bank ? "1501203456789" : demo.Phone,
+                method == PayoutMethod.Bank ? $"{demo.Owner}, City Bank, Dhanmondi branch" : demo.Owner);
+        }
+
         db.Merchants.Add(merchant);
         await db.SaveChangesAsync(cancellationToken);
 
-        db.PickupPoints.Add(new PickupPoint(merchant.Id, area.Id, "Shop", $"{demo.Name}, {area.Name}", demo.Phone, isDefault: true));
-        db.MerchantApiKeys.Add(MerchantApiKey.FromPlaintext(merchant.Id, "Demo website", demo.ApiKey).Value);
+        db.PickupPoints.Add(PickupPoint.Create(merchant.Id, area.Id, "Shop", demo.Address, demo.Phone, isDefault: true).Value);
+        if (demo.ApiKey is not null)
+        {
+            db.MerchantApiKeys.Add(MerchantApiKey.FromPlaintext(merchant.Id, "Demo website", demo.ApiKey).Value);
+        }
+
         await db.SaveChangesAsync(cancellationToken);
 
         return merchant.Id;
     }
 
     /// <summary>Creates the login when missing. Returns its id either way.</summary>
-    private async Task<long> EnsureUserAsync(
+    private static async Task<long> EnsureUserAsync(
         AsyncServiceScope scope,
         string email,
         string displayName,
@@ -172,11 +197,22 @@ public class DemoDataSeeder(IServiceScopeFactory scopeFactory, ITenantCatalog ca
             return;
         }
 
-        db.Riders.Add(new Rider(hub.Id, demo.Name, PhoneNumber.Parse(demo.Phone).Value, demo.Limit, userId));
+        db.Riders.Add(Rider.Create(hub.Id, demo.Name, demo.Phone, userId).Value);
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private sealed record DemoMerchant(string Key, string Name, string Area, string Phone, string ApiKey);
+    private sealed record DemoTenant(string Slug, DemoMerchant[] Merchants, DemoRider[] Riders);
 
-    private sealed record DemoRider(string Key, string Name, string Hub, string Phone, TripLoad Limit);
+    private sealed record DemoMerchant(
+        string Key,
+        string Name,
+        string Owner,
+        string Area,
+        string Address,
+        string Phone,
+        PayoutMethod? Payout,
+        MerchantStatus Status,
+        string? ApiKey);
+
+    private sealed record DemoRider(string Key, string Name, string Hub, string Phone);
 }

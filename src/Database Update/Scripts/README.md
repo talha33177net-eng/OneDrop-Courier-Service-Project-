@@ -23,6 +23,9 @@ dbup           everything else
 
 `tools/db/publish.ps1` runs all three.
 
+The databases were rebuilt from nothing when the project became a traditional courier (2026-10-04): the script
+history starts again at `2026/001_SeedCourier.sql` and `Scripts/Pre` is empty until a change needs it.
+
 ## Rules
 
 - Name scripts `NNN_DescriptiveName.sql` (3 digits). They are embedded resources and run in name order.

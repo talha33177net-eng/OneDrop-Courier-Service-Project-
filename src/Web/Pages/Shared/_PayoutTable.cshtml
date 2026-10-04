@@ -1,0 +1,49 @@
+@using Application.Payments.MerchantPayments
+@model (IReadOnlyList<PayoutRow> Rows, string Link, bool ShowMerchant)
+@* Payouts made: invoice number, the days they cover, cash collected, charges and what was sent *@
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty">@Icons.Get("wallet")<h3>No payouts yet</h3><p>Payouts are made every day for the parcels finished the day before.</p></div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Invoice</th>
+                    @if (Model.ShowMerchant)
+                    {
+                        <th>Merchant</th>
+                    }
+                    <th>Up to</th>
+                    <th class="num">Parcels</th>
+                    <th class="num">Cash collected</th>
+                    <th class="num">Charges</th>
+                    <th class="num">Paid</th>
+                    <th>To</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.Rows)
+                {
+                    <tr>
+                        <td><a class="code-link" href="@(Model.Link + row.Number)">@row.Number</a><div class="cell-sub">@row.Created.ToString("d MMM yyyy")</div></td>
+                        @if (Model.ShowMerchant)
+                        {
+                            <td>@row.Merchant</td>
+                        }
+                        <td class="nowrap">@row.UpToDate.ToString("d MMM")</td>
+                        <td class="num">@row.Parcels</td>
+                        <td class="num">@Money.Taka(row.CodTotal)</td>
+                        <td class="num negative">@Money.Taka(-row.ChargesTotal)</td>
+                        <td class="num strong">@Money.Taka(row.Amount)</td>
+                        <td>@row.Method.DisplayName()<div class="cell-sub">@row.Account</div></td>
+                        <td>@Statuses.Badge(row.Status)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

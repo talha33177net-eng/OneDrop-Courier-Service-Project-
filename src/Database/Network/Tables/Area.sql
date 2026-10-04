@@ -1,10 +1,10 @@
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 -- TABLE: Network.Area
--- Purpose: The neighbourhood list addresses pick from ("Mirpur 10", "Banani DOHS"). Dhaka addresses are too messy
---          to geocode in the MVP, so every address names an area and the area decides the zone and hub.
+-- Purpose: The neighbourhood list addresses pick from ("Mirpur 10", "Sylhet Sadar"). Addresses are too varied
+--          to geocode, so every address names an area and the area decides the zone, the hub and the charge.
 --          Merchants read the list from GET /api/v1/areas.
 -- Author: Courier team
--- Date: 2026-09-27
+-- Date: 2026-10-04
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Network].[Area] (
     [Id]        BIGINT         IDENTITY (1, 1) NOT NULL,

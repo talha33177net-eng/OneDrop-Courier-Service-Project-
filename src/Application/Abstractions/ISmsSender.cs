@@ -1,4 +1,4 @@
-using Domain.Customers;
+using Domain.Common;
 
 namespace Application.Abstractions;
 

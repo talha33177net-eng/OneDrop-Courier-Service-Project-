@@ -1,9 +1,9 @@
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 -- TABLE: Merchants.PickupPoint
--- Purpose: Where the zone pickup route collects a merchant's parcels. An order names one, or gets the merchant's
---          default (IsDefault = 1).
+-- Purpose: Where a rider collects a merchant's parcels. A parcel names one, or gets the merchant's default
+--          (IsDefault = 1). Its area decides the hub that collects and, with the destination, the service area.
 -- Author: Courier team
--- Date: 2026-09-27
+-- Date: 2026-10-04
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Merchants].[PickupPoint] (
     [Id]           BIGINT         IDENTITY (1, 1) NOT NULL,

@@ -1,0 +1,29 @@
+@page
+@model Web.Pages.Merchant.NewParcelModel
+@{
+    ViewData["Title"] = "Book a parcel";
+}
+
+<div class="page-head">
+    <div>
+        <div class="breadcrumb"><a asp-page="/Merchant/Parcels">Parcels</a> <span>/</span> <span>Book a parcel</span></div>
+        <h1>Book a parcel</h1>
+        <p>Fill in the recipient and the parcel. We collect it with your next pickup.</p>
+    </div>
+    <div class="page-actions">
+        <a class="btn btn-outline" asp-page="/Merchant/BulkUpload">@Icons.Get("upload") Upload many at once</a>
+    </div>
+</div>
+
+<partial name="_Alerts" />
+
+@if (!Model.CanBook)
+{
+    <div class="alert alert-warning">@Icons.Get("clock")<div>Your account is not active yet, so parcels cannot be booked. You can try the form and see the charges.</div></div>
+}
+
+<form method="post">
+    <div asp-validation-summary="ModelOnly" class="alert alert-error"></div>
+    <input type="hidden" asp-for="FormKey" />
+    @await Html.PartialAsync("_ParcelForm", (Model.Input, Model.Areas, Model.Points, false))
+</form>

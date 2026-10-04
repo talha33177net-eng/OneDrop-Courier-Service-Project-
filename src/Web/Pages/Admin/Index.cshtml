@@ -1,171 +1,113 @@
 @page
 @model Web.Pages.Admin.IndexModel
-@using Domain.Grouping
+@inject ITenantContext TenantContext
 @{
     ViewData["Title"] = "Dashboard";
-    var now = Model.Now;
-    var open = now.Hubs.Sum(hub => hub.OpenDeliveries);
-    var here = now.Hubs.Sum(hub => hub.ParcelsHere);
-    var ridersOut = now.Hubs.Sum(hub => hub.RidersOut);
-    var riders = now.Hubs.Sum(hub => hub.Riders);
-    var missing = now.Hubs.Sum(hub => hub.NotHereYet.Count);
-    var thisWeek = now.Total[^1].PackagesPerDelivery;
-
-    string Density(DeliveryDensity density)
-    {
-        return density.PackagesPerDelivery?.ToString("0.0") ?? "–";
-    }
-
-    string? Tooltip(DeliveryDensity density)
-    {
-        return density.Deliveries == 0
-            ? null
-            : $"{density.Packages} {(density.Packages == 1 ? "package" : "packages")} in " +
-                $"{density.Deliveries} {(density.Deliveries == 1 ? "delivery" : "deliveries")}";
-    }
-
-    string? DensityClass(DeliveryDensity density)
-    {
-        return density.PackagesPerDelivery switch
-        {
-            null => "muted",
-            >= 2 => "density-good",
-            _ => "density-low"
-        };
-    }
+    var d = Model.Data;
+    var s = d.Stages;
 }
-
 @section Head {
     <partial name="_Live" />
 }
 
 <div class="page-head">
     <div>
-        <p class="eyebrow">@now.Day.ToString("dddd d MMMM") <span class="live-status" data-live-status>Connecting…</span></p>
-        <h1>@Model.Tenant.Name today</h1>
-        <p class="lead">Every hub at a glance, and how many packages each delivery carries: the number to grow.</p>
+        <h1>Dashboard</h1>
+        <p>@TenantContext.Tenant?.Name today · <span class="badge badge-brand plain" data-live-status>Live</span></p>
+    </div>
+    <div class="page-actions">
+        <a class="btn btn-outline" asp-page="/Hub/Parcels">@Icons.Get("package") All parcels</a>
+        <a class="btn btn-primary" asp-page="/Admin/NewMerchant">@Icons.Get("plus") Add merchant</a>
     </div>
 </div>
-
-<details class="help">
-    <summary>How this page works</summary>
-    <ul>
-        <li>It updates by itself whenever a parcel is scanned, a delivery closes or a rider starts or finishes.</li>
-        <li><strong>Not scanned in yet</strong> counts parcels of deliveries due out today that are not on their shelf.
-            Riders take only orders with every parcel here; the rest follow tomorrow. Open a hub to see which ones.</li>
-        <li><strong>Packages per delivery</strong> counts deliveries handed over and the packages the customer took, per
-            seven days. Two or more means customers are combining shops; less means the area needs more shops.</li>
-    </ul>
-</details>
 
 <div data-live="dashboard">
-<div class="tiles">
-    <div class="tile">
-        <div class="tile-number">@open</div>
-        <div class="tile-label">deliveries still open to shops</div>
-    </div>
-    <div class="tile">
-        <div class="tile-number">@here</div>
-        <div class="tile-label">parcels in the hubs</div>
-    </div>
-    <div class="tile">
-        <div class="tile-number">@ridersOut</div>
-        <div class="tile-label">riders out of @riders</div>
-    </div>
-    <div class="tile @(missing > 0 ? "tile-warn" : null)">
-        <div class="tile-number">@missing</div>
-        <div class="tile-label">parcels for today not scanned in yet</div>
-    </div>
-    <div class="tile @(thisWeek >= 2 ? "tile-good" : "tile-warn")">
-        <div class="tile-number">@(thisWeek?.ToString("0.0") ?? "–")</div>
-        <div class="tile-label">packages per delivery, last 7 days</div>
-    </div>
-</div>
-
-<div class="card">
-    <h2>Hubs now</h2>
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <th>Hub</th>
-                    <th>Open deliveries</th>
-                    <th>Due out today</th>
-                    <th>Parcels in</th>
-                    <th>On the shuttle here</th>
-                    <th>Riders out</th>
-                    <th>Not scanned in yet</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var hub in now.Hubs)
-                {
-                    <tr>
-                        <td><a asp-page="/Hub/Index" asp-route-hub="@hub.Code">@hub.Name</a> <span class="muted">@hub.Code</span></td>
-                        <td>@hub.OpenDeliveries</td>
-                        <td>@hub.DueToday</td>
-                        <td>@hub.ParcelsHere</td>
-                        <td>@hub.ParcelsOnTheWay</td>
-                        <td>@hub.RidersOut of @hub.Riders</td>
-                        <td>
-                            @if (hub.NotHereYet.Count > 0)
-                            {
-                                <span class="pill pill-waiting">@hub.NotHereYet.Count</span>
-                            }
-                            else
-                            {
-                                <span class="muted">0</span>
-                            }
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<div class="card">
-    <h2>Packages per delivery, week by week</h2>
-    @if (now.Areas.Count == 0)
+    @if (d.PendingMerchants > 0)
     {
-        <p class="muted">No delivery has been handed over in the last @IndexModel.Weeks weeks.</p>
+        <a class="alert alert-warning" asp-page="/Admin/Merchants" asp-route-status="Pending" style="text-decoration:none">@Icons.Get("store")<div><strong>@d.PendingMerchants merchant@(d.PendingMerchants == 1 ? "" : "s") waiting for approval.</strong> Review the sign-ups.</div></a>
     }
-    else
-    {
-        <div class="table-wrap">
-            <table class="density">
-                <thead>
-                    <tr>
-                        <th>Area</th>
-                        @foreach (var week in now.Weeks)
-                        {
-                            <th title="@week.From.ToString("d MMM") to @week.To.ToString("d MMM")">to @week.To.ToString("d MMM")</th>
-                        }
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var area in now.Areas)
-                    {
-                        <tr>
-                            <td>@area.Area <span class="muted">@area.Zone</span></td>
-                            @foreach (var week in area.Weeks)
-                            {
-                                <td class="@DensityClass(week)" title="@Tooltip(week)">@Density(week)</td>
-                            }
-                        </tr>
-                    }
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <th>All areas</th>
-                        @foreach (var week in now.Total)
-                        {
-                            <th class="@DensityClass(week)" title="@Tooltip(week)">@Density(week)</th>
-                        }
-                    </tr>
-                </tfoot>
-            </table>
+
+    <div class="stats">
+        <div class="stat"><div class="stat-icon blue">@Icons.Get("plus")</div><div><div class="stat-label">Booked today</div><div class="stat-value">@d.BookedToday</div></div></div>
+        <div class="stat"><div class="stat-icon amber">@Icons.Get("truck")</div><div><div class="stat-label">Picked up today</div><div class="stat-value">@d.PickedUpToday</div></div></div>
+        <div class="stat"><div class="stat-icon green">@Icons.Get("check-circle")</div><div><div class="stat-label">Delivered today</div><div class="stat-value">@d.DeliveredToday</div></div></div>
+        <div class="stat"><div class="stat-icon red">@Icons.Get("return")</div><div><div class="stat-label">Returned today</div><div class="stat-value">@d.ReturnedToday</div></div></div>
+    </div>
+
+    <div class="grid grid-main">
+        <div class="card">
+            <div class="card-head"><div><h2>Last 7 days</h2><p>Parcels booked, delivered and returned each day</p></div></div>
+            <div class="card-body"><partial name="_WeekChart" model="d.Week" /></div>
         </div>
-    }
-</div>
+        <div class="card">
+            <div class="card-head"><h2>Parcels in progress</h2></div>
+            <div class="card-body">
+                <div class="money-list">
+                    <div><span>@Statuses.Badge(ParcelStatus.Pending)</span><a asp-page="/Hub/Parcels" asp-route-tab="Pending" class="strong">@s.Pending</a></div>
+                    <div><span>@Statuses.Badge(ParcelStatus.InTransit)</span><a asp-page="/Hub/Parcels" asp-route-tab="InTransit" class="strong">@s.InTransit</a></div>
+                    <div><span>@Statuses.Badge(ParcelStatus.OutForDelivery)</span><a asp-page="/Hub/Parcels" asp-route-tab="OutForDelivery" class="strong">@s.OutForDelivery</a></div>
+                    <div><span>@Statuses.Badge(ParcelStatus.OnHold)</span><a asp-page="/Hub/Parcels" asp-route-tab="OnHold" class="strong">@s.OnHold</a></div>
+                    <div><span>@Statuses.Badge(ParcelStatus.Returning)</span><a asp-page="/Hub/Parcels" asp-route-tab="Returns" class="strong">@s.Returns</a></div>
+                </div>
+                <hr />
+                <div class="spread">
+                    <div>
+                        <div class="stat-label">Delivery success</div>
+                        <div class="stat-value">@(s.SuccessRate is { } rate ? $"{rate}%" : "—")</div>
+                    </div>
+                    <div class="ring" style="--value:@(s.SuccessRate ?? 0);width:84px;height:84px"><span style="width:64px;height:64px;font-size:15px">@(s.SuccessRate ?? 0)%</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="stats mt-lg">
+        <a class="stat" asp-page="/Hub/Pickups"><div class="stat-icon amber">@Icons.Get("truck")</div><div><div class="stat-label">Pickups open</div><div class="stat-value">@d.OpenPickups</div></div></a>
+        <a class="stat" asp-page="/Hub/Runs"><div class="stat-icon violet">@Icons.Get("cash")</div><div><div class="stat-label">Cash with riders</div><div class="stat-value">@Money.Taka(d.CashWithRiders)</div></div></a>
+        <a class="stat" asp-page="/Admin/Payouts"><div class="stat-icon">@Icons.Get("wallet")</div><div><div class="stat-label">Owed to merchants</div><div class="stat-value">@Money.Taka(d.OwedToMerchants)</div></div></a>
+    </div>
+
+    <div class="grid grid-2">
+        <div class="card">
+            <div class="card-head"><h2>@Icons.Get("warehouse") Hubs</h2><a class="btn btn-ghost btn-sm" asp-page="/Admin/Coverage">Coverage</a></div>
+            <div class="table-wrap">
+                <table class="table compact">
+                    <thead><tr><th>Hub</th><th class="num">At hub</th><th class="num">For riders</th><th class="num">Coming</th><th class="num">With riders</th></tr></thead>
+                    <tbody>
+                        @foreach (var hub in d.Hubs)
+                        {
+                            <tr>
+                                <td><a asp-page="/Hub/Index" asp-route-hub="@hub.Code"><span class="code-link">@hub.Code</span> @hub.Name</a></td>
+                                <td class="num">@hub.AtHub</td>
+                                <td class="num">@hub.ToAssign</td>
+                                <td class="num">@hub.Incoming</td>
+                                <td class="num">@hub.WithRiders</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-head"><h2>@Icons.Get("trending") Top merchants this month</h2></div>
+            @if (d.TopMerchants.Count == 0)
+            {
+                <div class="card-body muted">No parcels booked this month yet.</div>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="table compact">
+                        <thead><tr><th>Merchant</th><th class="num">Parcels</th><th class="num">Delivered</th></tr></thead>
+                        <tbody>
+                            @foreach (var merchant in d.TopMerchants)
+                            {
+                                <tr><td class="cell-main">@merchant.Name</td><td class="num">@merchant.Parcels</td><td class="num">@merchant.Delivered</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
 </div>

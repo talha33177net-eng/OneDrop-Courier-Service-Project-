@@ -1,26 +1,21 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Application.Abstractions;
-using Infrastructure.MultiTenancy;
-using Infrastructure.Persistence;
 using Simulator;
 
 namespace Integration.Tests;
 
-/// <summary>The demo simulator (tools/Simulator) through the real API: its shops, its orders and their deliveries.</summary>
-public class SimulatorTests(WebAppFactory factory)
+/// <summary>The demo simulator (tools/Simulator) through the real API: its shops and the parcels they book.</summary>
+public class SimulatorTests(WebAppFactory factory) : AppTests(factory)
 {
     [Fact]
-    public async Task The_simulator_sends_its_shops_orders_that_group_into_deliveries_of_one_operator()
+    public async Task The_simulator_books_its_shops_parcels_at_one_courier_priced_from_its_rate_card()
     {
         WebAppFactory.RequireDatabase();
-        var tenant = (await factory.Services.GetRequiredService<ITenantCatalog>().FindBySlugAsync("chattogram", Cancel))!;
-        using var api = factory.CreateClient();
+        var tenant = await TenantAsync("rival");
+        using var api = Factory.CreateClient();
         var log = new List<string>();
 
-        // A new seed each run: the same customers again would join the open deliveries of an earlier run
         var result = await Simulation.RunAsync(
-            factory.Services,
+            Factory.Services,
             api,
             tenant,
             new SimulationOptions(3, 12, TimeSpan.Zero, Seed: Random.Shared.Next()),
@@ -29,42 +24,34 @@ public class SimulatorTests(WebAppFactory factory)
 
         Assert.Equal(12, result.Sent);
         Assert.Empty(result.Refused);
-        Assert.InRange(result.Joined, 1, 11);
         Assert.Equal(12, log.Count);
 
-        await using var scope = factory.Services.CreateAsyncScope();
-        scope.ServiceProvider.GetRequiredService<TenantContext>().Set(tenant);
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var emails = SimulatedShops.Kinds.Take(3).Select(SimulatedShops.EmailOf).ToList();
-        var shopIds = await db.Merchants.Where(m => emails.Contains(m.ContactEmail!)).Select(m => m.Id).ToListAsync(Cancel);
-        var orders = await db.Orders
-            .Where(o => result.Numbers.Contains(o.Number))
-            .Select(o => new { o.TenantId, o.MerchantId, o.DeliveryGroupId, o.AddedFee })
-            .ToListAsync(Cancel);
+        var shopIds = await QueryAsync("rival", db => db.Merchants.Where(m => emails.Contains(m.ContactEmail!)).Select(m => m.Id).ToListAsync(Cancel));
+        var parcels = await QueryAsync("rival", db => db.Parcels.Where(p => result.TrackingCodes.Contains(p.TrackingCode)).ToListAsync(Cancel));
 
         Assert.Equal(3, shopIds.Count);
-        Assert.Equal(12, orders.Count);
-        Assert.All(orders, o => Assert.Equal(tenant.Id, o.TenantId));
-        Assert.All(orders, o => Assert.Contains(o.MerchantId, shopIds));
-        Assert.Contains(orders.GroupBy(o => o.DeliveryGroupId), delivery => delivery.Select(o => o.MerchantId).Distinct().Count() >= 2);
-        Assert.Contains(orders, o => o.AddedFee == tenant.ExtraShopFee);
+        Assert.Equal(12, parcels.Count);
+        Assert.All(parcels, p => Assert.Equal(tenant.Id, p.TenantId));
+        Assert.All(parcels, p => Assert.Contains(p.MerchantId, shopIds));
+        Assert.True(parcels.Select(p => p.MerchantId).Distinct().Count() >= 2);
+        Assert.All(parcels, p => Assert.True(p.DeliveryCharge >= 70));
+        Assert.Equal(parcels.Sum(p => p.TotalCharge), result.Charges);
     }
 
     [Fact]
     public async Task Each_run_gives_the_shops_a_new_key_and_the_old_one_stops_working()
     {
         WebAppFactory.RequireDatabase();
-        var tenant = (await factory.Services.GetRequiredService<ITenantCatalog>().FindBySlugAsync("chattogram", Cancel))!;
-        var first = await SimulatedShops.EnsureAsync(factory.Services, tenant, 1, new Random(3), TimeProvider.System, Cancel);
-        var second = await SimulatedShops.EnsureAsync(factory.Services, tenant, 1, new Random(3), TimeProvider.System, Cancel);
+        var tenant = await TenantAsync("rival");
+        var first = await SimulatedShops.EnsureAsync(Factory.Services, tenant, 1, new Random(3), TimeProvider.System, Cancel);
+        var second = await SimulatedShops.EnsureAsync(Factory.Services, tenant, 1, new Random(3), TimeProvider.System, Cancel);
 
         Assert.Equal(first[0].Id, second[0].Id);
         Assert.NotEqual(first[0].ApiKey, second[0].ApiKey);
-        using var old = factory.ClientFor(first[0].ApiKey);
-        using var current = factory.ClientFor(second[0].ApiKey);
+        using var old = Factory.ClientFor(first[0].ApiKey);
+        using var current = Factory.ClientFor(second[0].ApiKey);
         Assert.Equal(System.Net.HttpStatusCode.Unauthorized, (await old.GetAsync("/api/v1/areas", Cancel)).StatusCode);
         Assert.Equal(System.Net.HttpStatusCode.OK, (await current.GetAsync("/api/v1/areas", Cancel)).StatusCode);
     }
-
-    private static CancellationToken Cancel => TestContext.Current.CancellationToken;
 }

@@ -1,101 +1,88 @@
 @page
 @model Web.Pages.Merchant.WebhookModel
 @{
-    ViewData["Title"] = "Order updates";
+    ViewData["Title"] = "Webhooks";
     var settings = Model.Settings;
 }
 
 <div class="page-head">
     <div>
-        <p class="eyebrow">@settings.MerchantName</p>
-        <h1>Order updates</h1>
-        <p class="lead">
-            Your website can hear each time one of your orders moves on: collected, at the hub, out with the rider,
-            delivered, refused or back with you. We post it to an address of your website, signed so you know it is ours.
-        </p>
+        <h1>Webhooks</h1>
+        <p>Your website hears each time one of your parcels moves on. We post it to your address, signed so you know it is ours.</p>
     </div>
-    <a class="button ghost" asp-page="/Merchant/Orders">My orders</a>
 </div>
-
-<details class="help">
-    <summary>What your website receives, and how to check it</summary>
-    <p>A <strong>POST</strong> with a JSON body like this, one per change:</p>
-    <pre><code>{
-  "type": "order.status_changed",
-  "timestamp": "2026-09-30T11:32:05Z",
-  "data": { "number": "OD-100001", "externalReference": "WEB-1042", "status": "atHub" }
-}</code></pre>
-    <ul>
-        <li>
-            <strong>status</strong> is one of <code>pickedUp</code>, <code>atHub</code>, <code>outForDelivery</code>,
-            <code>delivered</code>, <code>refused</code>, <code>returnedToMerchant</code>, <code>cancelled</code>.
-            <strong>timestamp</strong> is when it happened (UTC); an update sent again after a failure can arrive after a
-            later one, so keep the latest timestamp.
-        </li>
-        <li>
-            The headers follow <a href="https://www.standardwebhooks.com/" rel="noopener">Standard Webhooks</a>, so its
-            libraries check them for you: <code>webhook-id</code> (the same when an update is sent again, so you can skip
-            one you already have), <code>webhook-timestamp</code> (Unix seconds) and <code>webhook-signature</code>.
-        </li>
-        <li>
-            To check by hand: take your secret without <code>whsec_</code>, decode it from base64, and compute HMAC-SHA256
-            of <code>{webhook-id}.{webhook-timestamp}.{body}</code> with it. <code>v1,</code> followed by the result in
-            base64 must equal the signature. Refuse a timestamp more than five minutes old.
-        </li>
-        <li>
-            Answer quickly with any status from 200 to 299. Otherwise we try again after 1, 2, 4 and 8 minutes,
-            then stop.
-        </li>
-    </ul>
-</details>
 
 @if (Model.Done is not null)
 {
-    <div class="notice @(Model.DoneOk ? "notice-ok" : "notice-problem")" role="status">@Model.Done</div>
+    <div class="alert @(Model.DoneOk ? "alert-success" : "alert-error")" role="status">@Icons.Get(Model.DoneOk ? "check-circle" : "alert")<div>@Model.Done</div></div>
 }
-
 @if (Model.Problem is not null)
 {
-    <div class="notice notice-problem" role="alert">@Model.Problem</div>
+    <div class="alert alert-error" role="alert">@Icons.Get("alert")<div>@Model.Problem</div></div>
 }
 
-<section class="card">
-    <h2><span class="step-no">1</span> Your website's address</h2>
-    <form method="post" asp-page-handler="Save">
-        <label asp-for="Address">Webhook address</label>
-        <input asp-for="Address" type="url" inputmode="url" placeholder="https://myshop.com.bd/onedrop/webhook" required />
-        <div class="door-actions">
-            <button type="submit" class="button">Save</button>
+<div class="grid grid-main">
+    <div class="stack">
+        <div class="card">
+            <div class="card-head"><h2>@Icons.Get("zap") Your website's address</h2></div>
+            <div class="card-body">
+                <form method="post" asp-page-handler="Save">
+                    <div class="field">
+                        <label asp-for="Address">Webhook address</label>
+                        <input asp-for="Address" type="url" inputmode="url" placeholder="https://myshop.com.bd/courier/webhook" required />
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </form>
+                @if (settings.Url is not null)
+                {
+                    <hr />
+                    <div class="spread">
+                        <span class="muted">Updates go to <strong>@settings.Url</strong></span>
+                        <span class="gap">
+                            <form method="post" asp-page-handler="Test" class="inline-form"><button type="submit" class="btn btn-outline btn-sm">Send a test</button></form>
+                            <form method="post" asp-page-handler="Remove" class="inline-form"><button type="submit" class="btn btn-danger btn-sm">Stop sending</button></form>
+                        </span>
+                    </div>
+                }
+            </div>
         </div>
-    </form>
-    @if (settings.Url is not null)
-    {
-        <form method="post" asp-page-handler="Remove">
-            <p class="muted">Updates go to <strong>@settings.Url</strong>.</p>
-            <button type="submit" class="button ghost compact">Stop sending updates</button>
-        </form>
-    }
-</section>
 
-@if (settings.Secret is not null)
-{
-    <section class="card">
-        <h2><span class="step-no">2</span> Your secret</h2>
-        <p>Your website checks each update's signature with this. Keep it on your server; never put it in a web page.</p>
-        <p><code class="secret">@settings.Secret</code></p>
-        <form method="post" asp-page-handler="Secret">
-            <button type="submit" class="button ghost compact">Make a new secret</button>
-        </form>
-    </section>
-}
+        @if (settings.Secret is not null)
+        {
+            <div class="card">
+                <div class="card-head"><h2>@Icons.Get("lock") Your secret</h2></div>
+                <div class="card-body">
+                    <p>Your website checks each update's signature with this. Keep it on your server; never put it in a web page.</p>
+                    <p><code style="word-break:break-all">@settings.Secret</code></p>
+                    <form method="post" asp-page-handler="Secret">
+                        <button type="submit" class="btn btn-outline btn-sm">Make a new secret</button>
+                    </form>
+                </div>
+            </div>
+        }
+    </div>
 
-@if (settings.Url is not null)
-{
-    <section class="card">
-        <h2><span class="step-no">3</span> Try it</h2>
-        <p>We send a <code>webhook.test</code> update now, signed like every other, and show what your website answers.</p>
-        <form method="post" asp-page-handler="Test">
-            <button type="submit" class="button">Send a test</button>
-        </form>
-    </section>
-}
+    <div class="card">
+        <div class="card-head"><h2>@Icons.Get("code") What your website receives</h2></div>
+        <div class="card-body">
+            <p>A <strong>POST</strong> with a JSON body, one per change:</p>
+            <pre style="background:var(--grey-soft);padding:12px;border-radius:8px;overflow:auto;font-size:12px"><code>{
+  "type": "parcel.status_changed",
+  "timestamp": "2026-10-04T11:32:05Z",
+  "data": {
+    "trackingCode": "OD10000001",
+    "merchantReference": "INV-1042",
+    "status": "delivered",
+    "codAmount": 1250,
+    "collectedAmount": 1250,
+    "deliveryCharge": 60,
+    "reason": null
+  }
+}</code></pre>
+            <p class="hint">Statuses: <code>pickedUp</code>, <code>atHub</code>, <code>inTransit</code>, <code>outForDelivery</code>, <code>onHold</code>, <code>delivered</code>, <code>partlyDelivered</code>, <code>returning</code>, <code>returned</code>, <code>cancelled</code>.</p>
+            <p class="hint">Headers follow <a href="https://www.standardwebhooks.com/" rel="noopener">Standard Webhooks</a>: <code>webhook-id</code>, <code>webhook-timestamp</code>, <code>webhook-signature</code>. Answer with a 2xx status; otherwise we try again after 1, 2, 4 and 8 minutes.</p>
+        </div>
+    </div>
+</div>

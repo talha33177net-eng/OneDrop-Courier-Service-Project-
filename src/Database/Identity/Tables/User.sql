@@ -1,16 +1,15 @@
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 -- TABLE: Identity.User
--- Purpose: Logins for every role. Staff sign in by email and password, customers by phone OTP with the phone as
---          user name. User names are unique per tenant (NULL TenantId = platform staff), so one phone
---          can be a customer in two cities. The Identity columns follow ASP.NET Core Identity exactly.
+-- Purpose: Logins for every role, by email and password. MerchantId is set for a merchant's users. User names are
+--          unique per tenant (NULL TenantId = platform staff), so one email can sign in at two couriers.
+--          The Identity columns follow ASP.NET Core Identity exactly.
 -- Author: Courier team
--- Date: 2026-09-27
+-- Date: 2026-10-04
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Identity].[User] (
     [Id]                   BIGINT             IDENTITY (1, 1) NOT NULL,
     [TenantId]             BIGINT             NULL,
     [MerchantId]           BIGINT             NULL,
-    [CustomerId]           BIGINT             NULL,
     [DisplayName]          NVARCHAR (200)     NOT NULL,
     [UserName]             NVARCHAR (256)     NULL,
     [NormalizedUserName]   NVARCHAR (256)     NULL,
@@ -30,8 +29,7 @@ CREATE TABLE [Identity].[User] (
     [Created]              DATETIME2 (0)      DEFAULT (getutcdate()) NOT NULL,
     PRIMARY KEY CLUSTERED ([Id] ASC),
     CONSTRAINT [FK_User_Tenant] FOREIGN KEY ([TenantId]) REFERENCES [Platform].[Tenant] ([Id]),
-    CONSTRAINT [FK_User_Merchant] FOREIGN KEY ([MerchantId]) REFERENCES [Merchants].[Merchant] ([Id]),
-    CONSTRAINT [FK_User_Customer] FOREIGN KEY ([CustomerId]) REFERENCES [Customers].[Customer] ([Id])
+    CONSTRAINT [FK_User_Merchant] FOREIGN KEY ([MerchantId]) REFERENCES [Merchants].[Merchant] ([Id])
 );
 
 
@@ -49,8 +47,3 @@ CREATE NONCLUSTERED INDEX [IX_User_NormalizedEmail]
 GO
 CREATE NONCLUSTERED INDEX [IX_User_MerchantId]
     ON [Identity].[User]([MerchantId] ASC) WHERE ([MerchantId] IS NOT NULL);
-
-
-GO
-CREATE NONCLUSTERED INDEX [IX_User_CustomerId]
-    ON [Identity].[User]([CustomerId] ASC) WHERE ([CustomerId] IS NOT NULL);

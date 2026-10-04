@@ -12,6 +12,7 @@ public class HubConfiguration : IEntityTypeConfiguration<Hub>
         builder.Property(h => h.Code).HasMaxLength(20);
         builder.Property(h => h.Name).HasMaxLength(200);
         builder.Property(h => h.Address).HasMaxLength(500);
+        builder.Property(h => h.Phone).HasMaxLength(20);
         builder.HasIndex(h => new { h.TenantId, h.Code }).IsUnique().HasDatabaseName("UX_Hub_Tenant_Code");
     }
 }
@@ -23,6 +24,7 @@ public class ZoneConfiguration : IEntityTypeConfiguration<Zone>
         builder.MapTenantOwned(Schemas.Network);
         builder.Property(z => z.Code).HasMaxLength(20);
         builder.Property(z => z.Name).HasMaxLength(200);
+        builder.Property(z => z.City).HasMaxLength(60);
         builder.HasOne(z => z.Hub).WithMany().HasForeignKey(z => z.HubId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(z => new { z.TenantId, z.Code }).IsUnique().HasDatabaseName("UX_Zone_Tenant_Code");
     }
@@ -36,19 +38,5 @@ public class AreaConfiguration : IEntityTypeConfiguration<Area>
         builder.Property(a => a.Name).HasMaxLength(200);
         builder.HasOne(a => a.Zone).WithMany().HasForeignKey(a => a.ZoneId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(a => new { a.TenantId, a.Name }).IsUnique().HasDatabaseName("UX_Area_Tenant_Name");
-    }
-}
-
-public class PickupRouteConfiguration : IEntityTypeConfiguration<PickupRoute>
-{
-    public void Configure(EntityTypeBuilder<PickupRoute> builder)
-    {
-        builder.MapTenantOwned(Schemas.Network);
-        builder.Property(r => r.PickupTime).HasColumnType("time(0)");
-        builder.HasOne(r => r.Zone).WithMany().HasForeignKey(r => r.ZoneId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasIndex(r => r.ZoneId)
-            .IsUnique()
-            .HasFilter("[Archived] = 0")
-            .HasDatabaseName("UX_PickupRoute_Zone_Active");
     }
 }

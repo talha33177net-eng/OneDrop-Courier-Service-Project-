@@ -4,15 +4,14 @@ using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
 using Application.Notifications;
 using Domain.Common;
-using Domain.Customers;
 using Domain.Delivery;
-using Domain.Grouping;
 using Domain.Merchants;
 using Domain.Network;
 using Domain.Notifications;
-using Domain.Orders;
+using Domain.Parcels;
 using Domain.Payments;
 using Domain.Platform;
+using Domain.Pricing;
 using Infrastructure.Identity;
 
 namespace Infrastructure.Persistence;
@@ -39,9 +38,9 @@ public class AppDbContext(
     public const string TenantFilter = QueryFilters.Tenant;
     public const string MerchantFilter = QueryFilters.Merchant;
 
-    /// <summary>What the operator's dashboards count: a save touching one of these tells them to read again.</summary>
+    /// <summary>What the courier's dashboards count: a save touching one of these tells them to read again.</summary>
     private static readonly Type[] Operations =
-        [typeof(Order), typeof(Package), typeof(DeliveryGroup), typeof(Trip), typeof(TripStop), typeof(Rider)];
+        [typeof(Parcel), typeof(PickupRequest), typeof(DeliveryRun), typeof(DeliveryAttempt), typeof(Rider)];
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
 
@@ -51,13 +50,7 @@ public class AppDbContext(
 
     public DbSet<Area> Areas => Set<Area>();
 
-    public DbSet<PickupRoute> PickupRoutes => Set<PickupRoute>();
-
-    public DbSet<Customer> Customers => Set<Customer>();
-
-    public DbSet<CustomerAddress> CustomerAddresses => Set<CustomerAddress>();
-
-    public DbSet<PhoneOtp> PhoneOtps => Set<PhoneOtp>();
+    public DbSet<DeliveryRate> DeliveryRates => Set<DeliveryRate>();
 
     public DbSet<Merchant> Merchants => Set<Merchant>();
 
@@ -65,27 +58,23 @@ public class AppDbContext(
 
     public DbSet<PickupPoint> PickupPoints => Set<PickupPoint>();
 
-    public DbSet<Order> Orders => Set<Order>();
+    public DbSet<Parcel> Parcels => Set<Parcel>();
 
-    public DbSet<Package> Packages => Set<Package>();
-
-    public DbSet<OrderStatusHistory> OrderStatusHistory => Set<OrderStatusHistory>();
-
-    public DbSet<DeliveryGroup> DeliveryGroups => Set<DeliveryGroup>();
-
-    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<ParcelEvent> ParcelEvents => Set<ParcelEvent>();
 
     public DbSet<Rider> Riders => Set<Rider>();
 
-    public DbSet<Trip> Trips => Set<Trip>();
+    public DbSet<PickupRequest> PickupRequests => Set<PickupRequest>();
 
-    public DbSet<TripStop> TripStops => Set<TripStop>();
+    public DbSet<DeliveryRun> DeliveryRuns => Set<DeliveryRun>();
 
-    public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<DeliveryAttempt> DeliveryAttempts => Set<DeliveryAttempt>();
 
     public DbSet<LedgerEntry> LedgerEntries => Set<LedgerEntry>();
 
-    public DbSet<Settlement> Settlements => Set<Settlement>();
+    public DbSet<Payout> Payouts => Set<Payout>();
+
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     /// <summary>Read by the tenant filter at query time. Null means "no tenant", which matches no row.</summary>
     public long? CurrentTenantId => tenantContext.TenantId;
@@ -159,7 +148,7 @@ public class AppDbContext(
         try
         {
             var saved = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
-            OutboxMessages.AddRange(raisers.SelectMany(entity => entity.GetDomainEvents()).Select(OutboxContracts.ToOutbox));
+            OutboxMessages.AddRange(raisers.SelectMany(entity => entity.GetDomainEvents()).SelectMany(OutboxContracts.ToOutbox));
             saved += await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
             if (transaction is not null)
             {

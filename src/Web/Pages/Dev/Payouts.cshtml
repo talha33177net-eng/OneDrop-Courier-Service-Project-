@@ -1,0 +1,39 @@
+@page
+@model Web.Pages.Dev.PayoutsModel
+@{
+    ViewData["Title"] = "Payouts sent";
+}
+
+<div class="page-head">
+    <div>
+        <h1>Payouts sent</h1>
+        <p>Development only. The fake payout gateway lists here what it would have sent to merchants' bKash, Nagad or bank accounts.</p>
+    </div>
+</div>
+
+<div class="card">
+    @if (Model.Payouts.Count == 0)
+    {
+        <div class="empty">@Icons.Get("wallet")<h3>No payouts yet</h3><p>Run them from the admin's Merchant payouts page.</p></div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Sent (UTC)</th><th>To</th><th class="num">Amount</th><th>Key</th><th>Reference</th></tr></thead>
+                <tbody>
+                    @foreach (var payout in Model.Payouts)
+                    {
+                        <tr>
+                            <td class="nowrap">@payout.SentOn.ToString("d MMM HH:mm:ss")</td>
+                            <td>@payout.Account</td>
+                            <td class="num">@Money.Taka(payout.Amount)</td>
+                            <td><code>@payout.Key</code></td>
+                            <td class="cell-sub">@payout.Reference</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

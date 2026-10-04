@@ -3,8 +3,8 @@ using Microsoft.AspNetCore.Identity;
 namespace Infrastructure.Identity;
 
 /// <summary>
-/// A login. Staff sign in with email and password; customers with a phone OTP, their phone being the user
-/// name. User names are unique per tenant, so the same phone can be a customer in Dhaka and in Chattogram.
+/// A login: email and password, for every role. User names are unique per tenant, so the same email can sign in at two
+/// couriers.
 /// </summary>
 public class AppUser : IdentityUser<long>
 {
@@ -13,9 +13,6 @@ public class AppUser : IdentityUser<long>
 
     /// <summary>Set for merchant users: everything they see is filtered to this merchant.</summary>
     public long? MerchantId { get; set; }
-
-    /// <summary>Set for customers who signed in with a phone OTP.</summary>
-    public long? CustomerId { get; set; }
 
     public string DisplayName { get; set; } = "";
 

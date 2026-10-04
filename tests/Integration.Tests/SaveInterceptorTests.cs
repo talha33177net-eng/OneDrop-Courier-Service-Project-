@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Application.Abstractions;
-using Domain.Customers;
+using Domain.Delivery;
 using Domain.Network;
 using Infrastructure.MultiTenancy;
 using Infrastructure.Persistence;
@@ -15,20 +15,20 @@ public class SaveInterceptorTests(WebAppFactory factory)
     public async Task Changing_another_tenants_row_is_refused()
     {
         WebAppFactory.RequireDatabase();
-        await using var scope = await ScopeForAsync("chattogram");
+        await using var scope = await ScopeForAsync("rival");
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var dhaka = await TenantIdAsync("dhaka");
-        Hub dhakaHub;
+        var onedrop = await TenantIdAsync("onedrop");
+        Hub onedropHub;
         await using (await db.AcrossTenantsAsync(TestContext.Current.CancellationToken))
         {
-            dhakaHub = await db.Hubs
+            onedropHub = await db.Hubs
                 .IgnoreQueryFilters([AppDbContext.TenantFilter])
-                .FirstAsync(h => h.TenantId == dhaka);
+                .FirstAsync(h => h.TenantId == onedrop, TestContext.Current.CancellationToken);
         }
 
-        db.Entry(dhakaHub).Property(h => h.Name).CurrentValue = "Hijacked";
+        db.Entry(onedropHub).Property(h => h.Name).CurrentValue = "Hijacked";
 
-        var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync());
+        var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync(TestContext.Current.CancellationToken));
         Assert.Contains("Refused to write Hub", refused.Message);
     }
 
@@ -36,16 +36,16 @@ public class SaveInterceptorTests(WebAppFactory factory)
     public async Task A_new_row_takes_the_current_tenant()
     {
         WebAppFactory.RequireDatabase();
-        await using var scope = await ScopeForAsync("chattogram");
+        await using var scope = await ScopeForAsync("rival");
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var phone = PhoneNumber.Parse("019" + Random.Shared.Next(0, 100_000_000).ToString("D8")).Value;
+        var hubId = await db.Hubs.Select(h => h.Id).FirstAsync(TestContext.Current.CancellationToken);
 
-        var customer = new Customer(phone, "Interceptor test");
-        db.Customers.Add(customer);
-        await db.SaveChangesAsync();
+        var rider = Rider.Create(hubId, "Interceptor test", "01900000000", null).Value;
+        db.Riders.Add(rider);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(await TenantIdAsync("chattogram"), customer.TenantId);
-        Assert.NotEqual(default, customer.Created);
+        Assert.Equal(await TenantIdAsync("rival"), rider.TenantId);
+        Assert.NotEqual(default, rider.Created);
     }
 
     [Fact]
@@ -55,9 +55,9 @@ public class SaveInterceptorTests(WebAppFactory factory)
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        db.Customers.Add(new Customer(PhoneNumber.Parse("01900000000").Value, null));
+        db.Riders.Add(Rider.Create(1, "No tenant", "01900000000", null).Value);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -67,16 +67,16 @@ public class SaveInterceptorTests(WebAppFactory factory)
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        Assert.Equal(0, await db.Hubs.CountAsync());
+        Assert.Equal(0, await db.Hubs.CountAsync(TestContext.Current.CancellationToken));
         await using (await db.AcrossTenantsAsync(TestContext.Current.CancellationToken))
         {
-            Assert.True(await db.Hubs.IgnoreQueryFilters([AppDbContext.TenantFilter]).AnyAsync());
+            Assert.True(await db.Hubs.IgnoreQueryFilters([AppDbContext.TenantFilter]).AnyAsync(TestContext.Current.CancellationToken));
         }
     }
 
     private async Task<AsyncServiceScope> ScopeForAsync(string slug)
     {
-        var tenant = await factory.Services.GetRequiredService<ITenantCatalog>().FindBySlugAsync(slug);
+        var tenant = await factory.Services.GetRequiredService<ITenantCatalog>().FindBySlugAsync(slug, TestContext.Current.CancellationToken);
         var scope = factory.Services.CreateAsyncScope();
         scope.ServiceProvider.GetRequiredService<TenantContext>().Set(tenant!);
 
@@ -85,7 +85,7 @@ public class SaveInterceptorTests(WebAppFactory factory)
 
     private async Task<long> TenantIdAsync(string slug)
     {
-        var tenant = await factory.Services.GetRequiredService<ITenantCatalog>().FindBySlugAsync(slug);
+        var tenant = await factory.Services.GetRequiredService<ITenantCatalog>().FindBySlugAsync(slug, TestContext.Current.CancellationToken);
 
         return tenant!.Id;
     }

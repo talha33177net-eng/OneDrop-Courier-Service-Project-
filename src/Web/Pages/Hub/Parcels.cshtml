@@ -1,0 +1,54 @@
+@page
+@model Web.Pages.Hub.ParcelsModel
+@{
+    ViewData["Title"] = "Parcels";
+}
+
+<div class="page-head">
+    <div>
+        <h1>Parcels</h1>
+        <p>Every merchant's parcels, newest first.</p>
+    </div>
+</div>
+
+<div class="card">
+    <partial name="_ParcelTabs" model="Model.List.Counts" />
+    <form class="filters" method="get">
+        <input type="hidden" name="tab" value="@Model.Tab" />
+        <div class="field grow">
+            <label for="search">Search</label>
+            <input type="search" id="search" name="search" value="@Model.Search" placeholder="Tracking code, invoice, recipient name or phone" />
+        </div>
+        <div class="field">
+            <label for="merchantId">Merchant</label>
+            <select id="merchantId" name="merchantId">
+                <option value="">All merchants</option>
+                @foreach (var (id, name) in Model.Merchants)
+                {
+                    <option value="@id" selected="@(id == Model.MerchantId)">@name</option>
+                }
+            </select>
+        </div>
+        <div class="field">
+            <label for="hubId">Hub</label>
+            <select id="hubId" name="hubId">
+                <option value="">All hubs</option>
+                @foreach (var hub in Model.Hubs)
+                {
+                    <option value="@hub.Id" selected="@(hub.Id == Model.HubId)">@hub.Name</option>
+                }
+            </select>
+        </div>
+        <div class="field">
+            <label for="from">Booked from</label>
+            <input type="date" id="from" name="from" value="@Model.From?.ToString("yyyy-MM-dd")" />
+        </div>
+        <div class="field">
+            <label for="to">to</label>
+            <input type="date" id="to" name="to" value="@Model.To?.ToString("yyyy-MM-dd")" />
+        </div>
+        <button class="btn btn-outline" type="submit">@Icons.Get("search") Filter</button>
+    </form>
+    @await Html.PartialAsync("_ParcelTable", (Model.List.Page.Items, "/Hub/Parcel/", true, false))
+    <partial name="_Pager" model="(Model.List.Page.Number, Model.List.Page.Pages, Model.List.Page.Total)" />
+</div>

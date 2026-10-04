@@ -8,8 +8,6 @@ public interface ICurrentUser
 {
     long? UserId { get; }
 
-    /// <summary>Set for merchant portal users and API keys. Switches on the merchant filter.</summary>
+    /// <summary>Set for merchant panel users and API keys. Switches on the merchant filter.</summary>
     long? MerchantId { get; }
-
-    long? CustomerId { get; }
 }

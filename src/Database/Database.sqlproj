@@ -31,16 +31,15 @@
     <ProjectGuid>{def293bc-c319-4efa-bfc3-af22b92a00e3}</ProjectGuid>
   </PropertyGroup>
   <ItemGroup>
-    <Build Include="Security/Customers.sql" />
     <Build Include="Security/Delivery.sql" />
-    <Build Include="Security/Grouping.sql" />
     <Build Include="Security/Identity.sql" />
     <Build Include="Security/Merchants.sql" />
     <Build Include="Security/Network.sql" />
     <Build Include="Security/Notifications.sql" />
-    <Build Include="Security/Orders.sql" />
+    <Build Include="Security/Parcels.sql" />
     <Build Include="Security/Payments.sql" />
     <Build Include="Security/Platform.sql" />
+    <Build Include="Security/Pricing.sql" />
     <Build Include="Platform/Tables/Tenant.sql" />
     <Build Include="Identity/Tables/Role.sql" />
     <Build Include="Identity/Tables/RoleClaim.sql" />
@@ -51,27 +50,22 @@
     <Build Include="Identity/Tables/UserToken.sql" />
     <Build Include="Network/Tables/Area.sql" />
     <Build Include="Network/Tables/Hub.sql" />
-    <Build Include="Network/Tables/PickupRoute.sql" />
     <Build Include="Network/Tables/Zone.sql" />
-    <Build Include="Customers/Tables/Customer.sql" />
-    <Build Include="Customers/Tables/CustomerAddress.sql" />
-    <Build Include="Customers/Tables/PhoneOtp.sql" />
+    <Build Include="Pricing/Tables/DeliveryRate.sql" />
     <Build Include="Merchants/Tables/Merchant.sql" />
     <Build Include="Merchants/Tables/MerchantApiKey.sql" />
     <Build Include="Merchants/Tables/PickupPoint.sql" />
-    <Build Include="Orders/Sequences/OrderNumber.sql" />
-    <Build Include="Orders/Tables/Order.sql" />
-    <Build Include="Orders/Tables/OrderStatusHistory.sql" />
-    <Build Include="Orders/Tables/Package.sql" />
-    <Build Include="Grouping/Sequences/DeliveryGroupNumber.sql" />
-    <Build Include="Grouping/Tables/DeliveryGroup.sql" />
+    <Build Include="Parcels/Sequences/TrackingNumber.sql" />
+    <Build Include="Parcels/Tables/Parcel.sql" />
+    <Build Include="Parcels/Tables/ParcelEvent.sql" />
     <Build Include="Notifications/Tables/OutboxMessage.sql" />
     <Build Include="Delivery/Tables/Rider.sql" />
-    <Build Include="Delivery/Tables/Trip.sql" />
-    <Build Include="Delivery/Tables/TripStop.sql" />
-    <Build Include="Payments/Tables/Payment.sql" />
+    <Build Include="Delivery/Tables/PickupRequest.sql" />
+    <Build Include="Delivery/Tables/DeliveryRun.sql" />
+    <Build Include="Delivery/Tables/DeliveryAttempt.sql" />
+    <Build Include="Payments/Sequences/PayoutNumber.sql" />
     <Build Include="Payments/Tables/LedgerEntry.sql" />
-    <Build Include="Payments/Tables/Settlement.sql" />
+    <Build Include="Payments/Tables/Payout.sql" />
     <Build Include="Platform/Functions/TenantAccess.sql" />
     <Build Include="Platform/Security Policies/TenantIsolation.sql" />
   </ItemGroup>
@@ -91,21 +85,19 @@
     <Folder Include="Identity\Tables\" />
     <Folder Include="Network\" />
     <Folder Include="Network\Tables\" />
-    <Folder Include="Customers\" />
-    <Folder Include="Customers\Tables\" />
+    <Folder Include="Pricing\" />
+    <Folder Include="Pricing\Tables\" />
     <Folder Include="Merchants\" />
     <Folder Include="Merchants\Tables\" />
-    <Folder Include="Orders\" />
-    <Folder Include="Orders\Sequences\" />
-    <Folder Include="Orders\Tables\" />
-    <Folder Include="Grouping\" />
-    <Folder Include="Grouping\Sequences\" />
-    <Folder Include="Grouping\Tables\" />
+    <Folder Include="Parcels\" />
+    <Folder Include="Parcels\Sequences\" />
+    <Folder Include="Parcels\Tables\" />
     <Folder Include="Notifications\" />
     <Folder Include="Notifications\Tables\" />
     <Folder Include="Delivery\" />
     <Folder Include="Delivery\Tables\" />
     <Folder Include="Payments\" />
+    <Folder Include="Payments\Sequences\" />
     <Folder Include="Payments\Tables\" />
   </ItemGroup>
 </Project>

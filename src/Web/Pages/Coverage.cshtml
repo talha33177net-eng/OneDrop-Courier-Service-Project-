@@ -1,0 +1,51 @@
+@page
+@model CoverageModel
+@{
+    ViewData["Title"] = "Coverage";
+    var cities = Model.Hubs
+        .SelectMany(h => h.Zones.Select(z => (Hub: h, Zone: z)))
+        .GroupBy(x => x.Zone.City)
+        .OrderByDescending(g => g.Count())
+        .ThenBy(g => g.Key)
+        .ToList();
+}
+
+<section class="hero">
+    <div class="site-section">
+        <span class="eyebrow">Coverage</span>
+        <h1>Where we deliver</h1>
+        <p class="lead">@cities.Count cities and @Model.Hubs.Sum(h => h.Zones.Sum(z => z.Areas.Count)) areas, served from @Model.Hubs.Count hubs.</p>
+    </div>
+</section>
+
+<section class="site-section" style="padding-top:32px">
+    <div class="grid grid-2">
+        @foreach (var city in cities)
+        {
+            <div class="card">
+                <div class="card-head">
+                    <h2>@Icons.Get("map-pin") @city.Key</h2>
+                    <span class="muted">@city.Sum(x => x.Zone.Areas.Count) areas</span>
+                </div>
+                <div class="card-body stack">
+                    @foreach (var item in city.OrderBy(x => x.Zone.Suburb).ThenBy(x => x.Zone.Name))
+                    {
+                        var (hub, zone) = (item.Hub, item.Zone);
+                        <div>
+                            <div class="spread">
+                                <strong>@zone.Name @if (zone.Suburb) { <span class="badge badge-transit plain">Suburb</span> }</strong>
+                                <span class="muted">@hub.Name</span>
+                            </div>
+                            <div class="pill-row mt" style="margin-top:8px">
+                                @foreach (var area in zone.Areas)
+                                {
+                                    <span class="pill">@area</span>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</section>

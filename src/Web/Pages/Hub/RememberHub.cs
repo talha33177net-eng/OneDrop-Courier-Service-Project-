@@ -4,9 +4,9 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 namespace Web.Pages.Hub;
 
 /// <summary>
-/// Remembers the hub staff last worked at, so the hub's step bar and "Hub today" open on it without asking again.
-/// Only a preference: every hub page still checks the hub is this operator's, and the cookie is only written after a
-/// page with that hub has rendered. Host-only, like the sign-in cookie, so it stays with its operator.
+/// Remembers the hub staff last worked at, so every hub page opens on it without asking again. Only a preference: every
+/// hub page still checks the hub is this courier's, and the cookie is only written after a page with that hub has
+/// rendered. Host-only, like the sign-in cookie, so it stays with its courier.
 /// </summary>
 public sealed class RememberHub : IAsyncPageFilter
 {

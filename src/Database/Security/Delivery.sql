@@ -1,8 +1,8 @@
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 -- SCHEMA: Delivery
--- Purpose: Riders and their trips: which rider takes which delivery out on which day
+-- Purpose: Riders, their pickups and their daily delivery runs
 -- Author: Courier team
--- Date: 2026-09-28
+-- Date: 2026-10-04
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE SCHEMA [Delivery]
     AUTHORIZATION [dbo];

@@ -1,9 +1,9 @@
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 -- TABLE: Network.Hub
--- Purpose: A small local warehouse where parcels are scanned, shelved and grouped per customer. A hub serves one
---          or more zones (Network.Zone.HubId); a customer's delivery group is built at their zone's hub.
+-- Purpose: A branch where parcels are received, sorted, sent on to other hubs and handed to riders. A hub serves one
+--          or more zones (Network.Zone.HubId): it collects from the pickup points and delivers to the areas there.
 -- Author: Courier team
--- Date: 2026-09-27
+-- Date: 2026-10-04
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Network].[Hub] (
     [Id]        BIGINT         IDENTITY (1, 1) NOT NULL,
@@ -11,6 +11,7 @@ CREATE TABLE [Network].[Hub] (
     [Code]      NVARCHAR (20)  NOT NULL,
     [Name]      NVARCHAR (200) NOT NULL,
     [Address]   NVARCHAR (500) NOT NULL,
+    [Phone]     NVARCHAR (20)  NOT NULL,
     [Archived]  BIT            DEFAULT ((0)) NOT NULL,
     [UpdatedId] BIGINT         NULL,
     [UpdatedOn] DATETIME2 (7)  DEFAULT (getutcdate()) NOT NULL,

@@ -1,8 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Domain.Delivery;
-using Domain.Grouping;
+using Domain.Merchants;
 using Domain.Network;
+using Domain.Parcels;
 using Infrastructure.Identity;
 
 namespace Infrastructure.Persistence.Configurations;
@@ -14,7 +15,6 @@ public class RiderConfiguration : IEntityTypeConfiguration<Rider>
         builder.MapTenantOwned(Schemas.Delivery);
         builder.Property(r => r.Name).HasMaxLength(200);
         builder.Property(r => r.Phone).HasMaxLength(20);
-        builder.Ignore(r => r.Limit);
         builder.HasOne<Hub>().WithMany().HasForeignKey(r => r.HubId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<AppUser>().WithMany().HasForeignKey(r => r.UserId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(r => r.UserId)
@@ -24,35 +24,51 @@ public class RiderConfiguration : IEntityTypeConfiguration<Rider>
     }
 }
 
-public class TripConfiguration : IEntityTypeConfiguration<Trip>
+public class DeliveryRunConfiguration : IEntityTypeConfiguration<DeliveryRun>
 {
-    public void Configure(EntityTypeBuilder<Trip> builder)
+    public void Configure(EntityTypeBuilder<DeliveryRun> builder)
     {
         builder.MapTenantOwned(Schemas.Delivery);
-        builder.Property(t => t.CashExpected).HasPrecision(12, 2);
-        builder.Property(t => t.CashReceived).HasPrecision(12, 2);
-        builder.Ignore(t => t.CashShort);
-        builder.Property(t => t.RowVersion).IsRowVersion();
-        builder.HasOne<Rider>().WithMany().HasForeignKey(t => t.RiderId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne<Hub>().WithMany().HasForeignKey(t => t.HubId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasIndex(t => new { t.RiderId, t.DeliveryDate })
-            .IsUnique()
-            .HasDatabaseName("UX_Trip_Rider_DeliveryDate");
+        builder.Property(r => r.CashExpected).HasPrecision(12, 2);
+        builder.Property(r => r.CashReceived).HasPrecision(12, 2);
+        builder.Ignore(r => r.CashShort);
+        builder.Property(r => r.RowVersion).IsRowVersion();
+        builder.HasOne<Rider>().WithMany().HasForeignKey(r => r.RiderId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Hub>().WithMany().HasForeignKey(r => r.HubId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(r => new { r.RiderId, r.RunDate }).IsUnique().HasDatabaseName("UX_DeliveryRun_Rider_RunDate");
     }
 }
 
-public class TripStopConfiguration : IEntityTypeConfiguration<TripStop>
+public class DeliveryAttemptConfiguration : IEntityTypeConfiguration<DeliveryAttempt>
 {
-    public void Configure(EntityTypeBuilder<TripStop> builder)
+    public void Configure(EntityTypeBuilder<DeliveryAttempt> builder)
     {
         builder.MapTenantOwned(Schemas.Delivery);
-        builder.Property(s => s.FeeCollected).HasPrecision(10, 2);
-        builder.Property(s => s.CodCollected).HasPrecision(12, 2);
-        builder.HasOne<Trip>().WithMany().HasForeignKey(s => s.TripId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne<DeliveryGroup>().WithMany().HasForeignKey(s => s.DeliveryGroupId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne(s => s.Payment).WithMany().HasForeignKey(s => s.PaymentId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasIndex(s => new { s.DeliveryGroupId, s.DeliveryDate })
+        builder.Property(a => a.CollectedAmount).IsMoney();
+        builder.Property(a => a.Reason).HasMaxLength(200);
+        builder.Ignore(a => a.IsDone);
+        builder.HasOne<DeliveryRun>().WithMany().HasForeignKey(a => a.RunId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Rider>().WithMany().HasForeignKey(a => a.RiderId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Parcel>().WithMany().HasForeignKey(a => a.ParcelId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Merchant>().WithMany().HasForeignKey(a => a.MerchantId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(a => a.ParcelId)
             .IsUnique()
-            .HasDatabaseName("UX_TripStop_DeliveryGroup_DeliveryDate");
+            .HasFilter("[Outcome] IS NULL")
+            .HasDatabaseName("UX_DeliveryAttempt_Parcel_Open");
+    }
+}
+
+public class PickupRequestConfiguration : IEntityTypeConfiguration<PickupRequest>
+{
+    public void Configure(EntityTypeBuilder<PickupRequest> builder)
+    {
+        builder.MapTenantOwned(Schemas.Delivery);
+        builder.Property(r => r.Note).HasMaxLength(300);
+        builder.Property(r => r.RowVersion).IsRowVersion();
+        builder.Ignore(r => r.IsOpen);
+        builder.HasOne<Merchant>().WithMany().HasForeignKey(r => r.MerchantId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<PickupPoint>().WithMany().HasForeignKey(r => r.PickupPointId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Hub>().WithMany().HasForeignKey(r => r.HubId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Rider>().WithMany().HasForeignKey(r => r.RiderId).OnDelete(DeleteBehavior.Restrict);
     }
 }

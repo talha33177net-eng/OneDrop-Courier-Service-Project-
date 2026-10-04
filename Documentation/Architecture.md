@@ -1,7 +1,7 @@
 # How it fits together
 
-Diagrams of the system as built at the end of the 4-week MVP. GitHub draws the Mermaid blocks; any Mermaid viewer
-works too. The words behind them are in [Project-Context.md](Project-Context.md).
+Diagrams of the courier system as built. GitHub draws the Mermaid blocks; any Mermaid viewer works too. The words
+behind them are in [Project-Context.md](Project-Context.md).
 
 ## 1. One application, four layers
 
@@ -11,34 +11,35 @@ schema belongs to a SQL project, not to EF migrations.
 ```mermaid
 flowchart TB
     subgraph Users["Who uses it"]
-        Shop["Shop website or Facebook seller"]
-        Customer["Customer on a phone"]
-        Staff["Hub staff, riders, operator admin"]
+        Shop["Merchant: website, Facebook page, spreadsheet"]
+        Public["Recipient: tracking page, SMS"]
+        Staff["Hub staff, riders, courier admin"]
     end
 
     subgraph Web["Web (ASP.NET Core)"]
-        Api["REST API /api/v1<br/>API key per shop"]
-        Pages["Razor Pages portals<br/>shop, customer, hub, rider, admin"]
+        Api["REST API /api/v1<br/>API key per merchant"]
+        Pages["Razor Pages panels<br/>merchant, hub, rider, admin, public site"]
         Live["SignalR /hubs/operations<br/>live dashboards"]
     end
 
     subgraph App["Application"]
-        Slices["Use cases, one folder each<br/>CreateOrder, DeliveryGrouping, HubScan,<br/>Door, SettleMerchants, ShopWindow ..."]
-        Jobs["Tenant jobs<br/>lock, plan trips, settle, outbox"]
+        Slices["Use cases, one folder each<br/>CreateParcel, BulkImport, HubScan,<br/>AssignParcels, RiderDay, RunPayouts ..."]
+        Jobs["Tenant jobs<br/>payouts, texts, webhooks"]
     end
 
-    Domain["Domain<br/>Order, DeliveryGroup, Trip, Payment, LedgerEntry,<br/>DeliveryFeeCalculator ... no packages"]
+    Domain["Domain<br/>Parcel, DeliveryRate, DeliveryRun, PickupRequest,<br/>LedgerEntry, Payout, Merchant ... no packages"]
 
     subgraph Infra["Infrastructure"]
         Ef["EF Core AppDbContext<br/>query filters, save interceptor,<br/>tenant session, outbox writer"]
-        Adapters["Adapters: SMS, payment gateway,<br/>payout gateway, webhooks"]
+        Adapters["Adapters: SMS, payout gateway, webhooks"]
         Hangfire["Hangfire + OutboxDispatcher"]
     end
 
     Sql[("SQL Server<br/>schema from the SQL project + DbUp<br/>Row-Level Security")]
 
     Shop --> Api
-    Customer --> Pages
+    Shop --> Pages
+    Public --> Pages
     Staff --> Pages
     Staff --> Live
     Api --> Slices
@@ -53,124 +54,134 @@ flowchart TB
 
 | Project | Depends on | Holds |
 |---|---|---|
-| `src/Domain` | nothing | entities, state machines, fee calculator, trust and drop-off rules |
+| `src/Domain` | nothing | entities, the parcel state machine, the rate card and charges, runs and attempts, ledger and payouts |
 | `src/Application` | Domain (+ EF Core for LINQ) | use cases, jobs, interfaces for the outside world |
-| `src/Infrastructure` | Application | EF mapping, tenancy, Identity, fake SMS/payment/payout gateways, webhooks, Hangfire |
+| `src/Infrastructure` | Application | EF mapping, tenancy, Identity, fake SMS and payout gateways, webhooks, Hangfire, demo seeder |
 | `src/Web` | Infrastructure | pages, API, SignalR, composition root |
 | `src/Database`, `src/Database Update` | — | the schema (dacpac) and data migrations (DbUp) |
 
-The project references allow only these directions, so a business rule cannot reach the database or the web.
-`tests/Architecture.Tests` fails when an entity outside `Platform` has no `TenantId`, or a SQL file is missing from the
-SQL project or its standard header.
+## 2. The life of one parcel
 
-## 2. The life of one delivery
-
-Two shops, one customer, one rider, one fee. The money at the door is the delivery fee (OneDrop's) and the cash on
-delivery (the shops'); the shops are paid their COD the next day.
+A parcel booked in Mirpur for a recipient in Gulshan: picked up by a Mirpur rider, sent to the Gulshan hub, delivered
+there, and the merchant paid the next day.
 
 ```mermaid
 sequenceDiagram
-    autonumber
-    participant A as Shop A
-    participant B as Shop B
-    participant OD as OneDrop
-    participant C as Customer
-    participant H as Hub
-    participant R as Rider
+    actor M as Merchant
+    participant App as OneDrop
+    actor PR as Pickup rider (MIR)
+    participant MIR as Mirpur hub
+    participant GUL as Gulshan hub
+    actor DR as Delivery rider (GUL)
+    actor R as Recipient
 
-    A->>OD: Quote, then Create Order (phone + address)
-    OD-->>A: fee ৳60
-    OD->>C: SMS "joined delivery DG-…, add from any OneDrop shop for +৳25"
-    B->>OD: Create Order, same phone + address
-    OD-->>B: fee ৳25 (never told about Shop A)
-    C->>OD: optional Ship now (deliver tomorrow, +৳10 on Day 1)
-    Note over OD: End of Day 2, or Ship now: the delivery locks
-    H->>A: pickup route collects (scan "Collect")
-    H->>B: pickup route collects
-    H->>H: scan "Receive": both parcels on one shelf (MIR-04)
-    OD->>R: plan trips: the delivery on a rider's trip
-    R->>H: Start trip: takes every order whose parcels are all here
-    R->>C: one stop: fee ৳95 + COD, cash or bKash/Nagad QR
-    C-->>R: pays exactly what is due ("no fee, no handover")
-    OD->>C: SMS receipt
-    R->>H: hands in the day's cash
-    Note over OD: Next morning, settle job
-    OD->>A: payout = COD - charges
-    OD->>B: payout = COD - charges
+    M->>App: Book parcel (form, CSV or API) - charges from the rate card
+    M->>App: Request pickup
+    MIR->>App: Assign the pickup to a rider
+    PR->>App: Collected (scans each parcel) - Picked up
+    PR->>MIR: Brings the parcels
+    MIR->>App: Receive scan - At hub
+    MIR->>App: Dispatch scan to GUL - In transit
+    GUL->>App: Receive scan - At hub
+    GUL->>App: Assign to rider (opens the rider's run) - Out for delivery
+    App-->>R: SMS: out for delivery, rider's name and phone, cash to keep ready
+    DR->>R: At the door
+    DR->>App: Delivered, cash collected - ledger: COD, delivery charge, COD charge
+    App-->>R: SMS: delivered
+    DR->>GUL: Hands in the cash
+    GUL->>App: Close the run with the cash received (shortfall recorded)
+    App->>M: Next day: payout of COD less charges (INV- invoice)
 ```
 
-## 3. Delivery states
-
-A delivery group opens with the customer's first order to an address and is the unit the hub shelves and the rider
-delivers. Orders have their own states (`Created` → `PickedUp` → `AtHub` → `OutForDelivery` → `Delivered`, or
-`Refused` → `ReturnedToMerchant`, or `Cancelled`).
+## 3. Parcel states
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Open: first waiting order
-    [*] --> Locked: Deliver fast or Don't hold order (next day)
-    Open --> Locked: end of Day 2, or Ship now
-    Open --> Cancelled: combined into another delivery
-    Locked --> Cancelled: combined into another delivery
-    Locked --> Dispatched: rider presses Start trip
-    Dispatched --> Delivered: handed over and paid
-    Dispatched --> Locked: nobody home (one free re-attempt)
-    Dispatched --> Cancelled: everything refused, or nobody home twice
+    [*] --> Pending: booked
+    Pending --> Cancelled: merchant cancels
+    Pending --> PickedUp: rider collects
+    Pending --> AtHub: merchant drops it at a hub
+    PickedUp --> AtHub: receive scan
+    AtHub --> InTransit: dispatch to the delivery hub
+    InTransit --> AtHub: receive scan
+    AtHub --> OutForDelivery: assigned to a rider
+    OutForDelivery --> Delivered
+    OutForDelivery --> PartlyDelivered: part of the order kept
+    OutForDelivery --> OnHold: not reachable, reschedule
+    OnHold --> OutForDelivery: next attempt
+    OutForDelivery --> Returning: refused, or the last attempt failed
+    AtHub --> Returning: merchant asks for it back
+    Returning --> Returned: handed back at the pickup hub
     Delivered --> [*]
+    PartlyDelivered --> [*]
+    Returned --> [*]
     Cancelled --> [*]
 ```
 
-`Kind` tells what a locked delivery may still take: `Waiting` (the 3-day kind) takes nothing once locked;
-`NextDay`, `ShippedNow` and `FollowUp` still take the customer's orders while the new order's pickup route reaches the
-hub before the delivery's trip.
+Where a parcel is lives beside its status: `CurrentHubId` (on a hub's shelf), `TransferToHubId` (on the way between
+hubs) or `RiderId` (with a rider); at most one is set, which the database checks. A hold is allowed while attempts
+remain (the courier's `MaxDeliveryAttempts`, 3); the last failed attempt sends it back. A returning parcel travels
+back through the hubs to its pickup hub and is handed back there.
 
-## 4. Keeping operators apart
-
-Three layers, so a bug in one is still caught by the next. Inside an operator a fourth rule hides each shop's orders
-from every other shop.
+## 4. Money
 
 ```mermaid
 flowchart LR
-    Req["Request"] --> Resolve{"Tenant from<br/>subdomain or API key"}
-    Resolve --> L1["1. EF query filters<br/>WHERE TenantId = current<br/>and MerchantId = the shop"]
-    L1 --> L2["2. Save interceptor<br/>stamps TenantId,<br/>refuses another tenant's rows"]
-    L2 --> L3["3. Row-Level Security<br/>SESSION_CONTEXT TenantId<br/>on every app connection"]
-    L3 --> Db[("Rows of this operator only")]
+    Door["Rider collects cash<br/>at the door"] --> Run["Rider's run closed at the hub:<br/>cash expected vs received"]
+    Door --> Ledger["Ledger lines per parcel<br/>+ COD collected<br/>- delivery charge<br/>- COD charge (1%)<br/>- return charge"]
+    Ledger --> Job["Hourly payouts job:<br/>every line up to yesterday,<br/>per merchant"]
+    Job --> Payout["Payout INV-000123<br/>to bKash, Nagad or bank<br/>(idempotency key)"]
+    Job -. "charges more than cash" .-> Wait["Lines wait for the next payout"]
 ```
 
-| Check | Where |
-|---|---|
-| Every route answers another operator or shop with nothing of this one's | `tests/Integration.Tests/TripTests.Isolation.cs` (a new route fails until it has its line) |
-| Every tenant table is in the security policy | `RowLevelSecurityTests` |
-| Every entity outside `Platform` carries a `TenantId` | `Architecture.Tests` |
+Charges are fixed when a parcel is booked (`DeliveryCharge`, `CodChargePercent`, `ReturnCharge` snapshot from the
+rate card), so changing the rate card never reprices a parcel already booked.
 
-## 5. Side effects through the outbox
-
-Texts and webhooks never run inside the use case. The change and its message are saved in one transaction, then sent
-by a loop every 5 seconds, retried after 1, 2, 4 and 8 minutes.
+## 5. Keeping couriers and merchants apart
 
 ```mermaid
-flowchart LR
-    UseCase["Use case<br/>e.g. Create Order"] -->|"entity raises<br/>a domain event"| Save["AppDbContext.SaveChangesAsync<br/>one transaction"]
-    Save --> Rows[("Business rows")]
-    Save --> Outbox[("Notifications.OutboxMessage")]
-    Outbox --> Texts["SendOutboxJob<br/>customer SMS"]
-    Outbox --> Hooks["SendWebhooksJob<br/>signed shop webhooks"]
-    Save -->|"after commit"| Feed["IOperationsFeed<br/>'changed' to live dashboards"]
+flowchart TB
+    Request["Request<br/>subdomain or API key"] --> Tenant["Tenant resolved<br/>(courier)"]
+    Tenant --> L1["1. EF query filters<br/>TenantId, and MerchantId for merchants"]
+    L1 --> L2["2. Save interceptor<br/>stamps TenantId, refuses other tenants' rows"]
+    L2 --> L3["3. SQL Row-Level Security<br/>SESSION_CONTEXT per connection"]
+    L3 --> Rows[("Only this courier's rows")]
 ```
 
-## 6. A day at an operator
+Inside a courier, a merchant sees only its own parcels (query filter) and a rider only the parcels given to them
+(each rider query filters by the signed-in rider). The fraud check is the one place that counts a phone's parcels at
+every merchant, and it returns counts only, never a merchant's name. The isolation sweep test lists every route the app
+maps and fails for a new one without a line saying what another courier, merchant or rider gets there.
 
-Times are the tenant's own (Dhaka shown).
+## 6. The outbox
 
-| Time | What | How |
+```mermaid
+sequenceDiagram
+    participant H as Handler
+    participant Db as AppDbContext
+    participant O as Outbox table
+    participant D as OutboxDispatcher (every 5 s)
+    participant S as SMS / webhook
+
+    H->>Db: parcel.Deliver(...) raises ParcelStatusChanged
+    Db->>Db: save the change
+    Db->>O: write ParcelStatusChangedMessage (+ RecipientTextMessage) in the same transaction
+    D->>O: due messages, oldest first
+    D->>S: send (text written from the data at send time)
+    S-->>D: ok, or failure: retry after 1, 2, 4, 8 minutes, then given up
+```
+
+A text that is out of date when its turn comes (an "out for delivery" text for a parcel already delivered) is not
+sent. Given-up messages are listed for the admin on **Failed messages** and can be sent again.
+
+## 7. A day at the courier
+
+| When | Who | What |
 |---|---|---|
-| All day | Orders arrive and join deliveries | API or the shop's New order page |
-| Every 5 s | Customer texts, shop webhooks | outbox loops |
-| Every 5 min | Deliveries past their deadline lock | `lock-due-groups` job |
-| 11:00–13:30 | Pickup routes, farthest zones first | route sheet per zone |
-| About 14:30 | Hub shuttle to the customer's hub | shuttle manifest, load and receive scans |
-| From midnight, every 15 min | Deliveries due today go onto riders' trips | `plan-trips` job, or **Plan trips now** |
-| 17:00–21:00 | Riders deliver, one stop per customer and area | rider's **Today** |
-| Evening | Riders hand in cash | hub **Cash** |
-| Every hour | Shops paid everything up to yesterday | `settle-merchants` job |
+| Morning | Merchants | Book the day's parcels, request pickups |
+| Late morning | Hub staff | Assign pickups to riders; riders collect and scan |
+| Afternoon | Hub staff | Receive scans; dispatch parcels for other hubs (in transit) |
+| Afternoon | Hub staff | Assign parcels to riders by area: each rider's run for the day opens |
+| Evening | Riders | Deliver: delivered, partly delivered, on hold (with a date), refused |
+| End of run | Hub staff | Close each run: cash received against expected; held and refused parcels back on the shelf |
+| Every hour | Payouts job | Pays each merchant every ledger line up to yesterday (courier's time zone) |

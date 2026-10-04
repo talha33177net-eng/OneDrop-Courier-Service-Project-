@@ -1,34 +1,38 @@
 @page
 @model Web.Pages.Dev.SmsModel
 @{
-    ViewData["Title"] = "SMS outbox";
+    ViewData["Title"] = "SMS inbox";
 }
 
-<h1>SMS outbox</h1>
-<p class="lead">Development only. The fake SMS sender keeps the last 50 messages here instead of sending them.</p>
+<div class="page-head">
+    <div>
+        <h1>SMS inbox</h1>
+        <p>Development only. The fake SMS sender keeps the last 50 texts here instead of sending them.</p>
+    </div>
+</div>
 
-<div class="card table-wrap">
+<div class="card">
     @if (Model.Messages.Count == 0)
     {
-        <p class="muted">No messages yet.</p>
+        <div class="empty">@Icons.Get("message")<h3>No texts yet</h3><p>Recipients are texted when a parcel goes out for delivery and when it is delivered.</p></div>
     }
     else
     {
-        <table>
-            <thead>
-                <tr><th>Sent (UTC)</th><th>To</th><th>From</th><th>Message</th></tr>
-            </thead>
-            <tbody>
-                @foreach (var message in Model.Messages)
-                {
-                    <tr>
-                        <td>@message.On.ToString("HH:mm:ss")</td>
-                        <td>@message.To</td>
-                        <td>@message.Sender</td>
-                        <td style="white-space: normal">@message.Text</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Sent (UTC)</th><th>To</th><th>From</th><th>Message</th></tr></thead>
+                <tbody>
+                    @foreach (var message in Model.Messages)
+                    {
+                        <tr>
+                            <td class="nowrap">@message.On.ToString("HH:mm:ss")</td>
+                            <td class="nowrap">@message.To</td>
+                            <td>@message.Sender</td>
+                            <td>@message.Text</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
     }
 </div>

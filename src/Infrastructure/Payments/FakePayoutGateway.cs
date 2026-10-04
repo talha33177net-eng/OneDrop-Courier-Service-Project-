@@ -20,7 +20,7 @@ public class FakePayoutLog
     }
 }
 
-/// <summary>Adapter stand-in for bKash disbursement: every transfer succeeds and is kept in <see cref="FakePayoutLog"/>.</summary>
+/// <summary>Adapter stand-in for bKash, Nagad and bank payouts: every transfer succeeds and is kept in <see cref="FakePayoutLog"/>.</summary>
 public class FakePayoutGateway(FakePayoutLog log, TimeProvider time, ILogger<FakePayoutGateway> logger) : IPayoutGateway
 {
     public Task<string> SendAsync(

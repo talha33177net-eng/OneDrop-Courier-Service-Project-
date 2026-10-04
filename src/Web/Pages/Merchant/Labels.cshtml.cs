@@ -1,21 +1,24 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Application.Orders.PackageLabels;
+using Application.Abstractions;
+using Application.Parcels.Labels;
 
 namespace Web.Pages.Merchant;
 
-/// <summary>
-/// Printable parcel labels: <c>?order=OD-100001&amp;order=OD-100002</c> for those orders, or every order still
-/// waiting for its pickup when none is named.
-/// </summary>
-public class LabelsModel(PackageLabelsHandler handler) : PageModel
+/// <summary>Printable labels for the parcels named, or every parcel still waiting for pickup. Only the merchant's own.</summary>
+public class LabelsModel(ParcelLabelsHandler labels, ITenantContext tenantContext) : PageModel
 {
-    public PackageLabelSheet Sheet { get; private set; } = new([], false);
+    [BindProperty(SupportsGet = true)]
+    public string[] Codes { get; set; } = [];
 
-    public bool Waiting { get; private set; }
+    public IReadOnlyList<ParcelLabel> Labels { get; private set; } = [];
 
-    public async Task OnGetAsync(string[] order, CancellationToken cancellationToken)
+    public string Courier => tenantContext.Tenant?.Name ?? "";
+
+    public string Hotline => tenantContext.Tenant?.SupportPhone ?? "";
+
+    public async Task OnGetAsync(CancellationToken cancellationToken)
     {
-        Waiting = order.Length == 0;
-        Sheet = await handler.HandleAsync(order, cancellationToken);
+        Labels = await labels.ListAsync(Codes, cancellationToken);
     }
 }

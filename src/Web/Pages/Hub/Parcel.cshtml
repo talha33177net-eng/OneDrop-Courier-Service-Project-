@@ -1,0 +1,33 @@
+@page "{code}"
+@model Web.Pages.Hub.ParcelModel
+@{
+    ViewData["Title"] = $"Parcel {Model.Parcel.TrackingCode}";
+    var p = Model.Parcel;
+}
+
+<div class="page-head">
+    <div>
+        <div class="breadcrumb"><a asp-page="/Hub/Parcels">Parcels</a> <span>/</span> <span>@p.TrackingCode</span></div>
+        <h1 class="mono">@p.TrackingCode</h1>
+        <p>@p.Merchant · booked @p.Booked.ToString("d MMM yyyy, h:mm tt")@(p.MerchantReference is null ? "" : $" · invoice {p.MerchantReference}")</p>
+    </div>
+    <div class="page-actions">
+        <a class="btn btn-outline" asp-page="/Hub/Labels" asp-route-codes="@p.TrackingCode">@Icons.Get("printer") Reprint label</a>
+    </div>
+</div>
+
+<partial name="_Alerts" />
+
+@if (p.CanRequestReturn)
+{
+    <div class="card mb">
+        <div class="card-body">
+            <form method="post" asp-page-handler="Return" asp-route-code="@p.TrackingCode" class="gap">
+                <input type="text" name="reason" maxlength="200" placeholder="Why it goes back" style="max-width:360px" required />
+                <button class="btn btn-danger" type="submit">@Icons.Get("return") Return to merchant</button>
+            </form>
+        </div>
+    </div>
+}
+
+<partial name="_ParcelDetails" model="p" />

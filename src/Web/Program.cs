@@ -56,9 +56,10 @@ builder.Services.AddAuthorization(Policies.Configure);
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddPolicy("otp", context => RateLimitPartition.GetFixedWindowLimiter(
+    // Public forms (tracking, merchant sign-up): enough for a person, too few for a script guessing codes
+    options.AddPolicy("public", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1) }));
 });
 
 builder.Services
@@ -72,9 +73,6 @@ builder.Services.AddSingleton<ReceivedWebhooks>();
 builder.Services.AddRazorPages(options =>
 {
     options.Conventions.AuthorizeFolder("/Merchant", Policies.MerchantPortal);
-    options.Conventions.AuthorizeFolder("/Customer", Policies.CustomerPortal);
-    // The SMS link is the key: the customer opens their order without signing in, and the token names no customer
-    options.Conventions.AllowAnonymousToPage("/Customer/Order");
     options.Conventions.AuthorizeFolder("/Platform", Policies.PlatformAdmin);
     options.Conventions.AuthorizeFolder("/Hub", Policies.Operations);
     options.Conventions.AuthorizeFolder("/Admin", Policies.OperatorAdmin);
@@ -88,7 +86,9 @@ if (app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("Seed:De
 {
     await app.Services
         .GetRequiredService<DemoDataSeeder>()
-        .SeedAsync(app.Configuration["Seed:Password"] ?? throw new InvalidOperationException("Seed:Password is not set."));
+        .SeedAsync(
+            app.Configuration["Seed:Password"] ?? throw new InvalidOperationException("Seed:Password is not set."),
+            app.Configuration.GetValue<bool>("Seed:DemoActivity"));
 }
 
 if (runJobs)

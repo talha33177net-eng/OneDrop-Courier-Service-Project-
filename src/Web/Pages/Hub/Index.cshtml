@@ -1,244 +1,141 @@
 @page
 @model Web.Pages.Hub.IndexModel
-@using Domain.Delivery
-@using Web.Pages.Hub
-@using Web.Display
 @{
-    ViewData["Title"] = Model.Current is null ? "Hub today" : $"{Model.Current.Name} today";
+    ViewData["Title"] = Model.Hub is null ? "Hub board" : $"{Model.Hub.Name} board";
+    var b = Model.Board;
 }
-
 @section Head {
-    @if (Model.Current is not null)
-    {
-        <partial name="_Live" />
-    }
-}
-
-@if (Model.Current is null)
-{
-    <partial name="_HubPicker" model='new HubPicker("/Hub/Index", "Hub today", "Which hub are you working at?", Model.Hubs)' />
-    return;
-}
-
-@{
-    var hub = Model.Current;
-    var waitingAtShops = Model.Routes.Sum(route => route.Packages);
-    var ready = Model.Shelves.Count(shelf => shelf.Ready);
-    var toLoad = Model.Shuttle.ToLoad.Sum(load => load.Parcels.Count);
-    var riders = Model.Trips.Riders;
-    var riding = riders.Count(rider => rider.Status == TripStatus.Out);
-    var planned = riders.Count(rider => rider.Status == TripStatus.Planned);
-    var back = riders.Count(rider => rider.Status == TripStatus.Finished);
-    var notHandedIn = Model.Cash.Trips.Count(trip => trip.HandedIn is null && trip.Status == TripStatus.Finished);
-    var now = Model.Now!;
-    var missing = now.NotHereYet;
+    <partial name="_Live" />
 }
 
 <div class="page-head">
     <div>
-        <p class="eyebrow">@Model.Trips.Day.ToString("dddd d MMMM") <span class="live-status" data-live-status>Connecting…</span></p>
-        <h1>@hub.Name today</h1>
-        <p class="lead">
-            Parcels flow through the hub in six steps, top to bottom. Each card says what is waiting and takes you to
-            the page for it. The same steps are in the bar at the top of every hub page.
-        </p>
+        <h1>@(Model.Hub?.Name ?? "Hub board")</h1>
+        <p>@Model.Hub?.Address · <span class="badge badge-brand plain" data-live-status>Live</span></p>
     </div>
-    @if (Model.Hubs.Count > 1)
-    {
-        <details class="no-print">
-            <summary class="button ghost">Switch hub</summary>
-            <div class="card switch-hub">
-                <ul class="hub-list">
-                    @foreach (var other in Model.Hubs.Where(other => other.Code != hub.Code))
-                    {
-                        <li><a asp-page="/Hub/Index" asp-route-hub="@other.Code">@other.Name <span class="muted">@other.Code</span></a></li>
-                    }
-                </ul>
-            </div>
-        </details>
-    }
+    <div class="page-actions">
+        @await Html.PartialAsync("_HubSwitch", (Model.Hubs, Model.Hub))
+        <a class="btn btn-primary" asp-page="/Hub/Scan" asp-route-hub="@Model.Hub?.Code">@Icons.Get("scan") Scan parcels</a>
+    </div>
 </div>
 
-<div data-live="today">
-@if (missing.Count > 0)
+@if (b is null)
 {
-    <div class="notice notice-problem live-warning" role="alert">
-        <strong>
-            @missing.Count @(missing.Count == 1 ? "parcel" : "parcels") for today's deliveries @(missing.Count == 1 ? "is" : "are") not
-            scanned in yet.
-        </strong>
-        Riders take only orders with every parcel on the shelf; the rest follow tomorrow.
-        <details id="missing-parcels">
-            <summary>Which parcels, and where they are</summary>
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr><th>Label</th><th>Delivery</th><th>Shop</th><th>Where it is</th></tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var parcel in missing)
-                        {
-                            <tr>
-                                <td>@parcel.Label</td>
-                                <td>@parcel.Delivery</td>
-                                <td>@parcel.Shop</td>
-                                <td>@Statuses.Place(parcel.Place, parcel.OtherHub)</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </details>
-    </div>
-}
-else if (now.DueToday > 0)
-{
-    <p class="notice notice-ok">Every parcel of today's @now.DueToday @(now.DueToday == 1 ? "delivery" : "deliveries") is here.</p>
+    <div class="card"><div class="empty">@Icons.Get("warehouse")<h3>No hubs yet</h3></div></div>
+    return;
 }
 
-<div class="tiles">
-    <a class="tile" asp-page="/Hub/Shelves" asp-route-hub="@hub.Code">
-        <div class="tile-number">@now.OpenDeliveries</div>
-        <div class="tile-label">deliveries still open to shops</div>
-    </a>
-    <a class="tile" asp-page="/Hub/Shelves" asp-route-hub="@hub.Code">
-        <div class="tile-number">@now.ParcelsHere</div>
-        <div class="tile-label">parcels in the hub@(now.ParcelsOnTheWay > 0 ? $", {now.ParcelsOnTheWay} on the way" : "")</div>
-    </a>
-    <a class="tile @(waitingAtShops > 0 ? "tile-warn" : null)" asp-page="/Hub/Routes">
-        <div class="tile-number">@waitingAtShops</div>
-        <div class="tile-label">parcels waiting at shops</div>
-    </a>
-    <a class="tile @(ready > 0 ? "tile-good" : null)" asp-page="/Hub/Shelves" asp-route-hub="@hub.Code">
-        <div class="tile-number">@Model.Shelves.Count</div>
-        <div class="tile-label">deliveries on shelves, @ready ready</div>
-    </a>
-    <a class="tile @(toLoad > 0 ? "tile-warn" : null)" asp-page="/Hub/Shuttle" asp-route-hub="@hub.Code">
-        <div class="tile-number">@toLoad</div>
-        <div class="tile-label">parcels for the shuttle</div>
-    </a>
-    <a class="tile" asp-page="/Hub/Trips" asp-route-hub="@hub.Code">
-        <div class="tile-number">@riding</div>
-        <div class="tile-label">riders out of @riders.Count</div>
-    </a>
-    <a class="tile @(Model.Cash.StillWithRiders > 0 ? "tile-warn" : null)" asp-page="/Hub/Cash" asp-route-hub="@hub.Code">
-        <div class="tile-number">৳@Model.Cash.StillWithRiders.ToString("N0")</div>
-        <div class="tile-label">cash still with riders</div>
-    </a>
-</div>
+<div data-live="board">
+    <div class="stats">
+        <a class="stat" asp-page="/Hub/Pickups" asp-route-hub="@b.Hub.Code">
+            <div class="stat-icon amber">@Icons.Get("truck")</div>
+            <div><div class="stat-label">Pickups open</div><div class="stat-value">@b.PickupsOpen</div></div>
+        </a>
+        <div class="stat">
+            <div class="stat-icon blue">@Icons.Get("inbox")</div>
+            <div><div class="stat-label">Coming from other hubs</div><div class="stat-value">@b.Incoming</div></div>
+        </div>
+        <a class="stat" asp-page="/Hub/Assign" asp-route-hub="@b.Hub.Code">
+            <div class="stat-icon violet">@Icons.Get("send")</div>
+            <div><div class="stat-label">Waiting for a rider</div><div class="stat-value">@b.ToAssign.Count</div></div>
+        </a>
+        <div class="stat">
+            <div class="stat-icon">@Icons.Get("route")</div>
+            <div><div class="stat-label">To send to other hubs</div><div class="stat-value">@b.ToDispatchCount</div></div>
+        </div>
+        <a class="stat" asp-page="/Hub/Runs" asp-route-hub="@b.Hub.Code">
+            <div class="stat-icon green">@Icons.Get("bike")</div>
+            <div><div class="stat-label">Out with riders</div><div class="stat-value">@b.WithRiders</div><div class="stat-sub">@Money.Taka(b.CashWithRiders) cash with riders</div></div>
+        </a>
+        <div class="stat">
+            <div class="stat-icon red">@Icons.Get("return")</div>
+            <div><div class="stat-label">To hand back</div><div class="stat-value">@b.ToHandBackCount</div></div>
+        </div>
+    </div>
 
-<ol class="flow">
-    <li class="flow-step">
-        <span class="step-no">1</span>
-        <div class="flow-body">
-            <span class="flow-who">Morning · collector</span>
-            <h3>Pick up from the shops</h3>
-            <p>
-                A van visits every shop in this hub's zones at a set time. Print the route sheet, and at each shop scan
-                the parcels with <strong>Collect at the shop</strong> on the scan page.
-            </p>
-            <div class="flow-facts">
-                @foreach (var route in Model.Routes)
+    <div class="grid grid-main">
+        <div class="card">
+            <div class="card-head">
+                <div><h2>Waiting for a rider</h2><p>Delivered from this hub</p></div>
+                <a class="btn btn-primary btn-sm" asp-page="/Hub/Assign" asp-route-hub="@b.Hub.Code">Assign to riders</a>
+            </div>
+            @if (b.ToAssign.Count == 0)
+            {
+                <div class="empty">@Icons.Get("check-circle")<h3>Nothing waiting</h3><p>Parcels for this hub's areas show up here once scanned in.</p></div>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="table compact">
+                        <thead><tr><th>Parcel</th><th>Area</th><th>Merchant</th><th>Status</th><th class="num">COD</th></tr></thead>
+                        <tbody>
+                            @foreach (var p in b.ToAssign.Take(15))
+                            {
+                                <tr>
+                                    <td><a class="code-link" asp-page="/Hub/Parcel" asp-route-code="@p.TrackingCode">@p.TrackingCode</a><div class="cell-sub">@p.RecipientName</div></td>
+                                    <td>@p.Area</td>
+                                    <td>@p.Merchant</td>
+                                    <td>@Statuses.Badge(p.Status)@if (p.HoldUntil is { } until) { <div class="cell-sub">until @until.ToString("d MMM")</div> }</td>
+                                    <td class="num">@Money.Taka(p.CodAmount)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (b.ToAssign.Count > 15)
                 {
-                    <span class="pill @(route.Packages > 0 ? "pill-open" : null)">
-                        @route.Zone: @route.Packages @(route.Packages == 1 ? "parcel" : "parcels") at @route.Stops @(route.Stops == 1 ? "shop" : "shops"),
-                        @route.NextPickupDay.ToString("ddd") @route.PickupTime.ToString("h:mm tt")
-                    </span>
+                    <div class="card-foot muted">And @(b.ToAssign.Count - 15) more.</div>
                 }
-                @if (Model.Routes.Count == 0)
-                {
-                    <span class="muted">No pickup route leaves for this hub.</span>
-                }
-            </div>
+            }
         </div>
-        <div class="flow-action"><a class="button" asp-page="/Hub/Routes">Route sheets</a></div>
-    </li>
-    <li class="flow-step">
-        <span class="step-no">2</span>
-        <div class="flow-body">
-            <span class="flow-who">Midday · hub staff</span>
-            <h3>Scan every parcel in</h3>
-            <p>
-                When the van is back, scan each label (hand scanner, typing, or the phone camera). The screen answers in
-                big letters: the <strong>shelf</strong> to put it on, or <strong>send on</strong> to another hub.
-            </p>
-        </div>
-        <div class="flow-action"><a class="button" asp-page="/Hub/Scan" asp-route-hub="@hub.Code">Start scanning</a></div>
-    </li>
-    <li class="flow-step">
-        <span class="step-no">3</span>
-        <div class="flow-body">
-            <span class="flow-who">All day · hub staff</span>
-            <h3>Shelves: one per delivery</h3>
-            <p>
-                Every customer's delivery has its own shelf, so parcels from different shops wait together. A shelf is
-                <strong>Ready</strong> once the delivery is closed and all its parcels are here.
-            </p>
-            <div class="flow-facts">
-                <span class="pill">@Model.Shelves.Count on shelves</span>
-                <span class="pill pill-ready">@ready ready</span>
-            </div>
-        </div>
-        <div class="flow-action"><a class="button ghost" asp-page="/Hub/Shelves" asp-route-hub="@hub.Code">See shelves</a></div>
-    </li>
-    <li class="flow-step">
-        <span class="step-no">4</span>
-        <div class="flow-body">
-            <span class="flow-who">About 2:30 PM · hub staff</span>
-            <h3>Shuttle to other hubs</h3>
-            <p>
-                A parcel whose customer lives in another hub's area goes on the shuttle. Scan it with
-                <strong>Load the shuttle</strong>; the other hub scans it in when it arrives.
-            </p>
-            <div class="flow-facts">
-                <span class="pill @(toLoad > 0 ? "pill-open" : null)">@toLoad to load</span>
-                <span class="pill">@Model.Shuttle.OnTheWay.Count on the way here</span>
-            </div>
-        </div>
-        <div class="flow-action"><a class="button ghost" asp-page="/Hub/Shuttle" asp-route-hub="@hub.Code">Shuttle list</a></div>
-    </li>
-    <li class="flow-step">
-        <span class="step-no">5</span>
-        <div class="flow-body">
-            <span class="flow-who">5 PM · hub staff and riders</span>
-            <h3>Send the riders out</h3>
-            <p>
-                Deliveries due today are shared among the riders' bikes every 15 minutes, or at once with
-                <strong>Plan trips now</strong>. Each rider takes their deliveries off the shelves and starts the trip on
-                their phone.
-            </p>
-            <div class="flow-facts">
-                <span class="pill">@riders.Count @(riders.Count == 1 ? "rider" : "riders")</span>
-                <span class="pill pill-open">@planned planned</span>
-                <span class="pill">@riding out</span>
-                <span class="pill pill-ready">@back back</span>
-                @if (Model.Trips.Waiting.Count > 0)
-                {
-                    <span class="pill pill-waiting">@Model.Trips.Waiting.Count due today on no trip</span>
-                }
-            </div>
-        </div>
-        <div class="flow-action"><a class="button" asp-page="/Hub/Trips" asp-route-hub="@hub.Code">Riders and trips</a></div>
-    </li>
-    <li class="flow-step">
-        <span class="step-no">6</span>
-        <div class="flow-body">
-            <span class="flow-who">Evening · hub staff</span>
-            <h3>Count the riders' cash</h3>
-            <p>
-                When a rider is back with every stop done, count the cash they collected and record it. bKash and Nagad
-                payments are already with OneDrop.
-            </p>
-            <div class="flow-facts">
-                <span class="pill @(notHandedIn > 0 ? "pill-waiting" : null)">@notHandedIn @(notHandedIn == 1 ? "rider" : "riders") to count</span>
-            </div>
-        </div>
-        <div class="flow-action"><a class="button ghost" asp-page="/Hub/Cash" asp-route-hub="@hub.Code">Riders' cash</a></div>
-    </li>
-</ol>
-</div>
 
-<p class="muted">
-    Shops are paid their cash on delivery automatically the next day. Returned parcels: scan them in (the screen says
-    "Back to the shop"), then hand them back with <strong>Return to the shop</strong> on the scan page.
-</p>
+        <div class="stack">
+            <div class="card">
+                <div class="card-head"><div><h2>Send to other hubs</h2><p>Scan each one in the Dispatch tab</p></div></div>
+                @if (b.ToDispatch.Count == 0)
+                {
+                    <div class="card-body muted">Nothing to send on.</div>
+                }
+                else
+                {
+                    <div class="table-wrap">
+                        <table class="table compact">
+                            <tbody>
+                                @foreach (var group in b.ToDispatch)
+                                {
+                                    <tr>
+                                        <td><span class="code-link">@group.HubCode</span> @group.HubName @if (group.Returns) { <span class="badge badge-return plain">Returns</span> }</td>
+                                        <td class="num strong">@group.Parcels.Count</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+            <div class="card">
+                <div class="card-head"><div><h2>Hand back to merchants</h2><p>Returns collected by this hub</p></div></div>
+                @if (b.ToHandBack.Count == 0)
+                {
+                    <div class="card-body muted">No returns waiting.</div>
+                }
+                else
+                {
+                    <div class="table-wrap">
+                        <table class="table compact">
+                            <tbody>
+                                @foreach (var group in b.ToHandBack)
+                                {
+                                    <tr>
+                                        <td><div class="cell-main">@group.Merchant</div><div class="cell-sub">@Money.Phone(group.MerchantPhone)</div></td>
+                                        <td class="num strong">@group.Parcels.Count</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>

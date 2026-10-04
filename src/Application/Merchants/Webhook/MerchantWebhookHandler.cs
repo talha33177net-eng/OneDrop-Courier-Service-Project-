@@ -9,7 +9,7 @@ namespace Application.Merchants.Webhook;
 public sealed record WebhookSettings(string MerchantName, string? Url, string? Secret);
 
 /// <summary>
-/// The signed-in shop's own webhook: where its order status changes go, the secret it checks them with, and a test
+/// The signed-in shop's own webhook: where its parcel status changes go, the secret it checks them with, and a test
 /// message sent at once so the shop sees what its server answers.
 /// </summary>
 public class MerchantWebhookHandler(

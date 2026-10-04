@@ -1,0 +1,64 @@
+@page
+@using Domain.Payments
+@model Web.Pages.Admin.PayoutsModel
+@{
+    ViewData["Title"] = "Merchant payouts";
+    var d = Model.Data;
+}
+
+<div class="page-head">
+    <div>
+        <h1>Merchant payouts</h1>
+        <p>Every hour each merchant is paid the cash collected up to yesterday, less charges.</p>
+    </div>
+    <div class="page-actions">
+        <form method="post" asp-page-handler="Run" class="inline-form">
+            <button class="btn btn-primary" type="submit">@Icons.Get("send") Run payouts now</button>
+        </form>
+    </div>
+</div>
+
+<partial name="_Alerts" />
+
+<div class="stats">
+    <div class="stat"><div class="stat-icon">@Icons.Get("wallet")</div><div><div class="stat-label">Owed to merchants now</div><div class="stat-value">@Money.Taka(d.Owed.Sum(m => m.Net))</div></div></div>
+    <div class="stat"><div class="stat-icon green">@Icons.Get("check-circle")</div><div><div class="stat-label">Paid this month</div><div class="stat-value">@Money.Taka(d.PaidThisMonth)</div></div></div>
+    <div class="stat"><div class="stat-icon amber">@Icons.Get("clock")</div><div><div class="stat-label">Processing</div><div class="stat-value">@Money.Taka(d.PendingTotal)</div></div></div>
+</div>
+
+<div class="grid grid-side">
+    <div class="card">
+        <div class="card-head">
+            <h2>Payouts</h2>
+            <div class="segmented">
+                <a class="@(Model.Status is null ? "active" : "")" asp-route-status="">All</a>
+                <a class="@(Model.Status == PayoutStatus.Paid ? "active" : "")" asp-route-status="Paid">Paid</a>
+                <a class="@(Model.Status == PayoutStatus.Pending ? "active" : "")" asp-route-status="Pending">Processing</a>
+            </div>
+        </div>
+        @await Html.PartialAsync("_PayoutTable", (d.Payouts, "/Admin/Payout/", true))
+    </div>
+    <div class="card" style="align-self:start">
+        <div class="card-head"><div><h2>Owed now</h2><p>Lines not yet paid out, by merchant</p></div></div>
+        @if (d.Owed.Count == 0)
+        {
+            <div class="card-body muted">Nothing owed.</div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table compact">
+                    <tbody>
+                        @foreach (var m in d.Owed)
+                        {
+                            <tr>
+                                <td><a class="cell-main" asp-page="/Admin/Merchant" asp-route-id="@m.MerchantId">@m.Merchant</a>@if (!m.HasPayoutAccount) { <div class="cell-sub negative">No payout account</div> }</td>
+                                <td class="num strong @(m.Net < 0 ? "negative" : "")">@Money.Taka(m.Net)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>

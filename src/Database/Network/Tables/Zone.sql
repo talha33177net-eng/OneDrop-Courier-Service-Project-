@@ -1,9 +1,10 @@
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 -- TABLE: Network.Zone
--- Purpose: An area of the city (Mirpur, Gulshan, ...) with its own pickup routes, served by one hub. Several
---          zones can share a hub, which is how 7 Dhaka zones run on 5 hubs.
+-- Purpose: A part of the coverage map served by one hub: a city area (Mirpur), a suburb (Savar) or a district
+--          (Sylhet). City and IsSuburb decide a parcel's service area: another city is outside the city, a suburb of
+--          the pickup's city is a suburb, the rest inside the city (Domain.Pricing.ServiceAreas).
 -- Author: Courier team
--- Date: 2026-09-27
+-- Date: 2026-10-04
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Network].[Zone] (
     [Id]        BIGINT         IDENTITY (1, 1) NOT NULL,
@@ -11,6 +12,8 @@ CREATE TABLE [Network].[Zone] (
     [Code]      NVARCHAR (20)  NOT NULL,
     [Name]      NVARCHAR (200) NOT NULL,
     [HubId]     BIGINT         NOT NULL,
+    [City]      NVARCHAR (60)  NOT NULL,
+    [IsSuburb]  BIT            NOT NULL,
     [Archived]  BIT            DEFAULT ((0)) NOT NULL,
     [UpdatedId] BIGINT         NULL,
     [UpdatedOn] DATETIME2 (7)  DEFAULT (getutcdate()) NOT NULL,

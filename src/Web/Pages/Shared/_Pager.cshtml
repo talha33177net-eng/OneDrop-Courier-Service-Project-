@@ -1,0 +1,29 @@
+@model (int Number, int Pages, int Total)
+@* Previous and next links that keep every other query value of the current page *@
+@{
+    string Url(int page)
+    {
+        var query = Context.Request.Query
+            .Where(pair => pair.Key != "page")
+            .SelectMany(pair => pair.Value.Select(value => $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(value ?? "")}"))
+            .Append($"page={page}");
+
+        return Context.Request.Path + "?" + string.Join("&", query);
+    }
+}
+@if (Model.Pages > 1 || Model.Total > 0)
+{
+    <div class="pagination">
+        <span>@Model.Total.ToString("N0") in all · page @Model.Number of @Model.Pages</span>
+        <span class="gap">
+            @if (Model.Number > 1)
+            {
+                <a class="btn btn-outline btn-sm" href="@Url(Model.Number - 1)">@Icons.Get("arrow-left") Previous</a>
+            }
+            @if (Model.Number < Model.Pages)
+            {
+                <a class="btn btn-outline btn-sm" href="@Url(Model.Number + 1)">Next @Icons.Get("arrow-right")</a>
+            }
+        </span>
+    </div>
+}

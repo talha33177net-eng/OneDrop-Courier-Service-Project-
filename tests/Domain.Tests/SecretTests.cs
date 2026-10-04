@@ -1,4 +1,3 @@
-using Domain.Customers;
 using Domain.Merchants;
 
 namespace Domain.Tests;
@@ -89,42 +88,5 @@ public class MerchantApiKeyTests
     public void Malformed_keys_are_rejected_before_any_lookup(string? presented)
     {
         Assert.False(MerchantApiKey.TryParse(presented, out _, out _));
-    }
-}
-
-public class PhoneOtpTests
-{
-    private static readonly PhoneNumber Phone = PhoneNumber.Parse("01712345678").Value;
-    private static readonly DateTime Now = new(2026, 9, 27, 10, 0, 0, DateTimeKind.Utc);
-
-    [Fact]
-    public void The_right_code_signs_in_once()
-    {
-        var (challenge, code) = PhoneOtp.Issue(Phone, Now);
-
-        Assert.True(challenge.Verify(code, Now.AddMinutes(1)).IsSuccess);
-        Assert.Equal("otp.expired", challenge.Verify(code, Now.AddMinutes(1)).Error!.Code);
-    }
-
-    [Fact]
-    public void A_code_expires()
-    {
-        var (challenge, code) = PhoneOtp.Issue(Phone, Now);
-
-        Assert.Equal("otp.expired", challenge.Verify(code, Now + PhoneOtp.Lifetime).Error!.Code);
-    }
-
-    [Fact]
-    public void Wrong_guesses_lock_the_code()
-    {
-        var (challenge, code) = PhoneOtp.Issue(Phone, Now);
-        var wrong = code == "000000" ? "111111" : "000000";
-
-        for (var attempt = 0; attempt < PhoneOtp.MaxAttempts; attempt++)
-        {
-            Assert.Equal("otp.wrong", challenge.Verify(wrong, Now).Error!.Code);
-        }
-
-        Assert.Equal("otp.expired", challenge.Verify(code, Now).Error!.Code);
     }
 }

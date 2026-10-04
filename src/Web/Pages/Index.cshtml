@@ -1,136 +1,156 @@
 @page
+@using Domain.Pricing
 @model IndexModel
 @{
-    ViewData["Title"] = "Home";
+    ViewData["Title"] = Model.Tenant is null ? "Courier platform" : "Fast, reliable courier service";
 }
 
 @if (Model.Tenant is null)
 {
     <section class="hero">
-        <p class="eyebrow">OneDrop platform</p>
-        <h1>Multiple shops. One delivery.</h1>
-        <p class="lead">
-            Orders from different online shops to the same customer travel together, so the customer pays one delivery
-            instead of three. Each operator below runs on its own address with its own customers, hubs and prices.
-        </p>
-        <a class="button" asp-page="/Guide">How it works</a>
-        <a class="button ghost" asp-page="/Account/Login">Platform admin sign in</a>
+        <div class="site-section">
+            <span class="eyebrow">Platform</span>
+            <h1>Courier companies on OneDrop</h1>
+            <p class="lead">Each courier runs on its own address with its own merchants, riders, hubs and prices.</p>
+            <div class="grid grid-3 mt-lg">
+                @foreach (var (courier, url) in Model.Couriers)
+                {
+                    <a class="hub-tile" href="@url">
+                        <span class="code">@courier.Slug</span>
+                        <h3 class="mt-0">@courier.Name</h3>
+                        <span class="muted">Hotline @courier.SupportPhone</span>
+                    </a>
+                }
+            </div>
+            <p class="mt-lg"><a class="btn btn-outline" asp-page="/Account/Login">Platform staff sign in</a></p>
+        </div>
     </section>
+    return;
+}
 
-    <h2 class="section-title">Choose an operator</h2>
-    <div class="cards">
-        @foreach (var (tenant, url) in Model.Tenants)
-        {
-            <div class="card role-card">
-                <h2>@tenant.Name</h2>
-                <p class="muted">
-                    ৳@tenant.BaseDeliveryFee.ToString("0") for the first shop,
-                    +৳@tenant.ExtraShopFee.ToString("0") for each extra shop
+@{
+    var inside = Model.Rates.FirstOrDefault(r => r.ServiceArea == ServiceArea.InsideCity);
+}
+
+<section class="hero">
+    <div class="site-section" style="padding-top:0;padding-bottom:0">
+        <div class="hero-grid">
+            <div>
+                <span class="eyebrow">Courier for online businesses</span>
+                <h1>Doorstep delivery across Bangladesh, <em>cash collected</em> for you.</h1>
+                <p class="lead">
+                    Book parcels in seconds, we pick them up from your shop, deliver them to your customers and pay the
+                    cash on delivery into your bKash, Nagad or bank account the next day.
                 </p>
-                <a class="button" href="@url">Open @tenant.Name</a>
+                <div class="gap">
+                    <a class="btn btn-primary btn-lg" asp-page="/Account/Register">Become a merchant @Icons.Get("arrow-right")</a>
+                    <a class="btn btn-outline btn-lg" href="#pricing">See our rates</a>
+                </div>
+                <div class="hero-points">
+                    <span>@Icons.Get("check-circle") Next-day payout</span>
+                    <span>@Icons.Get("check-circle") Free pickup</span>
+                    <span>@Icons.Get("check-circle") Live tracking</span>
+                </div>
+            </div>
+            <div class="track-card">
+                <h2>Track your parcel</h2>
+                <p class="muted mt-0">Enter the tracking code from the SMS or the label.</p>
+                <form class="track-form" method="get" asp-page="/Track">
+                    <input type="text" name="code" placeholder="OD10000001" aria-label="Tracking code" required />
+                    <button class="btn btn-primary" type="submit">@Icons.Get("search") Track</button>
+                </form>
+                <div class="stats mt-lg" style="margin-bottom:0">
+                    <div class="stat"><div><div class="stat-label">Cities</div><div class="stat-value">@Model.Cities</div></div></div>
+                    <div class="stat"><div><div class="stat-label">Hubs</div><div class="stat-value">@Model.Hubs</div></div></div>
+                    <div class="stat"><div><div class="stat-label">Areas</div><div class="stat-value">@Model.Areas</div></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="site-section" id="services">
+    <div class="section-head">
+        <span class="eyebrow">Why merchants choose us</span>
+        <h2>Everything an online shop needs to deliver</h2>
+        <p>From a Facebook page to a busy website: one panel for booking, pickups, tracking and payments.</p>
+    </div>
+    <div class="features">
+        <div class="feature">
+            <div class="stat-icon">@Icons.Get("truck")</div>
+            <h3>Pickup from your door</h3>
+            <p>Ask for a pickup and a rider comes the same day to collect your parcels.</p>
+        </div>
+        <div class="feature">
+            <div class="stat-icon blue">@Icons.Get("cash")</div>
+            <h3>Cash on delivery</h3>
+            <p>Riders collect the price at the door. We pay it out every day, less our charges.</p>
+        </div>
+        <div class="feature">
+            <div class="stat-icon violet">@Icons.Get("map-pin")</div>
+            <h3>Live tracking</h3>
+            <p>You and your customers follow every parcel from your shop to their hands.</p>
+        </div>
+        <div class="feature">
+            <div class="stat-icon amber">@Icons.Get("shield")</div>
+            <h3>Fraud check</h3>
+            <p>See how often a phone number accepts its parcels before you send one.</p>
+        </div>
+        <div class="feature">
+            <div class="stat-icon green">@Icons.Get("upload")</div>
+            <h3>Bulk booking</h3>
+            <p>Upload a spreadsheet of orders and book hundreds of parcels at once.</p>
+        </div>
+        <div class="feature">
+            <div class="stat-icon grey">@Icons.Get("code")</div>
+            <h3>API and webhooks</h3>
+            <p>Connect your website: book parcels from your checkout and hear every status change.</p>
+        </div>
+    </div>
+</section>
+
+<section class="site-section" id="pricing" style="padding-top:0">
+    <div class="section-head">
+        <span class="eyebrow">Simple pricing</span>
+        <h2>Pay only for what you send</h2>
+        <p>No monthly fee and no pickup charge. Charges are taken from the cash we collect for you.</p>
+    </div>
+    <div class="price-cards">
+        @foreach (var rate in Model.Rates)
+        {
+            <div class="price-card @(rate.ServiceArea == ServiceArea.InsideCity ? "featured" : "")">
+                <h3>@rate.ServiceArea.DisplayName()</h3>
+                <div class="price">@Money.Taka(rate.BaseCharge) <small>up to @Money.Kg(rate.IncludedWeightGrams)</small></div>
+                <ul>
+                    <li>@Icons.Get("check") @Money.Taka(rate.ExtraKgCharge) for each extra kg</li>
+                    <li>@Icons.Get("check") @rate.CodChargePercent.ToString("0.##")% COD charge</li>
+                    <li>@Icons.Get("check") @if (rate.ReturnCharge == 0) { <text>No extra charge for a return</text> } else { <text>@Money.Taka(rate.ReturnCharge) extra for a return</text> }</li>
+                    <li>@Icons.Get("check") @(rate.ServiceArea switch { ServiceArea.InsideCity => "Delivered within 24 to 48 hours", ServiceArea.Suburb => "Delivered within 48 to 72 hours", _ => "Delivered within 3 to 5 days" })</li>
+                </ul>
             </div>
         }
     </div>
+</section>
 
-    @if (Model.Tenants.Count == 0)
-    {
-        <p class="notice">No operators yet. Run <code>./tools/db/publish.ps1</code> to create the database and the launch operators.</p>
-    }
-}
-else
-{
-    var tenant = Model.Tenant;
-    var first = tenant.BaseDeliveryFee;
-    var extra = tenant.ExtraShopFee;
-    <section class="hero">
-        <p class="eyebrow">@tenant.Name</p>
-        <h1>Multiple shops. One delivery.</h1>
-        <p class="lead">
-            Bought from several online shops? Choose OneDrop at each checkout and everything arrives together, in one
-            delivery, for one fee.
-        </p>
-        <div class="price-strip">
-            <span>First shop ৳@first.ToString("0")</span>
-            <span>Each extra shop +৳@extra.ToString("0")</span>
-            <span>3 shops ৳@((first + 2 * extra).ToString("0")) instead of ৳@((3 * first).ToString("0"))</span>
+<section class="site-section" style="padding-top:0">
+    <div class="section-head">
+        <span class="eyebrow">How it works</span>
+        <h2>From your shop to your customer in four steps</h2>
+    </div>
+    <div class="steps-row">
+        <div class="step-card"><h3>Book</h3><p>Add the parcel on your panel, by spreadsheet or from your website.</p></div>
+        <div class="step-card"><h3>Pickup</h3><p>A rider collects it from your shop and brings it to our hub.</p></div>
+        <div class="step-card"><h3>Deliver</h3><p>We sort it to the nearest hub and a rider takes it to your customer.</p></div>
+        <div class="step-card"><h3>Get paid</h3><p>The cash collected lands in your account the next day.</p></div>
+    </div>
+</section>
+
+<section class="site-section" style="padding-top:0">
+    <div class="cta">
+        <div>
+            <h2>Start sending today</h2>
+            <p>Sign up in two minutes.@if (inside is not null) { <text> Deliveries inside the city from @Money.Taka(inside.BaseCharge).</text> }</p>
         </div>
-        @if (User.Identity?.IsAuthenticated != true)
-        {
-            <a class="button" asp-page="/Account/PhoneLogin">Track my delivery</a>
-        }
-        <a class="button ghost" asp-page="/Guide">How it works</a>
-    </section>
-
-    @if (User.Identity?.IsAuthenticated != true)
-    {
-        <h2 class="section-title">Who are you?</h2>
-        <div class="cards">
-            <div class="card role-card">
-                <div class="role-icon" aria-hidden="true">🛍️</div>
-                <h2>Customer</h2>
-                <p class="muted">See your deliveries, which shops are in them, when they arrive and what to pay at the door. We text you a code; no password.</p>
-                <a class="button" asp-page="/Account/PhoneLogin">Track my delivery</a>
-            </div>
-            <div class="card role-card">
-                <div class="role-icon" aria-hidden="true">🏪</div>
-                <h2>Shop</h2>
-                <p class="muted">See your orders, print parcel labels for the pickup, and follow the cash on delivery paid to you each day.</p>
-                <a class="button secondary" asp-page="/Account/Login">Shop sign in</a>
-            </div>
-            <div class="card role-card">
-                <div class="role-icon" aria-hidden="true">🏭</div>
-                <h2>Hub staff</h2>
-                <p class="muted">Run the hub's day: pickups, scanning parcels onto shelves, the shuttle, sending riders out and counting cash.</p>
-                <a class="button secondary" asp-page="/Account/Login">Staff sign in</a>
-            </div>
-            <div class="card role-card">
-                <div class="role-icon" aria-hidden="true">🛵</div>
-                <h2>Rider</h2>
-                <p class="muted">Your stops for today in order, what to collect at each door, and the cash to hand in.</p>
-                <a class="button secondary" asp-page="/Account/Login">Rider sign in</a>
-            </div>
-        </div>
-    }
-
-    <h2 class="section-title">How a delivery works</h2>
-    <ol class="flow">
-        <li class="flow-step">
-            <span class="step-no">1</span>
-            <div class="flow-body">
-                <h3>Order from any shop</h3>
-                <p>Choose OneDrop at checkout. Orders to the same phone and address join one delivery.</p>
-            </div>
-        </li>
-        <li class="flow-step">
-            <span class="step-no">2</span>
-            <div class="flow-body">
-                <h3>Other shops can join for @tenant.GroupJoinDays @(tenant.GroupJoinDays == 1 ? "day" : "days")</h3>
-                <p>Buy somewhere else in those days and it rides along for +৳@extra.ToString("0"). In a hurry? Close it early and it comes the next day.</p>
-            </div>
-        </li>
-        <li class="flow-step">
-            <span class="step-no">3</span>
-            <div class="flow-body">
-                <h3>Everything arrives together the day after</h3>
-                <p>One rider, one door visit, in the evening. Pay the delivery fee and any cash on delivery at the door, in cash or by bKash or Nagad.</p>
-            </div>
-        </li>
-    </ol>
-
-    <details class="help">
-        <summary>Where we deliver</summary>
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr><th>Zone</th><th>Served by</th><th class="num">Areas</th></tr>
-                </thead>
-                <tbody>
-                    @foreach (var zone in Model.Zones)
-                    {
-                        <tr><td>@zone.Zone</td><td>@zone.Hub</td><td class="num">@zone.Areas</td></tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    </details>
-}
+        <a class="btn btn-primary btn-lg" asp-page="/Account/Register">Create a merchant account</a>
+    </div>
+</section>

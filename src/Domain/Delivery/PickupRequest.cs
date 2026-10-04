@@ -1,0 +1,142 @@
+using Domain.Common;
+
+namespace Domain.Delivery;
+
+/// <summary>Stored as TINYINT. Never renumber a value that has been saved.</summary>
+public enum PickupStatus : byte
+{
+    /// <summary>Asked for by the merchant; no rider yet.</summary>
+    Requested = 1,
+
+    /// <summary>A rider is going to collect.</summary>
+    Assigned = 2,
+
+    /// <summary>The rider collected the parcels.</summary>
+    Completed = 3,
+
+    Cancelled = 4
+}
+
+/// <summary>
+/// A merchant asking the hub to send a rider to one of its pickup points to collect the parcels booked there. The hub of
+/// the point's zone assigns a rider, who picks the parcels up and completes it.
+/// </summary>
+public class PickupRequest : TenantEntity, IMerchantOwned
+{
+    private PickupRequest()
+    {
+    }
+
+    public long MerchantId { get; private set; }
+
+    public long PickupPointId { get; private set; }
+
+    /// <summary>The hub that collects: the pickup point's zone's hub.</summary>
+    public long HubId { get; private set; }
+
+    /// <summary>The day the merchant wants the rider to come (the tenant's date).</summary>
+    public DateOnly PickupDate { get; private set; }
+
+    /// <summary>How many parcels the merchant expects to hand over, so the hub sends a big enough vehicle.</summary>
+    public int ExpectedParcels { get; private set; }
+
+    public string? Note { get; private set; }
+
+    public PickupStatus Status { get; private set; }
+
+    public long? RiderId { get; private set; }
+
+    /// <summary>Parcels the rider collected; set on completion.</summary>
+    public int? PickedParcels { get; private set; }
+
+    public DateTime? CompletedOn { get; private set; }
+
+    public byte[] RowVersion { get; private set; } = [];
+
+    public bool IsOpen => Status is PickupStatus.Requested or PickupStatus.Assigned;
+
+    public static Result<PickupRequest> Create(
+        long merchantId,
+        long pickupPointId,
+        long hubId,
+        DateOnly pickupDate,
+        DateOnly today,
+        int expectedParcels,
+        string? note)
+    {
+        if (pickupDate < today || pickupDate > today.AddDays(7))
+        {
+            return Error.Validation("pickup.date", "Choose a pickup day between today and a week from today.");
+        }
+
+        if (expectedParcels is < 1 or > 1000)
+        {
+            return Error.Validation("pickup.parcels", "Say how many parcels the rider collects, between 1 and 1,000.");
+        }
+
+        var text = note.NullIfBlank();
+        if (text?.Length > 300)
+        {
+            return Error.Validation("pickup.note", "The note is at most 300 characters.");
+        }
+
+        return new PickupRequest
+        {
+            MerchantId = merchantId,
+            PickupPointId = pickupPointId,
+            HubId = hubId,
+            PickupDate = pickupDate,
+            ExpectedParcels = expectedParcels,
+            Note = text,
+            Status = PickupStatus.Requested
+        };
+    }
+
+    /// <summary>The hub sends <paramref name="rider"/>, or another rider instead of the one it sent.</summary>
+    public Result Assign(Rider rider)
+    {
+        if (!IsOpen)
+        {
+            return Error.Conflict("pickup.closed", "This pickup is already done or cancelled.");
+        }
+
+        if (rider.HubId != HubId || rider.Archived)
+        {
+            return Error.Validation("pickup.rider", "Choose an active rider of the hub that collects from this point.");
+        }
+
+        RiderId = rider.Id;
+        Status = PickupStatus.Assigned;
+
+        return Result.Success();
+    }
+
+    /// <summary>The rider collected <paramref name="picked"/> parcels. Once.</summary>
+    public Result Complete(int picked, DateTime now)
+    {
+        if (Status != PickupStatus.Assigned)
+        {
+            return Error.Conflict("pickup.notAssigned", "Only a pickup assigned to a rider can be completed.");
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(picked);
+        PickedParcels = picked;
+        CompletedOn = now;
+        Status = PickupStatus.Completed;
+
+        return Result.Success();
+    }
+
+    /// <summary>The merchant no longer needs the rider. Only before the pickup is done.</summary>
+    public Result Cancel()
+    {
+        if (!IsOpen)
+        {
+            return Error.Conflict("pickup.closed", "This pickup is already done or cancelled.");
+        }
+
+        Status = PickupStatus.Cancelled;
+
+        return Result.Success();
+    }
+}

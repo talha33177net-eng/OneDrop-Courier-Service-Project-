@@ -1,0 +1,9 @@
+@* The result of the last form, carried over a redirect: TempData "Done" (success) and "Problem" (what went wrong) *@
+@if (TempData["Done"] is string done)
+{
+    <div class="alert alert-success" role="status">@Icons.Get("check-circle")<div>@done</div></div>
+}
+@if (TempData["Problem"] is string problem)
+{
+    <div class="alert alert-error" role="alert">@Icons.Get("alert")<div>@problem</div></div>
+}

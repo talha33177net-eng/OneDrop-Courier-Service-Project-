@@ -2,7 +2,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Application.Abstractions;
-using Domain.Customers;
+using Domain.Delivery;
 using Infrastructure.MultiTenancy;
 using Infrastructure.Persistence;
 
@@ -53,7 +53,7 @@ public class RowLevelSecurityTests(WebAppFactory factory)
             (predicates.TryGetValue(table, out var found) ? found : predicates[table] = []).Add(reader.GetString(1));
         }
 
-        Assert.Contains("Orders.Order", predicates.Keys);
+        Assert.Contains("Parcels.Parcel", predicates.Keys);
         Assert.Contains("Identity.User", predicates.Keys);
         Assert.All(predicates, table => Assert.True(
             table.Value.IsSupersetOf(["FILTER", "BLOCK AFTER INSERT", "BLOCK AFTER UPDATE"]),
@@ -64,21 +64,21 @@ public class RowLevelSecurityTests(WebAppFactory factory)
     public async Task With_the_query_filter_lifted_the_database_still_hides_another_tenants_rows()
     {
         WebAppFactory.RequireDatabase();
-        var (dhaka, chattogram) = (await TenantAsync("dhaka"), await TenantAsync("chattogram"));
-        await using var scope = ScopeFor(chattogram);
+        var (onedrop, rival) = (await TenantAsync("onedrop"), await TenantAsync("rival"));
+        await using var scope = ScopeFor(rival);
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var tenantsSeen = () => db.Hubs.IgnoreQueryFilters([AppDbContext.TenantFilter])
             .Select(h => h.TenantId).Distinct().ToListAsync(Cancel);
 
-        Assert.Equal([chattogram.Id], await tenantsSeen());
+        Assert.Equal([rival.Id], await tenantsSeen());
         await using (await db.AcrossTenantsAsync(Cancel))
         {
-            Assert.Contains(dhaka.Id, await tenantsSeen());
+            Assert.Contains(onedrop.Id, await tenantsSeen());
         }
 
-        Assert.Equal([chattogram.Id], await tenantsSeen());
-        Assert.Empty(await db.Orders.IgnoreQueryFilters([AppDbContext.TenantFilter, AppDbContext.MerchantFilter])
-            .Where(o => o.TenantId == dhaka.Id).Select(o => o.Id).Take(1).ToListAsync(Cancel));
+        Assert.Equal([rival.Id], await tenantsSeen());
+        Assert.Empty(await db.Parcels.IgnoreQueryFilters([AppDbContext.TenantFilter, AppDbContext.MerchantFilter])
+            .Where(o => o.TenantId == onedrop.Id).Select(o => o.Id).Take(1).ToListAsync(Cancel));
     }
 
     [Fact]
@@ -98,37 +98,38 @@ public class RowLevelSecurityTests(WebAppFactory factory)
     public async Task Writes_that_bypass_the_save_interceptor_cannot_reach_another_tenant()
     {
         WebAppFactory.RequireDatabase();
-        var (dhaka, chattogram) = (await TenantAsync("dhaka"), await TenantAsync("chattogram"));
-        await using var scope = ScopeFor(chattogram);
+        var (onedrop, rival) = (await TenantAsync("onedrop"), await TenantAsync("rival"));
+        await using var scope = ScopeFor(rival);
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var customer = new Customer(PhoneNumber.Parse("019" + Random.Shared.Next(0, 100_000_000).ToString("D8")).Value, "RLS test");
-        db.Customers.Add(customer);
+        var hubId = await db.Hubs.Select(h => h.Id).FirstAsync(Cancel);
+        var rider = Rider.Create(hubId, "RLS test", "019" + Random.Shared.Next(0, 100_000_000).ToString("D8"), null).Value;
+        db.Riders.Add(rider);
         await db.SaveChangesAsync(Cancel);
 
         // The updates write each row's own value back, so a broken policy counts the rows without changing them
         var changed = await db.Hubs.IgnoreQueryFilters([AppDbContext.TenantFilter])
-            .Where(h => h.TenantId == dhaka.Id)
+            .Where(h => h.TenantId == onedrop.Id)
             .ExecuteUpdateAsync(set => set.SetProperty(h => h.Name, h => h.Name), Cancel);
         var touched = await db.Database.ExecuteSqlAsync(
-            $"UPDATE Network.Zone SET [Name] = [Name] WHERE TenantId = {dhaka.Id}", Cancel);
+            $"UPDATE Network.Zone SET [Name] = [Name] WHERE TenantId = {onedrop.Id}", Cancel);
         var inserted = await Assert.ThrowsAsync<SqlException>(() => db.Database.ExecuteSqlAsync(
-            $"INSERT INTO Customers.Customer (TenantId, Phone, Name) VALUES ({dhaka.Id}, {customer.Phone}, N'Planted')", Cancel));
-        var moved = await Assert.ThrowsAsync<SqlException>(() => db.Customers
-            .Where(c => c.Id == customer.Id)
-            .ExecuteUpdateAsync(set => set.SetProperty(c => c.TenantId, dhaka.Id), Cancel));
+            $"INSERT INTO Delivery.Rider (TenantId, HubId, Phone, Name) VALUES ({onedrop.Id}, {hubId}, {rider.Phone}, N'Planted')", Cancel));
+        var moved = await Assert.ThrowsAsync<SqlException>(() => db.Riders
+            .Where(c => c.Id == rider.Id)
+            .ExecuteUpdateAsync(set => set.SetProperty(c => c.TenantId, onedrop.Id), Cancel));
 
         Assert.Equal(0, changed);
         Assert.Equal(0, touched);
         Assert.Contains("block predicate", inserted.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("block predicate", moved.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(chattogram.Id, await db.Customers.Where(c => c.Id == customer.Id).Select(c => c.TenantId).SingleAsync(Cancel));
+        Assert.Equal(rival.Id, await db.Riders.Where(c => c.Id == rider.Id).Select(c => c.TenantId).SingleAsync(Cancel));
     }
 
     [Fact]
     public async Task A_pooled_connection_never_keeps_the_last_tenant()
     {
         WebAppFactory.RequireDatabase();
-        TenantInfo[] tenants = [await TenantAsync("dhaka"), await TenantAsync("chattogram")];
+        TenantInfo[] tenants = [await TenantAsync("onedrop"), await TenantAsync("rival")];
 
         for (var round = 0; round < 6; round++)
         {

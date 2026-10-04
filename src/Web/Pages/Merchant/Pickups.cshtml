@@ -1,0 +1,100 @@
+@page
+@using Domain.Delivery
+@model Web.Pages.Merchant.PickupsModel
+@{
+    ViewData["Title"] = "Pickup requests";
+}
+
+<div class="page-head">
+    <div>
+        <h1>Pickup requests</h1>
+        <p>Ask us to collect your parcels. A rider from the nearest hub comes to your pickup point.</p>
+    </div>
+</div>
+
+<partial name="_Alerts" />
+
+<div class="grid grid-side">
+    <div class="card">
+        <div class="card-head"><h2>Your requests</h2></div>
+        @if (Model.Data.Requests.Count == 0)
+        {
+            <div class="empty">@Icons.Get("truck")<h3>No pickups yet</h3><p>Request your first pickup with the form.</p></div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Day</th><th>Pickup point</th><th class="num">Parcels</th><th>Rider</th><th>Status</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var request in Model.Data.Requests)
+                        {
+                            <tr>
+                                <td class="nowrap"><div class="cell-main">@request.Date.ToString("ddd d MMM")</div></td>
+                                <td><div>@request.PickupPoint</div><div class="cell-sub">@request.Area</div></td>
+                                <td class="num">@(request.Picked?.ToString() ?? request.Expected.ToString())<div class="cell-sub">@(request.Picked is null ? "expected" : "picked")</div></td>
+                                <td>
+                                    @if (request.Rider is not null)
+                                    {
+                                        <div>@request.Rider</div><div class="cell-sub">@Money.Phone(request.RiderPhone)</div>
+                                    }
+                                    else
+                                    {
+                                        <span class="faint">Not yet</span>
+                                    }
+                                </td>
+                                <td>@Statuses.Badge(request.Status)</td>
+                                <td class="text-right">
+                                    @if (request.Status is PickupStatus.Requested or PickupStatus.Assigned)
+                                    {
+                                        <form method="post" asp-page-handler="Cancel" asp-route-id="@request.Id" class="inline-form">
+                                            <button class="btn btn-ghost btn-sm" type="submit">Cancel</button>
+                                        </form>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+
+    <div class="card">
+        <div class="card-head"><h2>@Icons.Get("plus") Request a pickup</h2></div>
+        <div class="card-body">
+            @if (Model.Data.Points.Count == 0)
+            {
+                <p class="muted">Add a pickup point in <a asp-page="/Merchant/Settings">Settings</a> first.</p>
+            }
+            else
+            {
+                <form method="post">
+                    <div class="field">
+                        <label for="PointId">Pickup point</label>
+                        <select asp-for="PointId">
+                            @foreach (var point in Model.Data.Points)
+                            {
+                                <option value="@point.Id" selected="@point.IsDefault">@point.Name, @point.Area (@point.Waiting waiting)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="Date">Day</label>
+                        <input asp-for="Date" type="date" min="@Model.Today.ToString("yyyy-MM-dd")" max="@Model.Today.AddDays(7).ToString("yyyy-MM-dd")" />
+                    </div>
+                    <div class="field">
+                        <label for="Expected">How many parcels</label>
+                        <input asp-for="Expected" type="number" min="1" max="1000" />
+                    </div>
+                    <div class="field">
+                        <label for="Note">Note for the rider</label>
+                        <input asp-for="Note" maxlength="300" placeholder="e.g. Ask for Rahim at the counter" />
+                    </div>
+                    <button class="btn btn-primary btn-block" type="submit">@Icons.Get("truck") Request pickup</button>
+                </form>
+                <p class="hint mt">Parcels waiting at each point: @string.Join(", ", Model.Data.Points.Select(p => $"{p.Name} {p.Waiting}")).</p>
+            }
+        </div>
+    </div>
+</div>

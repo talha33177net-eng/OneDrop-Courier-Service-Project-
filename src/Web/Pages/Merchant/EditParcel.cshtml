@@ -1,0 +1,18 @@
+@page "{code}"
+@model Web.Pages.Merchant.EditParcelModel
+@{
+    ViewData["Title"] = $"Edit {Model.Code}";
+}
+
+<div class="page-head">
+    <div>
+        <div class="breadcrumb"><a asp-page="/Merchant/Parcels">Parcels</a> <span>/</span> <a asp-page="/Merchant/Parcel" asp-route-code="@Model.Code">@Model.Code</a> <span>/</span> <span>Edit</span></div>
+        <h1>Edit <span class="mono">@Model.Code</span></h1>
+        <p>You can change a parcel until a rider picks it up.</p>
+    </div>
+</div>
+
+<form method="post">
+    <div asp-validation-summary="ModelOnly" class="alert alert-error"></div>
+    @await Html.PartialAsync("_ParcelForm", (Model.Input, Model.Areas, Model.NoPoints, true))
+</form>

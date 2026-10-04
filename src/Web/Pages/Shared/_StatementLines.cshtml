@@ -1,0 +1,37 @@
+@using Application.Payments.MerchantPayments
+@using Domain.Payments
+@model (IReadOnlyList<StatementLine> Lines, string Link)
+@* Ledger lines grouped by parcel: cash collected and each charge, with the parcel's net *@
+@if (Model.Lines.Count == 0)
+{
+    <div class="empty">@Icons.Get("inbox")<h3>Nothing here</h3><p>Lines appear when a parcel is delivered or returned.</p></div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table compact">
+            <thead>
+                <tr><th>Parcel</th><th>Day</th><th class="num">Cash collected</th><th class="num">Delivery</th><th class="num">COD charge</th><th class="num">Return</th><th class="num">Net</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var parcel in Model.Lines.GroupBy(l => l.TrackingCode))
+                {
+                    decimal Of(LedgerEntryKind kind) => parcel.Where(l => l.Kind == kind).Sum(l => l.Amount);
+                    <tr>
+                        <td><a class="code-link" href="@(Model.Link + parcel.Key)">@parcel.Key</a></td>
+                        <td class="nowrap">@parcel.First().Date.ToString("d MMM")</td>
+                        <td class="num">@Money.Taka(Of(LedgerEntryKind.Cod))</td>
+                        <td class="num">@Money.Taka(Of(LedgerEntryKind.DeliveryCharge))</td>
+                        <td class="num">@Money.Taka(Of(LedgerEntryKind.CodCharge))</td>
+                        <td class="num">@Money.Taka(Of(LedgerEntryKind.ReturnCharge))</td>
+                        <td class="num strong">@Money.Taka(parcel.Sum(l => l.Amount))</td>
+                    </tr>
+                }
+                <tr class="total">
+                    <td colspan="6">Total</td>
+                    <td class="num">@Money.Taka(Model.Lines.Sum(l => l.Amount))</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+}

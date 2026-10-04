@@ -1,52 +1,65 @@
 @page
 @model Web.Pages.Account.LoginModel
 @{
-    ViewData["Title"] = "Staff sign in";
+    ViewData["Title"] = "Sign in";
 }
 
-<div class="auth-layout">
-    <div class="card">
-        <h1>Sign in</h1>
-        <p class="lead">For shops, hub staff, riders and admins of @Model.Where.</p>
-        <form method="post">
-            <div asp-validation-summary="All"></div>
-            <label asp-for="Input.Email">Email</label>
-            <input asp-for="Input.Email" type="email" autocomplete="username" />
-            <label asp-for="Input.Password">Password</label>
-            <input asp-for="Input.Password" type="password" autocomplete="current-password" />
-            <label class="check"><input asp-for="Input.RememberMe" /> Keep me signed in</label>
-            <button class="button block" type="submit">Sign in</button>
-        </form>
-        <p class="muted">
-            A customer?
-            <a asp-page="/Account/PhoneLogin">Track your delivery with your phone number</a> instead: no password needed.
-        </p>
-    </div>
-
-    @if (Model.DemoLogins.Count > 0)
-    {
-        <div class="card">
-            <h2>Try it with a demo account</h2>
-            <p class="muted">
-                Development only. Press one to sign in as that person (password <code>@Model.DemoPassword</code>). To
-                follow one delivery from start to end, see <a asp-page="/Guide">How it works</a>.
-            </p>
-            <div class="demo-logins">
-                @foreach (var login in Model.DemoLogins)
-                {
-                    <form method="post">
-                        <input type="hidden" name="Input.Email" value="@login.Email" />
-                        <input type="hidden" name="Input.Password" value="@Model.DemoPassword" />
-                        <button class="demo-login" type="submit">
-                            <span>
-                                <strong>@login.Name</strong>
-                                <small>@login.Email</small>
-                            </span>
-                            <em>@login.RoleName ›</em>
-                        </button>
-                    </form>
-                }
-            </div>
+<div class="auth-page">
+    <div style="width:100%;max-width:760px">
+        <div class="auth-card" style="margin:0 auto">
+            <h1>Welcome back</h1>
+            <p class="sub">Sign in to @Model.Where.</p>
+            <form method="post">
+                <div asp-validation-summary="ModelOnly" class="alert alert-error"></div>
+                <div class="field">
+                    <label asp-for="Input.Email">Email</label>
+                    <input asp-for="Input.Email" type="email" autocomplete="username" placeholder="you@example.com" />
+                    <span asp-validation-for="Input.Email" class="field-error"></span>
+                </div>
+                <div class="field">
+                    <label asp-for="Input.Password">Password</label>
+                    <input asp-for="Input.Password" type="password" autocomplete="current-password" />
+                    <span asp-validation-for="Input.Password" class="field-error"></span>
+                </div>
+                <div class="field">
+                    <label class="check"><input asp-for="Input.RememberMe" /> Keep me signed in</label>
+                </div>
+                <button class="btn btn-primary btn-block btn-lg" type="submit">Sign in</button>
+            </form>
+            @if (Model.OnCourierSite)
+            {
+                <p class="muted text-center mt">
+                    New merchant? <a asp-page="/Account/Register">Create an account</a> · Sending to you? <a asp-page="/Track">Track a parcel</a>
+                </p>
+            }
         </div>
-    }
+
+        @if (Model.DemoLogins.Count > 0)
+        {
+            <div class="card mt-lg">
+                <div class="card-head">
+                    <div>
+                        <h2>Demo accounts</h2>
+                        <p>Development only. Press one to sign in as that person (password <code>@Model.DemoPassword</code>).</p>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="demo-logins">
+                        @foreach (var login in Model.DemoLogins)
+                        {
+                            <form method="post">
+                                <input type="hidden" name="Input.Email" value="@login.Email" />
+                                <input type="hidden" name="Input.Password" value="@Model.DemoPassword" />
+                                <button class="demo-login" type="submit">
+                                    <span class="badge badge-brand plain" style="float:right">@login.RoleName</span>
+                                    <strong>@login.Name</strong>
+                                    <small>@login.Email</small>
+                                </button>
+                            </form>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
 </div>

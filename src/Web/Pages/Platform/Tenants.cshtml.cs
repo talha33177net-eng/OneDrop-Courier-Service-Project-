@@ -5,7 +5,7 @@ using Infrastructure.Persistence;
 namespace Web.Pages.Platform;
 
 /// <summary>
-/// The platform view across tenants. The only page that lifts the tenant filter, and it says so explicitly, to EF
+/// The platform view across couriers. The only page that lifts the tenant filter, and it says so explicitly, to EF
 /// and to the database's Row-Level Security; it only ever reads counts.
 /// </summary>
 public class TenantsModel(AppDbContext db) : PageModel
@@ -22,25 +22,13 @@ public class TenantsModel(AppDbContext db) : PageModel
             .Select(t => new TenantRow(
                 t.Name,
                 t.Slug,
-                t.BaseDeliveryFee,
-                t.ExtraShopFee,
                 db.Hubs.IgnoreQueryFilters(acrossTenants).Count(h => h.TenantId == t.Id),
-                db.Zones.IgnoreQueryFilters(acrossTenants).Count(z => z.TenantId == t.Id),
                 db.Merchants.IgnoreQueryFilters(acrossTenants).Count(m => m.TenantId == t.Id),
-                db.Customers.IgnoreQueryFilters(acrossTenants).Count(c => c.TenantId == t.Id),
-                db.Orders.IgnoreQueryFilters(acrossTenants).Count(o => o.TenantId == t.Id)))
+                db.Riders.IgnoreQueryFilters(acrossTenants).Count(r => r.TenantId == t.Id),
+                db.Parcels.IgnoreQueryFilters(acrossTenants).Count(p => p.TenantId == t.Id)))
             .AsNoTracking()
             .ToListAsync(cancellationToken);
     }
 
-    public sealed record TenantRow(
-        string Name,
-        string Slug,
-        decimal BaseFee,
-        decimal ExtraFee,
-        int Hubs,
-        int Zones,
-        int Merchants,
-        int Customers,
-        int Orders);
+    public sealed record TenantRow(string Name, string Slug, int Hubs, int Merchants, int Riders, int Parcels);
 }

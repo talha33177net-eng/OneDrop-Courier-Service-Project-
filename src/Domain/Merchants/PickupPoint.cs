@@ -2,21 +2,15 @@ using Domain.Common;
 
 namespace Domain.Merchants;
 
-/// <summary>Where the pickup route collects a merchant's parcels. A merchant has one default point.</summary>
+/// <summary>
+/// Where a rider collects a merchant's parcels: a shop, a warehouse or a home. A merchant has one default point, used
+/// when a parcel names none. The point's area decides the hub that collects from it and, with the destination, the
+/// service area a parcel is charged at.
+/// </summary>
 public class PickupPoint : TenantEntity, IMerchantOwned, IArchivable
 {
     private PickupPoint()
     {
-    }
-
-    public PickupPoint(long merchantId, long areaId, string name, string address, string contactPhone, bool isDefault)
-    {
-        MerchantId = merchantId;
-        AreaId = areaId;
-        Name = name.Trim();
-        Address = address.Trim();
-        ContactPhone = contactPhone.Trim();
-        IsDefault = isDefault;
     }
 
     public long MerchantId { get; private set; }
@@ -27,9 +21,49 @@ public class PickupPoint : TenantEntity, IMerchantOwned, IArchivable
 
     public string Address { get; private set; } = "";
 
+    /// <summary>E.164: who the rider calls on arrival.</summary>
     public string ContactPhone { get; private set; } = "";
 
     public bool IsDefault { get; private set; }
 
     public bool Archived { get; private set; }
+
+    public static Result<PickupPoint> Create(long merchantId, long areaId, string? name, string? address, string? phone, bool isDefault)
+    {
+        var point = new PickupPoint { MerchantId = merchantId, IsDefault = isDefault };
+        var changed = point.Change(areaId, name, address, phone);
+
+        return changed.IsSuccess ? point : changed.Error!;
+    }
+
+    public Result Change(long areaId, string? name, string? address, string? phone)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 200)
+        {
+            return Error.Validation("pickupPoint.name", "Name the pickup point, such as \"Shop\" or \"Warehouse\".");
+        }
+
+        if (string.IsNullOrWhiteSpace(address) || address.Trim().Length > 500)
+        {
+            return Error.Validation("pickupPoint.address", "Enter the pickup address, at most 500 characters.");
+        }
+
+        var contact = PhoneNumber.Parse(phone);
+        if (contact.IsFailure)
+        {
+            return contact.Error!;
+        }
+
+        AreaId = areaId;
+        Name = name.Trim();
+        Address = address.Trim();
+        ContactPhone = contact.Value.Value;
+
+        return Result.Success();
+    }
+
+    public void MakeDefault(bool isDefault)
+    {
+        IsDefault = isDefault;
+    }
 }

@@ -1,45 +1,41 @@
 # Project
 
-**Multiple shops. One delivery.** OneDrop groups orders from different online shops going to the same customer
-into one delivery. Multi-tenant: each operator (OneDrop Dhaka, OneDrop Chattogram, ...) has its own customers,
-hubs, merchants and prices.
+**OneDrop Courier: doorstep delivery and cash on delivery across Bangladesh.** A courier service for online shops, in
+the way Steadfast, Pathao or RedX work: a merchant books parcels, a rider picks them up, the hubs sort them, a rider
+delivers each one and collects the cash on delivery, and the merchant is paid that cash, less the courier's charges,
+the next day.
 
 .NET 10 · ASP.NET Core (Razor Pages + REST API) · EF Core 10 · SQL Server · Clean Architecture modular monolith.
 
-In Dhaka, three shops sent separately cost the customer three courier charges (৳180 or more). With OneDrop the first
-shop costs ৳60 and every other shop in the same delivery ৳25, so three shops cost ৳110. The customer pays at the door
-on delivery day, when the group is complete. Shops pay nothing, hand their parcels to a scheduled zone pickup and are
-paid their cash on delivery the next morning.
+| Who | What they do |
+|---|---|
+| Merchant | Signs up (approved by the courier), books parcels by form, spreadsheet or API, asks for pickups, prints labels, follows every parcel, checks a phone number's delivery record, sees its payments and invoices |
+| Hub staff | Scan parcels in and out (receive, send to the delivery hub, hand back returns), send riders to pickups, hand parcels to riders, close each rider's run with the cash handed in |
+| Rider | A phone screen: today's pickups and deliveries, and at each door delivered, partly delivered, on hold or refused |
+| Courier admin | Live dashboard, merchants (approve, suspend, edit), riders, the rate card, coverage, payouts, failed messages |
+| Recipient | Public tracking by code, and an SMS when the parcel goes out and when it is delivered |
+
+Prices come from the courier's rate card, per service area (seeded values):
+
+| Service area | Up to 1 kg | Each extra kg | COD charge | Extra for a return |
+|---|---|---|---|---|
+| Inside city | ৳60 | ৳15 | 1% | ৳0 |
+| Suburb | ৳100 | ৳20 | 1% | ৳50 |
+| Outside city | ৳120 | ৳20 | 1% | ৳60 |
 
 ## Documents
 
 | Read | For |
 |---|---|
 | [Documentation/Project-Context.md](Documentation/Project-Context.md) | The product, every decision and why, the environment, traps already found. Start here |
-| [Documentation/Architecture.md](Documentation/Architecture.md) | Diagrams: layers, the life of a delivery, delivery states, tenant isolation, the outbox, a day at an operator |
-| [Documentation/Demo.md](Documentation/Demo.md) | The final demo script, step by step, and a recorded run |
-| [Plans/Implementation-Plan.md](Plans/Implementation-Plan.md) | Every task with how it was tested, the decisions log and the daily log |
+| [Documentation/Architecture.md](Documentation/Architecture.md) | Diagrams: layers, the life of a parcel, parcel states, tenant isolation, the outbox, a day at the courier |
+| [Documentation/Demo.md](Documentation/Demo.md) | The demo script, step by step |
+| [Plans/Implementation-Plan.md](Plans/Implementation-Plan.md) | What is built, how it was tested, what is next, the decisions log and the daily log |
 | [Documentation/Conventions.md](Documentation/Conventions.md), [Documentation/Database.md](Documentation/Database.md) | Rules for code and SQL |
-
-## Status
-
-The 4-week MVP is complete: the final demo runs end to end ([Documentation/Demo.md](Documentation/Demo.md)).
-
-| Week | Scope | State |
-|---|---|---|
-| 1 — Foundation | Solution, tenancy (catalog, resolvers, filters, save guard), domain + database, Identity with roles and phone OTP, seeded tenants/zones/hubs, merchant API key + Create Order | **Done** |
-| 2 — Grouping core | Customer matching, delivery groups + 3-day rule, quote (৳60 / +৳25), lock job + Ship now, outbox + fake SMS, customer group page | **Done** |
-| 3 — Operations & money | Pickup routes + QR labels, hub scan/shelves/shuttle, rider trips, market pricing (joinable fast deliveries, Ship now as an upgrade, weight allowance, staggered pickups), door payment, confirmation and advance payment, ledger + settlement, trust (advance after a refusal until 3 good deliveries; late shops drop off at the hub) | **Done** |
-| 4 — Polish & proof | SignalR dashboards, webhooks, Row-Level Security, Docker, CI, simulator, combining deliveries to two spellings of one address, the shopping window, documentation and the final demo | **Done** |
-
-Not built yet (after the MVP): screens for shops to create their own API keys, operator admin screens for zones,
-hubs, riders, bikes, route times and prices (today SQL only), Ship now by replying "1" to the SMS (needs an inbound
-SMS gateway), a screen for texts and webhooks that failed, real bKash/Nagad and SMS gateways (fakes today), and a
-database login of the app's own instead of `sa`.
 
 ## Run it
 
-Prerequisites: .NET 10 SDK, SQL Server (the dev server is `ras-x2`), and SqlPackage
+Prerequisites: .NET 10 SDK, SQL Server (the dev server is `10.50.0.1,1433` over the VPN), and SqlPackage
 (`dotnet tool install -g microsoft.sqlpackage`).
 
 **One-time setup: connection strings.** They contain the database password, so they are kept in git-ignored
@@ -55,7 +51,7 @@ Both have the same shape:
 ```json
 {
   "ConnectionStrings": {
-    "Database": "Server=ras-x2,1433;Database=OneDrop;User Id=...;Password=...;TrustServerCertificate=true;MultipleActiveResultSets=true"
+    "Database": "Server=10.50.0.1,1433;Database=OneDrop;User Id=...;Password=...;TrustServerCertificate=true;MultipleActiveResultSets=true"
   }
 }
 ```
@@ -63,30 +59,29 @@ Both have the same shape:
 Then:
 
 ```powershell
-./tools/db/publish.ps1                      # dbup pre -> publish the dacpac -> dbup (tenants, zones, hubs, areas)
-dotnet run --project src/Web                # http://localhost:5080 — seeds demo logins and merchants on start
+./tools/db/publish.ps1                      # dbup pre -> publish the dacpac -> dbup (the courier, hubs, zones, areas, rates)
+dotnet run --project src/Web                # seeds demo logins, merchants and riders on start
 ```
-
-Tenants are subdomains. Browsers resolve `*.localhost` to your machine, so no hosts-file changes are needed:
 
 | Address | What |
 |---|---|
-| http://localhost:5080 | Platform (OneDrop company) |
-| http://dhaka.localhost:5080 | OneDrop Dhaka — 7 zones, 5 hubs, ৳60 + ৳25, fast ৳70 |
-| http://chattogram.localhost:5080 | OneDrop Chattogram — 5 zones, 2 hubs, ৳70 + ৳30, fast ৳80 |
+| http://onedrop.localhost:5080 | OneDrop Courier: public site, tracking, sign-up, and every panel |
+| http://localhost:5080 | The platform (lists couriers; platform admin only) |
 
-### Fill it with demo orders
+Browsers resolve `*.localhost` to your machine, so no hosts-file changes are needed. In Development the app also books
+about twenty sample parcels in every stage (`Seed:DemoActivity`), so every screen has something to show.
 
-With the app running, the simulator makes up shops for each operator and sends their orders through the API, from
-customers who buy at several shops, so deliveries group as they would in real life:
+### Fill it with more parcels
+
+With the app running, the simulator makes up shops and books their parcels through the API:
 
 ```powershell
-dotnet run --project tools/Simulator -- --orders 40               # both operators, 40 orders each
-dotnet run --project tools/Simulator -- --tenant dhaka --pace 2   # one order every 2 seconds: watch /Admin fill up
+dotnet run --project tools/Simulator -- --parcels 40              # 40 parcels from 6 made-up shops
+dotnet run --project tools/Simulator -- --parcels 40 --pace 2     # one every 2 seconds: watch /Admin fill up
 ```
 
-`--shops` (up to 8), `--seed` (the same customers again) and `--url` (default http://localhost:5080) are optional. It
-uses the app's database for the shops (the same connection string as the app) and gives each a new API key per run.
+`--shops` (up to 8), `--seed`, `--tenant` (default: every courier in the database) and `--url` (default http://localhost:5080) are optional.
+Each run gives each shop a new API key.
 
 ### Run it in Docker
 
@@ -97,124 +92,124 @@ copy .env.example .env          # then choose a SQL Server password in .env (git
 docker compose up --build       # SQL Server 2025, the database deployed from nothing, then the app
 ```
 
-The same addresses as above work (http://dhaka.localhost:5080). The `database` service runs `publish.ps1` against the
-container's SQL Server and exits; the app starts once it has succeeded. SQL Server is on `localhost,14330` for
-your own queries; `docker compose down -v` deletes its data.
+The same address works (http://onedrop.localhost:5080). SQL Server is on `localhost,14330`; `docker compose down -v`
+deletes its data.
 
 ### Demo logins (Development only, password `OneDrop#2026`)
 
-| Login | Where | Role |
-|---|---|---|
-| `admin@onedrop.test` | localhost | Platform admin |
-| `admin@dhaka.onedrop.test` / `admin@chattogram.onedrop.test` | tenant | Tenant admin (**Dashboard**: every hub live and packages per delivery by area, week by week; **Failed messages**: texts and webhooks that did not go out, send again; also every hub page) |
-| `hub@dhaka.onedrop.test` / `hub@chattogram.onedrop.test` | tenant | Hub staff (**Hub today**: live counts and the parcels of today's deliveries not scanned in yet; **Pickup routes**: route sheets per zone; **Scan**: collect, receive, load the shuttle and return to the shop; **Shelves**; **Shuttle** manifest; **Trips**: today's riders and deliveries, Plan trips now; **Cash**: record each rider's cash handed in) |
-| `rider@dhaka.onedrop.test` (Mirpur, 30 parcels / 25 kg), `rider2@dhaka.onedrop.test` (Mirpur, 12 / 15 kg), `rider3@dhaka.onedrop.test` (Gulshan), `rider@chattogram.onedrop.test` (Agrabad) | tenant | Rider (**Today**: stops, what to collect, Start trip; at each door: refused orders, check the amount, hand over for cash or after a bKash / Nagad QR is paid (the fake wallet is paid on **Wallet payments**), or nobody home; cash to hand in) |
-| `fashion@`, `gadget@`, `beauty@` + `dhaka.onedrop.test` / `chattogram.onedrop.test` | tenant | Merchant (orders, printable QR labels; **Payouts**: COD owed, charges, payouts sent the next day, listed on **Wallet payments**; **Order updates** (webhook), **Shop window**, **API keys**: make and revoke keys) |
-| Any mobile number via **Customer sign in** | tenant | Customer (code appears on **SMS outbox**; a first cash order is confirmed, or its fee paid in advance, through the link in its text) |
+The sign-in page lists them as one-press buttons in Development.
 
-### Demo merchant API keys (Development only)
+| Login | Role |
+|---|---|
+| `admin@onedrop.test` | Courier admin |
+| `hub@onedrop.test` | Hub staff (any hub; the hub is picked at the top of each hub page) |
+| `fashion@onedrop.test`, `gadget@onedrop.test`, `beauty@onedrop.test`, `crafts@onedrop.test` | Merchants (Fashion House, Gadget BD, Beauty Shop, Chattogram Crafts) |
+| `organic@onedrop.test` | Organic Bazar, a merchant still waiting for approval |
+| `rider@onedrop.test`, `rider2@` (Mirpur), `rider3@` (Gulshan), `rider4@` (Chattogram), `rider5@` (Dhanmondi), `rider6@` (Uttara) | Riders |
+| `admin@platform.test` on http://localhost:5080 | Platform admin |
 
-| Tenant | Merchant | Key |
-|---|---|---|
-| Dhaka | Fashion House | `od_dhkfashion01_DevOnlyKeyDoNotUseInProduction01` |
-| Dhaka | Gadget BD | `od_dhkgadget001_DevOnlyKeyDoNotUseInProduction02` |
-| Dhaka | Beauty Shop | `od_dhkbeauty001_DevOnlyKeyDoNotUseInProduction03` |
-| Chattogram | Fashion House | `od_ctgfashion01_DevOnlyKeyDoNotUseInProduction04` |
-| Chattogram | Gadget BD | `od_ctggadget001_DevOnlyKeyDoNotUseInProduction05` |
-| Chattogram | Beauty Shop | `od_ctgbeauty001_DevOnlyKeyDoNotUseInProduction06` |
+The **Demo mode** bar links the fake gateways: **SMS inbox** (`/Dev/Sms`), **Payouts sent** (`/Dev/Payouts`) and
+**Webhooks received** (`/Dev/Webhooks`).
 
-### Create an order
+### Demo API keys (Development only)
+
+| Merchant | Key |
+|---|---|
+| Fashion House | `od_odfashion001_DevOnlyKeyDoNotUseInProduction01` |
+| Gadget BD | `od_odgadget0001_DevOnlyKeyDoNotUseInProduction02` |
+| Beauty Shop | `od_odbeauty0001_DevOnlyKeyDoNotUseInProduction03` |
+| Chattogram Crafts | `od_odctgcraft01_DevOnlyKeyDoNotUseInProduction04` |
+
+Merchants make and revoke their own keys on **API keys**.
+
+## The merchant API
 
 ```bash
-curl http://localhost:5080/api/v1/orders \
-  -H "X-Api-Key: od_dhkfashion01_DevOnlyKeyDoNotUseInProduction01" \
-  -H "Idempotency-Key: fh-A102" \
+curl http://onedrop.localhost:5080/api/v1/parcels \
+  -H "X-Api-Key: od_odfashion001_DevOnlyKeyDoNotUseInProduction01" \
+  -H "Idempotency-Key: INV-1001" \
   -H "Content-Type: application/json" \
   -d '{
-        "externalReference": "A102",
-        "customer": { "name": "Rahim Uddin", "phone": "01712-345678" },
-        "address":  { "area": "Mirpur 10", "line1": "House 12, Road 5", "line2": "Flat 3B" },
-        "packages": [ { "description": "T-shirt", "weightGrams": 400 } ],
-        "codAmount": 800,
-        "speed": "combine"
+        "merchantReference": "INV-1001",
+        "recipientName": "Rahim Uddin",
+        "recipientPhone": "01712-345678",
+        "recipientAddress": "House 12, Road 5",
+        "area": "Gulshan 2",
+        "codAmount": 1250,
+        "weightKg": 1.5,
+        "itemDescription": "Panjabi"
       }'
 ```
 
 | Endpoint | |
 |---|---|
-| `POST /api/v1/orders` | 201 with the order number and `fee`; `waitsFor` says what the order waits for from the customer (`none`, `confirm`, or `payInAdvance` when the shop sends `"feeInAdvance": true`, after a refusal or a no-show, until the customer has accepted the operator's count of deliveries since). A retry with the same `Idempotency-Key` returns 200 and the same order, a different body with that key 409 |
-| `GET /api/v1/orders/{number}` | The caller's own order; anyone else's is 404 |
-| `GET /api/v1/areas` | The area list an address must pick from |
-| `GET /api/v1/quote?phone=&area=&line1=` | The delivery fee for the checkout: `{ fee, currency, joinsDelivery }` (৳60 for a new delivery, +৳25 when one is already on its way, the fast fee for `speed=fast`). Optional `weightGrams` adds each started kg above the shop's allowance (Dhaka 2 kg, then ৳15); optional `pickupPointId` (default: the shop's default point) |
+| `POST /api/v1/parcels` | 201 with the tracking code (`OD10000001`), status, service area, delivery hub and charges. A retry with the same `Idempotency-Key` returns 200 and the same parcel; a different body with that key 409. A merchant waiting for approval gets 403 |
+| `GET /api/v1/parcels/{code}` | The caller's own parcel and its history; anyone else's is 404 |
+| `POST /api/v1/parcels/{code}/cancel` | Before pickup only (409 after); optional `reason` |
+| `GET /api/v1/charge?area=&weightKg=&codAmount=` | What a parcel would cost: service area, delivery charge, COD charge, total, return charge |
+| `GET /api/v1/areas` | The areas an address must pick from, with their city and hub |
 
-### Order updates by webhook
+### Status changes by webhook
 
-A shop sets its webhook address on **Order updates** (`/Merchant/Webhook`, https only; plain http only to localhost)
-and gets a `whsec_` secret there. Each status change of its orders (`pickedUp`, `atHub`, `outForDelivery`,
-`delivered`, `refused`, `returnedToMerchant`, `cancelled`) is posted through the outbox:
+A merchant sets a webhook address on **Webhooks** (`/Merchant/Webhook`, https only; plain http only to localhost) and
+gets a `whsec_` secret there. Each status change of its parcels is posted through the outbox:
 
 ```json
-{ "type": "order.status_changed", "timestamp": "2026-09-30T05:38:12Z",
-  "data": { "number": "OD-100108", "externalReference": "FB-2001", "status": "atHub" } }
+{ "type": "parcel.status_changed", "timestamp": "2026-10-04T05:38:12Z",
+  "data": { "trackingCode": "OD10000008", "merchantReference": "INV-2007", "status": "outForDelivery",
+            "codAmount": 1250, "collectedAmount": null, "deliveryCharge": 60, "reason": null } }
 ```
 
 Signed as [Standard Webhooks](https://www.standardwebhooks.com/): headers `webhook-id` (the same on a retry),
 `webhook-timestamp` and `webhook-signature` = `v1,` + base64 HMAC-SHA256 of `{id}.{timestamp}.{body}` keyed with the
-base64-decoded secret. Any 2xx answer counts; otherwise it is retried after 1, 2, 4 and 8 minutes. The body never
-names the delivery or the customer's other shops. In Development, set the address to
-`http://localhost:5080/Dev/Webhooks` to see what arrives and whether its signature checks.
+base64-decoded secret. Any 2xx answer counts; otherwise it is retried after 1, 2, 4 and 8 minutes, then given up
+(the admin can send it again from **Failed messages**).
 
-### Shopping window
-
-A shop that wants new customers lists itself on **Shop window** (`/Merchant/Window`): the address customers shop at
-(website or Facebook page) and a line on what it sells. Customers whose delivery is still open to other shops see the
-listed shops: the "joined" SMS ends with "Add from any OneDrop shop for +৳25:" and a link to the operator's public
-**Shops** page (`/Shops`, the same list for everyone), and each open delivery on "My deliveries" lists the shops not
-already in it. Shops are never shown who bought where.
-
-Background jobs run on Hangfire in the web app; the dashboard is at http://localhost:5080/jobs (platform admin).
+Background jobs run on Hangfire in the web app (the hourly merchant payouts); the dashboard is at
+http://localhost:5080/jobs (platform admin).
 
 ## Layout
 
 ```
 src/
-  Domain            entities and business rules, no packages
-  Application       one folder per use case (Orders/CreateOrder, Grouping/DeliveryGrouping, Delivery/Door, ...)
-  Infrastructure    EF Core mapping, tenancy, Identity, Hangfire, fake SMS/payment/payout gateways, webhooks, demo seeder
-  Web               Razor Pages portals, /api/v1, SignalR, middleware, composition root
+  Domain            entities and business rules, no packages (Parcels, Pricing, Delivery, Payments, Merchants, Network)
+  Application       one folder per use case (Parcels/CreateParcel, Hubs/HubScan, Delivery/RiderDay, Payments/RunPayouts, ...)
+  Infrastructure    EF Core mapping, tenancy, Identity, Hangfire, fake SMS and payout gateways, webhooks, demo seeder
+  Web               Razor Pages panels, /api/v1, SignalR, middleware, composition root
   Database          SQL project: owns the schema, builds a dacpac
   Database Update   DbUp data migrations (dbup.exe)
 tests/
   Domain.Tests          business rules
   Architecture.Tests    every entity has a TenantId; the SQL project lists every .sql file
-  Integration.Tests     real database: grouping, fees, hub, door, payouts, isolation sweep, Row-Level Security
+  Integration.Tests     real database: API, panels, the delivery flow, payouts, webhooks, isolation sweep, Row-Level Security
 tools/
   db/publish.ps1        deploy the database (Windows PowerShell and PowerShell 7 on Linux)
-  Simulator             demo shops and orders through the running app's API
+  Simulator             demo shops and parcels through the running app's API
 Dockerfile, docker-compose.yml, .github/workflows/ci.yml
 Documentation/          context, architecture diagrams, demo, conventions
-Plans/                  the implementation plan and daily log
+Plans/                  the plan and daily log
 ```
-
-See [Documentation/Architecture.md](Documentation/Architecture.md) for how the parts work together.
 
 ## Database
 
-The schema is owned by the SQL project, **not** by EF migrations — the same setup as DCN. A new table or
-column goes into `src/Database/<Schema>/Tables/<Table>.sql` first, then into the EF mapping in
-`src/Infrastructure/Persistence/Configurations`. Data changes go into DbUp scripts. The integration
-test `SchemaMatchesModelTests` fails if the two disagree. Full rules: [Documentation/Database.md](Documentation/Database.md).
+The schema is owned by the SQL project, **not** by EF migrations — the same setup as DCN. A new table or column goes
+into `src/Database/<Schema>/Tables/<Table>.sql` first, then into the EF mapping in
+`src/Infrastructure/Persistence/Configurations`. Data changes go into DbUp scripts. The integration test
+`SchemaMatchesModelTests` fails if the two disagree. Full rules: [Documentation/Database.md](Documentation/Database.md).
 
-## Keeping tenants apart
+## Keeping couriers and merchants apart
 
-1. **EF Core query filters** — every tenant-owned entity gets `WHERE TenantId = @current`, and merchant-owned
-   ones also `WHERE MerchantId = @merchant` for merchant callers. No tenant set means no rows.
+The system is multi-tenant: a tenant is a courier operator with its own hubs, riders, merchants and rates. One
+courier is seeded; the integration tests add a second ("rival") to prove the walls hold.
+
+1. **EF Core query filters** — every tenant-owned entity gets `WHERE TenantId = @current`, and merchant-owned ones
+   also `WHERE MerchantId = @merchant` for merchant callers. No tenant set means no rows.
 2. **Save interceptor** — stamps `TenantId` on new rows and refuses writes to another tenant's rows.
-3. **SQL Server Row-Level Security** — the policy `Platform.TenantIsolation` filters every table with a `TenantId`
-   by the tenant each application connection names in `SESSION_CONTEXT`, and refuses rows written for another
-   tenant, so a lifted filter or raw SQL still stays inside the tenant.
+3. **SQL Server Row-Level Security** — the policy `Platform.TenantIsolation` filters every table with a `TenantId` by
+   the tenant each application connection names in `SESSION_CONTEXT`, and refuses rows written for another tenant.
 
-The tenant comes from the subdomain (portals) or the API key (merchant API).
+The tenant comes from the subdomain (panels) or the API key (merchant API). A merchant sees only its own parcels, and
+a rider only the parcels given to them.
 
 ## Tests
 
@@ -223,13 +218,12 @@ dotnet test --project tests/Domain.Tests
 dotnet test --project tests/Architecture.Tests
 
 ./tools/db/publish.ps1 -Database OneDrop-Test   # after any schema change: keeps the test database current
-dotnet test --project tests/Integration.Tests    # uses OneDrop-Test from testsettings.json
+dotnet test --project tests/Integration.Tests    # uses OneDrop-Test from testsettings.Local.json
 ```
 
-The integration tests use their own database, `OneDrop-Test`, so their throwaway orders and customers never
-reach the development database `OneDrop`. Set `INTEGRATION_TEST_DB` to point them somewhere else (CI, another
-developer's database).
+The integration tests use their own database, `OneDrop-Test`, so their parcels never reach the development database
+`OneDrop`. Set `INTEGRATION_TEST_DB` to point them somewhere else (CI, another developer's database).
 
-**CI** (`.github/workflows/ci.yml`, on pushes to `main` and `day*` and on pull requests): builds, starts a throwaway
-SQL Server 2025 with a password made up for the run, deploys the database into it from nothing with `publish.ps1`,
-runs the three suites (failing if the integration tests were skipped) and builds the Docker images.
+**CI** (`.github/workflows/ci.yml`): builds, starts a throwaway SQL Server 2025 with a password made up for the run,
+deploys the database into it from nothing with `publish.ps1`, runs the three suites (failing if the integration tests
+were skipped) and builds the Docker images.

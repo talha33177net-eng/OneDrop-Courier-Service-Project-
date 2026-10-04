@@ -1,0 +1,62 @@
+@page
+@model Web.Pages.Merchant.ParcelsModel
+@{
+    ViewData["Title"] = "Parcels";
+}
+
+<div class="page-head">
+    <div>
+        <h1>Parcels</h1>
+        <p>Every parcel you have booked, newest first.</p>
+    </div>
+    <div class="page-actions">
+        <a class="btn btn-outline" asp-page-handler="Export" asp-all-route-data="@(Request.Query.ToDictionary(q => q.Key, q => q.Value.ToString()))">@Icons.Get("download") Export CSV</a>
+        <a class="btn btn-outline" asp-page="/Merchant/BulkUpload">@Icons.Get("upload") Bulk upload</a>
+        <a class="btn btn-primary" asp-page="/Merchant/NewParcel">@Icons.Get("plus") Book a parcel</a>
+    </div>
+</div>
+
+<partial name="_Alerts" />
+
+<div class="card">
+    <partial name="_ParcelTabs" model="Model.List.Counts" />
+    <form class="filters" method="get">
+        <input type="hidden" name="tab" value="@Model.Tab" />
+        <div class="field grow">
+            <label for="search">Search</label>
+            <input type="search" id="search" name="search" value="@Model.Search" placeholder="Tracking code, invoice, recipient name or phone" />
+        </div>
+        <div class="field">
+            <label for="from">Booked from</label>
+            <input type="date" id="from" name="from" value="@Model.From?.ToString("yyyy-MM-dd")" />
+        </div>
+        <div class="field">
+            <label for="to">to</label>
+            <input type="date" id="to" name="to" value="@Model.To?.ToString("yyyy-MM-dd")" />
+        </div>
+        <button class="btn btn-outline" type="submit">@Icons.Get("search") Filter</button>
+        @if (Model.Search is not null || Model.From is not null || Model.To is not null)
+        {
+            <a class="btn btn-ghost" asp-page="/Merchant/Parcels" asp-route-tab="@Model.Tab">Clear</a>
+        }
+    </form>
+    <form method="get" asp-page="/Merchant/Labels" id="selected">
+        @await Html.PartialAsync("_ParcelTable", (Model.List.Page.Items, "/Merchant/Parcel/", false, true))
+        @if (Model.List.Page.Items.Count > 0)
+        {
+            <div class="card-foot spread no-print">
+                <span class="muted">Tick parcels to print their labels.</span>
+                <button class="btn btn-outline btn-sm" type="submit">@Icons.Get("printer") Print labels for ticked parcels</button>
+            </div>
+        }
+    </form>
+    <partial name="_Pager" model="(Model.List.Page.Number, Model.List.Page.Pages, Model.List.Page.Total)" />
+</div>
+
+@section Scripts {
+    <script>
+        document.querySelector("[data-select-all]")?.addEventListener("change", event => {
+            document.querySelectorAll("#selected input[name=codes]").forEach(box => box.checked = event.target.checked);
+        });
+    </script>
+}

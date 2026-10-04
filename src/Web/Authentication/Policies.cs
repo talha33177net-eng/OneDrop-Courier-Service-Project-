@@ -7,16 +7,15 @@ public static class Policies
 {
     public const string MerchantApi = nameof(MerchantApi);
     public const string MerchantPortal = nameof(MerchantPortal);
-    public const string CustomerPortal = nameof(CustomerPortal);
     public const string PlatformAdmin = nameof(PlatformAdmin);
 
-    /// <summary>The operator's own staff: hub staff and tenant admins.</summary>
+    /// <summary>The courier's own staff at the hubs: hub staff and admins.</summary>
     public const string Operations = nameof(Operations);
 
-    /// <summary>The operator's admins: the whole operator at once (every hub, the week-by-week numbers).</summary>
+    /// <summary>The courier's admins: the whole company at once (merchants, riders, rates, payouts).</summary>
     public const string OperatorAdmin = nameof(OperatorAdmin);
 
-    /// <summary>The operator's riders, on their own tenant's subdomain.</summary>
+    /// <summary>The courier's riders, on their own tenant's subdomain.</summary>
     public const string Rider = nameof(Rider);
 
     public static void Configure(AuthorizationOptions options)
@@ -28,9 +27,6 @@ public static class Policies
         options.AddPolicy(MerchantPortal, policy => policy
             .RequireRole(Roles.Merchant)
             .RequireClaim(AppClaims.MerchantId));
-        options.AddPolicy(CustomerPortal, policy => policy
-            .RequireRole(Roles.Customer)
-            .RequireClaim(AppClaims.CustomerId));
         options.AddPolicy(PlatformAdmin, policy => policy.RequireRole(Roles.PlatformAdmin));
         options.AddPolicy(Operations, policy => policy
             .RequireRole(Roles.HubStaff, Roles.TenantAdmin)

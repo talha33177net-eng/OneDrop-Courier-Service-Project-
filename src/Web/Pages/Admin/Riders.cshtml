@@ -1,0 +1,106 @@
+@page
+@model Web.Pages.Admin.RidersModel
+@{
+    ViewData["Title"] = "Riders";
+}
+
+<div class="page-head">
+    <div>
+        <h1>Riders</h1>
+        <p>Who picks up and delivers, from which hub.</p>
+    </div>
+    <div class="page-actions">
+        <form method="get" class="hub-switch">
+            @Icons.Get("warehouse")
+            <select name="hubId" onchange="this.form.submit()" aria-label="Hub">
+                <option value="">All hubs</option>
+                @foreach (var hub in Model.Hubs)
+                {
+                    <option value="@hub.Id" selected="@(hub.Id == Model.HubId)">@hub.Name</option>
+                }
+            </select>
+        </form>
+    </div>
+</div>
+
+<partial name="_Alerts" />
+@if (Model.Problem is not null)
+{
+    <div class="alert alert-error">@Icons.Get("alert")<div>@Model.Problem</div></div>
+}
+
+<div class="grid grid-side">
+    <div class="card">
+        @if (Model.Rows.Count == 0)
+        {
+            <div class="empty">@Icons.Get("bike")<h3>No riders here</h3></div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Rider</th><th>Hub</th><th class="num">With them</th><th class="num">Delivered today</th><th class="num">Cash in hand</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var r in Model.Rows)
+                        {
+                            <tr style="@(r.Active ? "" : "opacity:.55")">
+                                <td><div class="cell-main">@r.Name @if (!r.Active) { <span class="badge badge-cancel">Stopped</span> }</div><div class="cell-sub">@Money.Phone(r.Phone)@(r.Email is null ? "" : $" · {r.Email}")</div></td>
+                                <td>@r.Hub</td>
+                                <td class="num">@r.WithThem</td>
+                                <td class="num">@r.DeliveredToday</td>
+                                <td class="num">@Money.Taka(r.CashInHand)</td>
+                                <td class="text-right nowrap">
+                                    <a class="btn btn-ghost btn-sm" asp-route-edit="@r.Id" asp-route-hubId="@Model.HubId">Edit</a>
+                                    <form method="post" asp-page-handler="Active" asp-route-id="@r.Id" asp-route-active="@(!r.Active)" asp-route-hubId="@Model.HubId" class="inline-form">
+                                        <button class="btn btn-ghost btn-sm" type="submit">@(r.Active ? "Stop" : "Restart")</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            @if (Model.Edit == r.Id)
+                            {
+                                <tr>
+                                    <td colspan="6" style="background:var(--brand-tint)">
+                                        <form method="post" asp-page-handler="Edit" asp-route-id="@r.Id" asp-route-hubId="@Model.HubId" class="gap">
+                                            <input type="text" name="name" value="@r.Name" required style="max-width:200px" aria-label="Name" />
+                                            <input type="tel" name="phone" value="@Money.Phone(r.Phone)" required style="max-width:160px" aria-label="Phone" />
+                                            <select name="hubId" style="max-width:200px" aria-label="Hub">
+                                                @foreach (var hub in Model.Hubs)
+                                                {
+                                                    <option value="@hub.Id" selected="@(hub.Id == r.HubId)">@hub.Name</option>
+                                                }
+                                            </select>
+                                            <button class="btn btn-primary btn-sm" type="submit">Save</button>
+                                            <a class="btn btn-ghost btn-sm" asp-route-hubId="@Model.HubId">Cancel</a>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+
+    <div class="card" style="align-self:start">
+        <div class="card-head"><h2>@Icons.Get("plus") Add a rider</h2></div>
+        <div class="card-body">
+            <form method="post" asp-page-handler="Add">
+                <div class="field"><label for="name">Name</label><input type="text" id="name" name="name" required /></div>
+                <div class="field"><label for="phone">Mobile number</label><input type="tel" id="phone" name="phone" required /></div>
+                <div class="field">
+                    <label for="hubId">Hub</label>
+                    <select id="hubId" name="hubId" required>
+                        @foreach (var hub in Model.Hubs)
+                        {
+                            <option value="@hub.Id" selected="@(hub.Id == Model.HubId)">@hub.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="field"><label for="email">Email to sign in with</label><input type="email" id="email" name="email" required /></div>
+                <div class="field"><label for="password">First password</label><input type="text" id="password" name="password" autocomplete="off" required /></div>
+                <button class="btn btn-primary btn-block" type="submit">Add rider</button>
+            </form>
+        </div>
+    </div>
+</div>

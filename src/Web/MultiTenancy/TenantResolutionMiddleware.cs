@@ -8,7 +8,7 @@ using Serilog.Context;
 namespace Web.MultiTenancy;
 
 /// <summary>
-/// First step of every request: dhaka.{root domain} selects the Dhaka tenant. An unknown subdomain is a 404,
+/// First step of every request: onedrop.{root domain} selects the OneDrop courier. An unknown subdomain is a 404,
 /// never a fall-back to some default tenant. API calls may use the bare domain; the API key selects the
 /// tenant for them (see ApiKeyAuthenticationHandler).
 /// </summary>
@@ -23,7 +23,7 @@ public class TenantResolutionMiddleware(RequestDelegate next, IOptions<TenancyOp
             if (tenant is null)
             {
                 context.Response.StatusCode = StatusCodes.Status404NotFound;
-                await context.Response.WriteAsync($"There is no OneDrop operator called '{slug}'.");
+                await context.Response.WriteAsync($"There is no courier called '{slug}'.");
                 return;
             }
 
@@ -53,7 +53,7 @@ public class TenantUserGuardMiddleware(RequestDelegate next)
             if (claimed != current)
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                await context.Response.WriteAsync("This login belongs to another OneDrop operator.");
+                await context.Response.WriteAsync("This login belongs to another courier.");
                 return;
             }
         }

@@ -1,0 +1,63 @@
+@page
+@model Web.Pages.Rider.PickupsModel
+@{
+    ViewData["Title"] = "My pickups";
+    var t = Model.Today!;
+}
+@section Head {
+    <partial name="_RiderApp" />
+}
+
+<div class="rider-wrap">
+    <div class="page-head">
+        <div>
+            <h1>My pickups</h1>
+            <p>Collect the parcels at each merchant and tick the ones you take.</p>
+        </div>
+    </div>
+
+    <partial name="_Alerts" />
+
+    @if (t.Pickups.Count == 0)
+    {
+        <div class="card"><div class="empty">@Icons.Get("truck")<h3>No pickups</h3><p>The hub assigns pickups to you.</p></div></div>
+    }
+    @foreach (var p in t.Pickups)
+    {
+        <div class="task">
+            <div class="task-head">
+                <div>
+                    <div class="task-name">@p.Merchant</div>
+                    <div class="muted" style="font-size:12.5px">@p.PickupPoint · @p.Date.ToString("ddd d MMM") · about @p.Expected parcels</div>
+                </div>
+            </div>
+            <div class="task-meta">
+                <div>@Icons.Get("map-pin") <span>@p.Address, <strong>@p.Area</strong></span></div>
+                <div>@Icons.Get("phone") <a href="tel:@Money.Phone(p.ContactPhone)">@Money.Phone(p.ContactPhone)</a></div>
+                @if (p.Note is not null)
+                {
+                    <div>@Icons.Get("message") <span>@p.Note</span></div>
+                }
+            </div>
+            <form method="post" asp-route-id="@p.Id">
+                @if (p.Parcels.Count == 0)
+                {
+                    <p class="muted">No parcels are booked at this point yet.</p>
+                }
+                else
+                {
+                    <div class="stack" style="margin-top:8px">
+                        @foreach (var parcel in p.Parcels)
+                        {
+                            <label class="check" style="font-weight:500">
+                                <input type="checkbox" name="codes" value="@parcel.TrackingCode" checked />
+                                <span><span class="mono strong">@parcel.TrackingCode</span> · @parcel.RecipientName, @parcel.Area · @Money.Taka(parcel.CodAmount)</span>
+                            </label>
+                        }
+                    </div>
+                }
+                <button class="btn btn-primary btn-block mt" type="submit">@Icons.Get("check") Picked up</button>
+            </form>
+        </div>
+    }
+</div>

@@ -1,0 +1,109 @@
+@page "{code}"
+@model Web.Pages.Rider.DeliveryModel
+@{
+    ViewData["Title"] = Model.Parcel.TrackingCode;
+    var d = Model.Parcel;
+    var lastAttempt = d.Attempts + 1 >= d.MaxAttempts;
+}
+@section Head {
+    <partial name="_RiderApp" />
+}
+
+<div class="rider-wrap">
+    <div class="breadcrumb"><a asp-page="/Rider/Index">@Icons.Get("arrow-left") My deliveries</a></div>
+    <div class="task mb">
+        <div class="task-head">
+            <div>
+                <div class="task-name">@d.RecipientName</div>
+                <div class="mono muted" style="font-size:12.5px">@d.TrackingCode · @d.Merchant (@Money.Phone(d.MerchantPhone))</div>
+            </div>
+            <div class="text-right"><div class="task-cod">@Money.Taka(d.CodAmount)</div><div class="muted" style="font-size:12px">to collect</div></div>
+        </div>
+        <div class="task-meta">
+            <div>@Icons.Get("map-pin") <span>@d.RecipientAddress, <strong>@d.Area</strong></span></div>
+            <div>@Icons.Get("phone") <a href="tel:@Money.Phone(d.RecipientPhone)">@Money.Phone(d.RecipientPhone)</a></div>
+            <div>@Icons.Get("package") <span>@(d.ItemDescription ?? "Parcel") · @Money.Kg(d.WeightGrams)</span></div>
+            @if (d.Note is not null)
+            {
+                <div>@Icons.Get("message") <span>@d.Note</span></div>
+            }
+        </div>
+    </div>
+
+    @if (Model.Problem is not null)
+    {
+        <div class="alert alert-error">@Icons.Get("alert")<div>@Model.Problem</div></div>
+    }
+
+    <div class="outcome-forms">
+        <details open>
+            <summary><span class="stat-icon green" style="width:30px;height:30px">@Icons.Get("check")</span> Delivered</summary>
+            <div class="body">
+                <form method="post" asp-page-handler="Deliver" asp-route-code="@d.TrackingCode">
+                    <div class="field">
+                        <label for="collected">Cash collected</label>
+                        <div class="input-group">
+                            <span class="prefix">৳</span>
+                            <input type="number" id="collected" name="collected" value="@d.CodAmount.ToString("0")" min="0" max="@d.CodAmount.ToString("0")" step="1" required />
+                        </div>
+                        <span class="hint">Less than @Money.Taka(d.CodAmount) only if the customer kept part of the parcel; then say why.</span>
+                    </div>
+                    <div class="field">
+                        <label for="deliverReason">Reason, for a partial delivery</label>
+                        <input type="text" id="deliverReason" name="reason" maxlength="200" placeholder="e.g. Kept 2 of 3 items" />
+                    </div>
+                    <button class="btn btn-primary btn-lg btn-block" type="submit">Delivered</button>
+                </form>
+            </div>
+        </details>
+        @if (!lastAttempt)
+        {
+            <details>
+                <summary><span class="stat-icon orange" style="width:30px;height:30px">@Icons.Get("pause")</span> Not today (hold)</summary>
+                <div class="body">
+                    <form method="post" asp-page-handler="Hold" asp-route-code="@d.TrackingCode">
+                        <div class="field">
+                            <label for="holdReason">Why</label>
+                            <select id="holdReason" name="reason" required>
+                                <option>Customer not reachable</option>
+                                <option>Customer asked for another day</option>
+                                <option>Customer not at the address</option>
+                                <option>Address not found</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="until">Deliver on (if the customer said)</label>
+                            <input type="date" id="until" name="until" />
+                        </div>
+                        <button class="btn btn-outline btn-lg btn-block" type="submit">Put on hold</button>
+                    </form>
+                </div>
+            </details>
+        }
+        <details>
+            <summary><span class="stat-icon red" style="width:30px;height:30px">@Icons.Get("x")</span> Refused</summary>
+            <div class="body">
+                <form method="post" asp-page-handler="Refuse" asp-route-code="@d.TrackingCode">
+                    <div class="field">
+                        <label for="refuseReason">Why</label>
+                        <select id="refuseReason" name="reason" required>
+                            <option>Customer refused the parcel</option>
+                            <option>Customer did not order it</option>
+                            <option>Wrong or damaged product</option>
+                            <option>Customer cannot pay</option>
+                            @if (lastAttempt)
+                            {
+                                <option>Not delivered after every attempt</option>
+                            }
+                        </select>
+                    </div>
+                    <button class="btn btn-danger btn-lg btn-block" type="submit">Return to merchant</button>
+                </form>
+            </div>
+        </details>
+    </div>
+    @if (lastAttempt)
+    {
+        <p class="hint mt">This is the last attempt: the parcel is delivered or goes back to the merchant.</p>
+    }
+</div>

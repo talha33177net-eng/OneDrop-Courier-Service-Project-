@@ -1,0 +1,95 @@
+@page "{id:long}"
+@using Domain.Merchants
+@model Web.Pages.Admin.MerchantModel
+@{
+    var m = Model.Merchant;
+    ViewData["Title"] = m.Profile.Name;
+}
+
+<div class="page-head">
+    <div>
+        <div class="breadcrumb"><a asp-page="/Admin/Merchants">Merchants</a> <span>/</span> <span>@m.Profile.Name</span></div>
+        <h1>@m.Profile.Name @Statuses.Badge(m.Status)</h1>
+        <p>@m.Profile.OwnerName · joined @m.Joined.ToString("d MMM yyyy")@(m.LoginEmail is null ? "" : $" · signs in as {m.LoginEmail}")</p>
+    </div>
+    <div class="page-actions">
+        <a class="btn btn-outline" asp-page="/Hub/Parcels" asp-route-merchantId="@m.Id">@Icons.Get("package") Parcels</a>
+        @if (m.Status == MerchantStatus.Pending)
+        {
+            <form method="post" asp-page-handler="Approve" asp-route-id="@m.Id" class="inline-form"><button class="btn btn-primary" type="submit">@Icons.Get("check") Approve</button></form>
+        }
+        @if (m.Status == MerchantStatus.Suspended)
+        {
+            <form method="post" asp-page-handler="Reactivate" asp-route-id="@m.Id" class="inline-form"><button class="btn btn-primary" type="submit">Reactivate</button></form>
+        }
+        else
+        {
+            <form method="post" asp-page-handler="Suspend" asp-route-id="@m.Id" class="inline-form"><button class="btn btn-danger" type="submit" onclick="return confirm('Suspend this merchant? They cannot book parcels until reactivated.')">Suspend</button></form>
+        }
+    </div>
+</div>
+
+<partial name="_Alerts" />
+
+<div class="stats">
+    <div class="stat"><div class="stat-icon blue">@Icons.Get("package")</div><div><div class="stat-label">Parcels</div><div class="stat-value">@m.Parcels</div></div></div>
+    <div class="stat"><div class="stat-icon green">@Icons.Get("check-circle")</div><div><div class="stat-label">Delivered</div><div class="stat-value">@m.Delivered</div></div></div>
+    <div class="stat"><div class="stat-icon red">@Icons.Get("return")</div><div><div class="stat-label">Returned</div><div class="stat-value">@m.Returned</div></div></div>
+    <div class="stat"><div class="stat-icon">@Icons.Get("wallet")</div><div><div class="stat-label">Owed now</div><div class="stat-value">@Money.Taka(m.Unpaid)</div></div></div>
+</div>
+
+<div class="grid grid-2">
+    <div class="card">
+        <div class="card-head"><h2>@Icons.Get("store") Profile</h2></div>
+        <div class="card-body">
+            <form method="post" asp-page-handler="Profile" asp-route-id="@m.Id">
+                <div class="form-grid">
+                    <div class="field"><label for="name">Business name</label><input type="text" id="name" name="name" value="@m.Profile.Name" required /></div>
+                    <div class="field"><label for="owner">Owner</label><input type="text" id="owner" name="owner" value="@m.Profile.OwnerName" required /></div>
+                    <div class="field"><label for="phone">Mobile</label><input type="tel" id="phone" name="phone" value="@Money.Phone(m.Profile.Phone)" required /></div>
+                    <div class="field"><label for="email">Email</label><input type="email" id="email" name="email" value="@m.Profile.Email" /></div>
+                    <div class="field field-full"><label for="address">Address</label><input type="text" id="address" name="address" value="@m.Profile.Address" required /></div>
+                </div>
+                <button class="btn btn-outline" type="submit">Save profile</button>
+            </form>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-head"><h2>@Icons.Get("wallet") Payout account</h2></div>
+        <div class="card-body">
+            <form method="post" asp-page-handler="Payout" asp-route-id="@m.Id">
+                <div class="field">
+                    <label for="method">Method</label>
+                    <select id="method" name="method">
+                        <option value="@PayoutMethod.Bkash" selected="@(m.PayoutMethod == PayoutMethod.Bkash)">bKash</option>
+                        <option value="@PayoutMethod.Nagad" selected="@(m.PayoutMethod == PayoutMethod.Nagad)">Nagad</option>
+                        <option value="@PayoutMethod.Bank" selected="@(m.PayoutMethod == PayoutMethod.Bank)">Bank</option>
+                    </select>
+                </div>
+                <div class="field"><label for="payoutAccount">Number or account number</label><input type="text" id="payoutAccount" name="payoutAccount" value="@(m.PayoutMethod == PayoutMethod.Bank ? m.PayoutAccount : Money.Phone(m.PayoutAccount))" required /></div>
+                <div class="field"><label for="accountName">Account name (and bank, branch)</label><input type="text" id="accountName" name="accountName" value="@m.PayoutAccountName" required /></div>
+                <button class="btn btn-outline" type="submit">Save payout account</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-lg">
+    <div class="card-head"><h2>@Icons.Get("map-pin") Pickup points</h2></div>
+    <div class="table-wrap">
+        <table class="table compact">
+            <thead><tr><th>Name</th><th>Address</th><th>Area</th><th>Phone</th></tr></thead>
+            <tbody>
+                @foreach (var point in m.PickupPoints)
+                {
+                    <tr><td class="cell-main">@point.Name @if (point.IsDefault) { <span class="badge badge-brand plain">Default</span> }</td><td>@point.Address</td><td>@point.Area</td><td>@Money.Phone(point.ContactPhone)</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-head"><h2>Latest parcels</h2><a class="btn btn-ghost btn-sm" asp-page="/Hub/Parcels" asp-route-merchantId="@m.Id">View all @Icons.Get("arrow-right")</a></div>
+    @await Html.PartialAsync("_ParcelTable", (Model.Recent, "/Hub/Parcel/", false, false))
+</div>

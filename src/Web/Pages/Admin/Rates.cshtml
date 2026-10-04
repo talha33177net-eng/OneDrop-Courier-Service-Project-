@@ -1,0 +1,40 @@
+@page
+@using Domain.Pricing
+@model Web.Pages.Admin.RatesModel
+@{
+    ViewData["Title"] = "Delivery rates";
+}
+
+<div class="page-head">
+    <div>
+        <h1>Delivery rates</h1>
+        <p>What merchants pay. A change prices the parcels booked from now on; parcels already booked keep their charges.</p>
+    </div>
+</div>
+
+<partial name="_Alerts" />
+
+<div class="grid grid-3">
+    @foreach (var rate in Model.Rates)
+    {
+        <form method="post" class="card">
+            <input type="hidden" name="area" value="@rate.ServiceArea" />
+            <div class="card-head">
+                <div>
+                    <h2>@rate.ServiceArea.DisplayName()</h2>
+                    <p>@(rate.ServiceArea switch { ServiceArea.InsideCity => "Pickup and delivery in the same city", ServiceArea.Suburb => "To a suburb of the pickup's city", _ => "To another city or district" })</p>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="form-grid">
+                    <div class="field"><label>First weight</label><div class="input-group"><input type="number" name="includedKg" value="@((rate.IncludedWeightGrams / 1000m).ToString("0.##"))" min="0.1" max="50" step="0.1" required /><span class="suffix">kg</span></div></div>
+                    <div class="field"><label>Charge for it</label><div class="input-group"><span class="prefix">৳</span><input type="number" name="baseCharge" value="@rate.BaseCharge.ToString("0.##")" min="0" step="1" required /></div></div>
+                    <div class="field"><label>Each extra kg</label><div class="input-group"><span class="prefix">৳</span><input type="number" name="extraKgCharge" value="@rate.ExtraKgCharge.ToString("0.##")" min="0" step="1" required /></div></div>
+                    <div class="field"><label>COD charge</label><div class="input-group"><input type="number" name="codChargePercent" value="@rate.CodChargePercent.ToString("0.##")" min="0" max="10" step="0.1" required /><span class="suffix">%</span></div></div>
+                    <div class="field field-full"><label>Extra for a return</label><div class="input-group"><span class="prefix">৳</span><input type="number" name="returnCharge" value="@rate.ReturnCharge.ToString("0.##")" min="0" step="1" required /></div><span class="hint">Added to the delivery charge when a parcel comes back.</span></div>
+                </div>
+            </div>
+            <div class="card-foot"><button class="btn btn-primary" type="submit">Save</button></div>
+        </form>
+    }
+</div>

@@ -3,9 +3,9 @@ using Domain.Common;
 namespace Domain.Platform;
 
 /// <summary>
-/// An operator, e.g. the Dhaka operator or a partner courier in another city. The only business entity with no
-/// TenantId: it is the tenant. Prices, the grouping window and the SMS sender name are per tenant, and every one
-/// of them is set explicitly for each tenant: nothing here falls back to another operator's values.
+/// A courier company running on the platform. The only business entity with no TenantId: it is the tenant. Its rate
+/// card lives in <c>Pricing.DeliveryRate</c>; every setting here is stated for each tenant explicitly, so nothing falls
+/// back to another courier's values.
 /// </summary>
 public class Tenant : AuditedEntity, IArchivable
 {
@@ -15,70 +15,25 @@ public class Tenant : AuditedEntity, IArchivable
 
     public string Name { get; private set; } = "";
 
-    /// <summary>Subdomain that selects this tenant: "dhaka" for dhaka.{root domain}.</summary>
+    /// <summary>Subdomain that selects this tenant: "onedrop" for onedrop.{root domain}.</summary>
     public string Slug { get; private set; } = "";
 
-    /// <summary>IANA or Windows id. Day boundaries for the 3-day rule are counted in this zone.</summary>
+    /// <summary>IANA or Windows id. Delivery days, runs and payouts are counted in this zone.</summary>
     public string TimeZone { get; private set; } = "";
 
     public string CurrencyCode { get; private set; } = "";
 
-    /// <summary>Sender name shown on customer SMS.</summary>
+    /// <summary>Sender name shown on the recipients' SMS.</summary>
     public string SmsSenderName { get; private set; } = "";
 
-    /// <summary>Fee for the first shop in a delivery group.</summary>
-    public decimal BaseDeliveryFee { get; private set; }
-
-    /// <summary>Fee for every extra distinct shop in the same delivery group.</summary>
-    public decimal ExtraShopFee { get; private set; }
-
-    /// <summary>Next-day delivery without waiting for the group.</summary>
-    public decimal FastDeliveryFee { get; private set; }
+    /// <summary>The hotline shown to merchants and recipients.</summary>
+    public string SupportPhone { get; private set; } = "";
 
     /// <summary>
-    /// Days, counted from the first order's day, on which later orders still join the group: 2 means Day 1 and
-    /// Day 2 join and the group is delivered on Day 3.
+    /// Delivery attempts a parcel gets: a rider may put it on hold for another day until this many attempts have been
+    /// made, after which it is returned to the merchant.
     /// </summary>
-    public int GroupJoinDays { get; private set; }
-
-    /// <summary>
-    /// Grams each shop's parcels may weigh in a delivery before <see cref="ExtraKgFee"/> is charged. Nullable only
-    /// because the column came after the launch seed; a tenant without it is not served (see <c>TenantCatalog</c>).
-    /// </summary>
-    public int? WeightAllowanceGrams { get; private set; }
-
-    /// <summary>Fee for every started kilogram a shop's parcels weigh above <see cref="WeightAllowanceGrams"/>.</summary>
-    public decimal? ExtraKgFee { get; private set; }
-
-    /// <summary>
-    /// Accepted deliveries after which a customer never pays the fee in advance, even after a refusal or when a shop
-    /// asks. Nullable only because the column came after the launch seed; a tenant without it is not served.
-    /// </summary>
-    public int? TrustedAfterDeliveries { get; private set; }
-
-    /// <summary>
-    /// What a shop pays when its order comes back (refused at the door, or nobody home at the re-attempt), taken off
-    /// its payout. Nullable only because the column came after the launch seed; a tenant without it is not served.
-    /// </summary>
-    public decimal? ReturnCharge { get; private set; }
-
-    /// <summary>What a shop pays when a rider has to leave its order behind because the shop had not handed it over.</summary>
-    public decimal? LateHandoverFee { get; private set; }
-
-    /// <summary>
-    /// Accepted deliveries, counted since their last refusal or no-show, after which a customer stops paying the fee in
-    /// advance. Nullable only because the column came after the launch seed; a tenant without it is not served.
-    /// </summary>
-    public int? TrustedAgainAfterDeliveries { get; private set; }
-
-    /// <summary>
-    /// Late handovers within <see cref="LateHandoverWindowDays"/> after which a shop brings its parcels to the hub
-    /// itself instead of waiting for the pickup route.
-    /// </summary>
-    public int? DropOffAfterLateHandovers { get; private set; }
-
-    /// <summary>Days a late handover counts towards <see cref="DropOffAfterLateHandovers"/>.</summary>
-    public int? LateHandoverWindowDays { get; private set; }
+    public int MaxDeliveryAttempts { get; private set; }
 
     public bool Archived { get; private set; }
 }

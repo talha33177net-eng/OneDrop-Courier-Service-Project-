@@ -1,13 +1,13 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Application.Abstractions;
-using Domain.Customers;
+using Domain.Common;
 
 namespace Infrastructure.Sms;
 
 public sealed record SentSms(DateTime On, string To, string Sender, string Text);
 
-/// <summary>Recent messages the fake sender "sent", so a demo can read an OTP without a phone.</summary>
+/// <summary>Recent messages the fake sender "sent", so a demo can read the recipients' texts without a phone.</summary>
 public class SmsLog
 {
     private const int Keep = 50;

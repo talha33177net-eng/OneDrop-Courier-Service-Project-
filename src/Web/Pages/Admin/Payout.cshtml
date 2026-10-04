@@ -1,0 +1,15 @@
+@page "{number}"
+@model Web.Pages.Admin.PayoutModel
+@{
+    ViewData["Title"] = $"Invoice {Model.Details.Payout.Number}";
+}
+
+<div class="page-head">
+    <div>
+        <div class="breadcrumb"><a asp-page="/Admin/Payouts">Merchant payouts</a> <span>/</span> <span>@Model.Details.Payout.Number</span></div>
+        <h1>Invoice @Model.Details.Payout.Number</h1>
+        <p>@Model.Details.Payout.Merchant</p>
+    </div>
+</div>
+
+@await Html.PartialAsync("_PayoutInvoice", (Model.Details, "/Hub/Parcel/"))

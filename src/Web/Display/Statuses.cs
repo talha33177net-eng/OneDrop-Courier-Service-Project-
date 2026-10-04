@@ -1,65 +1,119 @@
-using Domain.Grouping;
-using Domain.Orders;
+using System.Globalization;
+using System.Net;
+using Microsoft.AspNetCore.Html;
+using Application.Payments.MerchantPayments;
+using Domain.Common;
+using Domain.Delivery;
+using Domain.Merchants;
+using Domain.Parcels;
+using Domain.Payments;
 
 namespace Web.Display;
 
 /// <summary>
-/// The words and colours the pages use for order and delivery statuses, so a shop, a customer and hub staff read the
-/// same thing for the same status instead of the enum's name.
+/// The words and colours every page uses for statuses, so a merchant, hub staff, a rider and an admin read the same thing
+/// for the same status instead of the enum's name.
 /// </summary>
 public static class Statuses
 {
-    public static string Order(OrderStatus status)
+    public static IHtmlContent Badge(ParcelStatus status)
+    {
+        var tone = status switch
+        {
+            ParcelStatus.Pending => "pending",
+            ParcelStatus.PickedUp or ParcelStatus.AtHub or ParcelStatus.InTransit => "transit",
+            ParcelStatus.OutForDelivery => "out",
+            ParcelStatus.OnHold => "hold",
+            ParcelStatus.Delivered or ParcelStatus.PartlyDelivered => "done",
+            ParcelStatus.Returning or ParcelStatus.Returned => "return",
+            _ => "cancel"
+        };
+
+        return Pill(tone, status.DisplayName());
+    }
+
+    public static IHtmlContent Badge(MerchantStatus status)
     {
         return status switch
         {
-            OrderStatus.Created => "Waiting for pickup",
-            OrderStatus.PickedUp => "Picked up",
-            OrderStatus.AtHub => "At the hub",
-            OrderStatus.OutForDelivery => "Out for delivery",
-            OrderStatus.Delivered => "Delivered",
-            OrderStatus.Refused => "Refused",
-            OrderStatus.ReturnedToMerchant => "Returned to the shop",
-            _ => "Cancelled"
+            MerchantStatus.Pending => Pill("pending", "Awaiting approval"),
+            MerchantStatus.Active => Pill("done", "Active"),
+            _ => Pill("return", "Suspended")
         };
     }
 
-    /// <summary>The status pill's colour: waiting (amber), moving (blue), done (green), problem (red), quiet (grey).</summary>
-    public static string OrderClass(OrderStatus status)
+    public static IHtmlContent Badge(PickupStatus status)
     {
         return status switch
         {
-            OrderStatus.Created => "status status-waiting",
-            OrderStatus.PickedUp or OrderStatus.AtHub or OrderStatus.OutForDelivery => "status status-moving",
-            OrderStatus.Delivered => "status status-done",
-            OrderStatus.Refused or OrderStatus.ReturnedToMerchant => "status status-problem",
-            _ => "status status-quiet"
+            PickupStatus.Requested => Pill("pending", "Requested"),
+            PickupStatus.Assigned => Pill("out", "Rider assigned"),
+            PickupStatus.Completed => Pill("done", "Picked up"),
+            _ => Pill("cancel", "Cancelled")
         };
     }
 
-    public static string Delivery(DeliveryGroupStatus status)
+    public static IHtmlContent Badge(RunStatus status)
     {
-        return status switch
+        return status == RunStatus.Open ? Pill("out", "Open") : Pill("done", "Closed");
+    }
+
+    public static IHtmlContent Badge(PayoutStatus status)
+    {
+        return status == PayoutStatus.Paid ? Pill("done", "Paid") : Pill("pending", "Processing");
+    }
+
+    public static IHtmlContent Badge(AttemptOutcome? outcome)
+    {
+        return outcome switch
         {
-            DeliveryGroupStatus.Open => "Waiting for more shops",
-            DeliveryGroupStatus.Locked => "Closed",
-            DeliveryGroupStatus.Dispatched => "Out for delivery",
-            DeliveryGroupStatus.Delivered => "Delivered",
-            _ => "Cancelled"
+            AttemptOutcome.Delivered => Pill("done", "Delivered"),
+            AttemptOutcome.PartlyDelivered => Pill("done", "Partly delivered"),
+            AttemptOutcome.Hold => Pill("hold", "On hold"),
+            AttemptOutcome.Refused => Pill("return", "Refused"),
+            _ => Pill("out", "With rider")
         };
     }
 
-    /// <summary>Where a parcel of today's delivery is while it is not on its shelf; <paramref name="otherHub"/> names that hub.</summary>
-    public static string Place(ParcelPlace place, string? otherHub)
+    public static string Name(LedgerEntryKind kind)
     {
-        return place switch
-        {
-            ParcelPlace.AtTheShop => "Still at the shop",
-            ParcelPlace.WaitingForAdvance => "At the shop, waiting for the fee in advance",
-            ParcelPlace.WithTheCollector => "Collected, not scanned in yet",
-            ParcelPlace.AtAnotherHub => $"At {otherHub} hub, not on the shuttle yet",
-            ParcelPlace.OnTheShuttle => "On the shuttle here",
-            _ => "With a rider, not scanned back in"
-        };
+        return kind.DisplayName();
+    }
+
+    private static HtmlString Pill(string tone, string text)
+    {
+        return new HtmlString($"""<span class="badge badge-{tone}">{WebUtility.HtmlEncode(text)}</span>""");
+    }
+}
+
+/// <summary>
+/// Taka amounts and phone numbers as people read them. Returned as HTML so the ৳ sign is written as it is; Razor would
+/// otherwise encode it inside a C# expression.
+/// </summary>
+public static class Money
+{
+    public static IHtmlContent Taka(decimal amount)
+    {
+        var text = amount < 0
+            ? "−৳" + (-amount).ToString("N0", CultureInfo.InvariantCulture)
+            : "৳" + amount.ToString("N0", CultureInfo.InvariantCulture);
+
+        return new HtmlString($"""<span class="amount">{text}</span>""");
+    }
+
+    public static IHtmlContent Taka(decimal? amount)
+    {
+        return amount is { } value ? Taka(value) : new HtmlString("""<span class="faint">—</span>""");
+    }
+
+    /// <summary>A stored E.164 number in the local form people dial: 01712345678.</summary>
+    public static string Phone(string? e164)
+    {
+        return PhoneNumber.Parse(e164) is { IsSuccess: true } parsed ? parsed.Value.Local : e164 ?? "";
+    }
+
+    public static string Kg(int grams)
+    {
+        return (grams / 1000m).ToString("0.##", CultureInfo.InvariantCulture) + " kg";
     }
 }

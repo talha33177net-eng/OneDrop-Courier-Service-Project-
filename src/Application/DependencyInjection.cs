@@ -1,35 +1,37 @@
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
-using Application.Auth.PhoneLogin;
-using Application.Customers;
-using Application.Delivery.Door;
-using Application.Delivery.HubCash;
-using Application.Delivery.HubTrips;
-using Application.Delivery.PlanTrips;
+using Application.Dashboards;
+using Application.Delivery.Pickups;
 using Application.Delivery.RiderDay;
-using Application.Grouping;
-using Application.Grouping.CombineDeliveries;
-using Application.Grouping.CustomerDeliveries;
-using Application.Grouping.LockDueGroups;
-using Application.Grouping.ShipNow;
-using Application.Merchants;
-using Application.Notifications.FailedMessages;
+using Application.Delivery.Riders;
+using Application.Hubs;
+using Application.Hubs.AssignParcels;
+using Application.Hubs.HubBoard;
+using Application.Hubs.HubScan;
+using Application.Hubs.Runs;
+using Application.Merchants.Account;
+using Application.Merchants.Admin;
 using Application.Merchants.ApiKeys;
-using Application.Merchants.ShopWindow;
+using Application.Merchants.Onboarding;
 using Application.Merchants.Webhook;
-using Application.Network.HubScan;
+using Application.Network.Coverage;
 using Application.Network.ListAreas;
-using Application.Network.PickupRoutes;
-using Application.Operations.Dashboard;
+using Application.Notifications.FailedMessages;
 using Application.Notifications.SendOutbox;
 using Application.Notifications.SendWebhooks;
-using Application.Orders.ConfirmOrder;
-using Application.Orders.CreateOrder;
-using Application.Orders.GetOrder;
-using Application.Orders.PackageLabels;
-using Application.Payments.MerchantPayouts;
-using Application.Payments.SettleMerchants;
-using Application.Pricing.GetQuote;
+using Application.Parcels;
+using Application.Parcels.Browse;
+using Application.Parcels.BulkImport;
+using Application.Parcels.CreateParcel;
+using Application.Parcels.FraudCheck;
+using Application.Parcels.Labels;
+using Application.Parcels.ParcelActions;
+using Application.Parcels.Quote;
+using Application.Parcels.Track;
+using Application.Payments.AdminPayouts;
+using Application.Payments.MerchantPayments;
+using Application.Payments.RunPayouts;
+using Application.Pricing.Rates;
 
 namespace Application;
 
@@ -39,40 +41,48 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly, ServiceLifetime.Singleton);
-        services.AddScoped<CustomerDirectory>();
-        services.AddScoped<DeliveryGrouping>();
-        services.AddScoped<LockDueGroupsJob>();
+
+        services.AddScoped<ParcelBooking>();
+        services.AddScoped<CreateParcelHandler>();
+        services.AddScoped<ParcelListHandler>();
+        services.AddScoped<ParcelDetailsHandler>();
+        services.AddScoped<ParcelActionsHandler>();
+        services.AddScoped<ParcelLabelsHandler>();
+        services.AddScoped<BulkImportHandler>();
+        services.AddScoped<TrackHandler>();
+        services.AddScoped<QuoteHandler>();
+        services.AddScoped<FraudCheckHandler>();
+
+        services.AddScoped<HubDirectory>();
+        services.AddScoped<HubScanHandler>();
+        services.AddScoped<HubBoardHandler>();
+        services.AddScoped<AssignParcelsHandler>();
+        services.AddScoped<RunsHandler>();
+
+        services.AddScoped<PickupsHandler>();
+        services.AddScoped<RiderDayHandler>();
+        services.AddScoped<AdminRidersHandler>();
+
+        services.AddScoped<MerchantOnboarding>();
+        services.AddScoped<AdminMerchantsHandler>();
+        services.AddScoped<MerchantAccountHandler>();
+        services.AddScoped<MerchantApiKeysHandler>();
+        services.AddScoped<MerchantWebhookHandler>();
+
+        services.AddScoped<PayoutsJob>();
+        services.AddScoped<MerchantPaymentsHandler>();
+        services.AddScoped<AdminPayoutsHandler>();
+
+        services.AddScoped<RatesHandler>();
+        services.AddScoped<ListAreasHandler>();
+        services.AddScoped<CoverageHandler>();
+        services.AddScoped<DashboardHandler>();
+
         services.AddScoped<SendOutboxJob>();
-        services.AddScoped<CustomerTexts>();
+        services.AddScoped<RecipientTexts>();
         services.AddScoped<SendWebhooksJob>();
         services.AddScoped<MerchantWebhooks>();
-        services.AddScoped<MerchantWebhookHandler>();
-        services.AddScoped<ShoppingWindow>();
-        services.AddScoped<MerchantShopWindowHandler>();
-        services.AddScoped<MerchantApiKeysHandler>();
         services.AddScoped<FailedMessagesHandler>();
-        services.AddScoped<CreateOrderHandler>();
-        services.AddScoped<GetOrderHandler>();
-        services.AddScoped<ConfirmOrderHandler>();
-        services.AddScoped<GetQuoteHandler>();
-        services.AddScoped<ListAreasHandler>();
-        services.AddScoped<ShipNowHandler>();
-        services.AddScoped<CombineDeliveriesHandler>();
-        services.AddScoped<CustomerDeliveriesHandler>();
-        services.AddScoped<PickupRoutesHandler>();
-        services.AddScoped<HubScanHandler>();
-        services.AddScoped<PackageLabelsHandler>();
-        services.AddScoped<TripPlanning>();
-        services.AddScoped<PlanTripsJob>();
-        services.AddScoped<HubTripsHandler>();
-        services.AddScoped<OperationsDashboardHandler>();
-        services.AddScoped<RiderDayHandler>();
-        services.AddScoped<DoorHandler>();
-        services.AddScoped<HubCashHandler>();
-        services.AddScoped<SettleMerchantsJob>();
-        services.AddScoped<MerchantPayoutsHandler>();
-        services.AddScoped<ShopDropOffs>();
-        services.AddScoped<PhoneLoginService>();
 
         return services;
     }

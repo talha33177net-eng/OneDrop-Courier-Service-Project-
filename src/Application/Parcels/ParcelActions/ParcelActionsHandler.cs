@@ -1,0 +1,121 @@
+using FluentValidation;
+using Microsoft.EntityFrameworkCore;
+using Application.Abstractions;
+using Application.Common;
+using Application.Parcels.Browse;
+using Application.Parcels.CreateParcel;
+using Domain.Common;
+using Domain.Parcels;
+
+namespace Application.Parcels.ParcelActions;
+
+/// <summary>
+/// What a merchant does with a parcel after booking it: correct it or cancel it before pickup, or ask for it back later.
+/// Courier staff can also ask for a parcel back. A merchant finds only its own parcels.
+/// </summary>
+public class ParcelActionsHandler(
+    IAppDbContext db,
+    ICurrentUser currentUser,
+    ParcelBooking booking,
+    IValidator<CreateParcelCommand> validator,
+    TimeProvider time)
+{
+    /// <summary>
+    /// New details for a parcel still waiting for pickup, priced again at today's rates; the pickup point stays. The
+    /// tracking code, reference and idempotency key of <paramref name="details"/> are ignored.
+    /// </summary>
+    public async Task<Result> EditAsync(string trackingCode, CreateParcelCommand details, CancellationToken cancellationToken = default)
+    {
+        var merchantId = currentUser.MerchantId ?? throw new InvalidOperationException("A merchant edits its parcels.");
+        var parcel = await FindAsync(trackingCode, cancellationToken);
+        if (parcel is null)
+        {
+            return ParcelDetailsHandler.NotFound;
+        }
+
+        var validation = await validator.ValidateAsync(details, cancellationToken);
+        if (!validation.IsValid)
+        {
+            return validation.ToError();
+        }
+
+        var route = await booking.ResolveAsync(
+            merchantId,
+            parcel.PickupPointId,
+            details.AreaId,
+            details.Area,
+            details.WeightGrams,
+            cancellationToken);
+        if (route.IsFailure)
+        {
+            return route.Error!;
+        }
+
+        var edited = parcel.Edit(new ParcelDetails(
+            route.Value.Area.Id,
+            route.Value.DeliveryHub.Id,
+            details.RecipientName!,
+            PhoneNumber.Parse(details.RecipientPhone).Value,
+            details.RecipientAddress!,
+            details.CodAmount,
+            details.WeightGrams,
+            details.ItemDescription,
+            details.Note,
+            route.Value.Charges));
+
+        return await SaveAsync(edited, cancellationToken);
+    }
+
+    public async Task<Result> CancelAsync(string trackingCode, string? reason, CancellationToken cancellationToken = default)
+    {
+        var parcel = await FindAsync(trackingCode, cancellationToken);
+        if (parcel is null)
+        {
+            return ParcelDetailsHandler.NotFound;
+        }
+
+        if (reason?.Trim().Length > 200)
+        {
+            return Error.Validation("parcel.cancel.reason", "Say why in at most 200 characters.");
+        }
+
+        return await SaveAsync(parcel.Cancel(reason, time.GetUtcNow().UtcDateTime), cancellationToken);
+    }
+
+    public async Task<Result> RequestReturnAsync(string trackingCode, string? reason, CancellationToken cancellationToken = default)
+    {
+        var parcel = await FindAsync(trackingCode, cancellationToken);
+        if (parcel is null)
+        {
+            return ParcelDetailsHandler.NotFound;
+        }
+
+        return await SaveAsync(parcel.RequestReturn(reason), cancellationToken);
+    }
+
+    private Task<Parcel?> FindAsync(string trackingCode, CancellationToken cancellationToken)
+    {
+        var code = trackingCode.Trim().ToUpperInvariant();
+
+        return db.Parcels.SingleOrDefaultAsync(p => p.TrackingCode == code, cancellationToken);
+    }
+
+    private async Task<Result> SaveAsync(Result changed, CancellationToken cancellationToken)
+    {
+        if (changed.IsFailure)
+        {
+            return changed;
+        }
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Error.Conflict("parcel.changed", "The parcel was updated by someone else just now. Open it again.");
+        }
+
+        return Result.Success();
+    }
+}

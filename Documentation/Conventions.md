@@ -1,7 +1,7 @@
 # Development conventions
 
-Delivery-grouping platform: orders from different shops to the same customer travel in one delivery. Multi-tenant
-modular monolith on .NET 10, SQL Server. The product is described in `README.md`, the 4-week plan and progress in
+Courier platform for online shops (pickup, hubs, delivery, cash on delivery, next-day payouts). Multi-tenant
+modular monolith on .NET 10, SQL Server. The product is described in `README.md`, the plan and progress in
 `Plans/Implementation-Plan.md`.
 
 [Project-Context.md](Project-Context.md) explains the product, the decisions and the environment.
@@ -27,10 +27,10 @@ dotnet test --project tests/Integration.Tests
 ```
 
 - Tests run on Microsoft.Testing.Platform (`global.json`), so use `dotnet test --project <path>`.
-- The integration suite runs against `OneDrop-Test` on ras-x2, named in the git-ignored
+- The integration suite runs against `OneDrop-Test` on 10.50.0.1, named in the git-ignored
   `tests/Integration.Tests/testsettings.Local.json` (`INTEGRATION_TEST_DB` overrides it). With no database
   configured it skips itself, and a green run with everything skipped means nothing ran. After a schema change,
-  update it with `./tools/db/publish.ps1 -Database OneDrop-Test`. Ask before creating any other database on ras-x2.
+  update it with `./tools/db/publish.ps1 -Database OneDrop-Test`. Ask before creating any other database on 10.50.0.1.
 - Never point integration tests at the dev database `OneDrop`.
 - Connection strings (they contain the password) live only in git-ignored `*.Local.json` files. Never commit one.
 - No product-name prefix in code: projects, folders and namespaces are `Domain`, `Application`, `Infrastructure`,
@@ -44,8 +44,8 @@ dotnet test --project tests/Integration.Tests
   Handlers are plain scoped classes registered in `Application/DependencyInjection.cs`; there is no mediator.
 - A business "no" is a `Result` with an `Error` (code, message, type); exceptions are for bugs. The API maps
   errors to problem details in `Web/Api/ResultMapping.cs`.
-- Aggregates guard their own rules: `Order.Create` validates, `Order.MoveTo` enforces the status state machine.
-  Methods with five or more parameters take a record (`NewOrder`).
+- Aggregates guard their own rules: `Parcel.Create` validates, `Parcel` moves only along its status state machine.
+  Methods with five or more parameters take a record (`NewParcel`).
 - Side effects of a change (SMS, later webhooks) never run inside the use case: the entity raises a domain event
   (`Raise`), the save writes it to the outbox in the same transaction, and `SendOutboxJob` acts on it later. A new
   event needs a contract and a case in `Application/Notifications/OutboxContracts`.
@@ -77,7 +77,7 @@ dotnet test --project tests/Integration.Tests
 
 ## User-facing text
 
-- Sentence case everywhere ("My orders", never "My Orders"). "and", never "&".
+- Sentence case everywhere ("All parcels", never "All Parcels"). "and", never "&".
 - Currency is ৳ with no decimals in the UI (`৳110`).
 - Never show a raw id; show a name or the order number.
 

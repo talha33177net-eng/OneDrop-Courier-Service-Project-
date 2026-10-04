@@ -1,0 +1,78 @@
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.RazorPages;
+using Application.Delivery.Riders;
+using Application.Hubs;
+using Domain.Common;
+
+namespace Web.Pages.Admin;
+
+/// <summary>The courier's riders by hub with today's work; add a rider with a login, edit one, stop or restart one.</summary>
+public class RidersModel(AdminRidersHandler riders, HubDirectory hubs) : PageModel
+{
+    [BindProperty(SupportsGet = true)]
+    public long? HubId { get; set; }
+
+    [BindProperty(SupportsGet = true)]
+    public long? Edit { get; set; }
+
+    public IReadOnlyList<RiderRow> Rows { get; private set; } = [];
+
+    public IReadOnlyList<HubItem> Hubs { get; private set; } = [];
+
+    public string? Problem { get; private set; }
+
+    public async Task OnGetAsync(CancellationToken cancellationToken)
+    {
+        await LoadAsync(cancellationToken);
+    }
+
+    public async Task<IActionResult> OnPostAddAsync(
+        string? name,
+        string? phone,
+        long hubId,
+        string? email,
+        string? password,
+        CancellationToken cancellationToken)
+    {
+        var added = await riders.AddAsync(new NewRider(name, phone, hubId, email, password), cancellationToken);
+        if (added.IsSuccess)
+        {
+            TempData["Done"] = $"{name} is added. They sign in with {email}.";
+
+            return RedirectToPage();
+        }
+
+        Problem = added.Error!.Message;
+        await LoadAsync(cancellationToken);
+
+        return Page();
+    }
+
+    public async Task<IActionResult> OnPostEditAsync(long id, string? name, string? phone, long hubId, CancellationToken cancellationToken)
+    {
+        return Answer(await riders.EditAsync(id, name, phone, hubId, cancellationToken), "Rider saved.");
+    }
+
+    public async Task<IActionResult> OnPostActiveAsync(long id, bool active, CancellationToken cancellationToken)
+    {
+        return Answer(await riders.SetActiveAsync(id, active, cancellationToken), active ? "Rider restarted." : "Rider stopped: no new work is assigned to them.");
+    }
+
+    private IActionResult Answer(Result result, string done)
+    {
+        if (result.IsFailure && result.Error!.Type == ErrorType.NotFound)
+        {
+            return NotFound();
+        }
+
+        TempData[result.IsSuccess ? "Done" : "Problem"] = result.IsSuccess ? done : result.Error!.Message;
+
+        return RedirectToPage(new { hubId = HubId });
+    }
+
+    private async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        Rows = await riders.ListAsync(HubId, cancellationToken);
+        Hubs = await hubs.ListAsync(cancellationToken);
+    }
+}

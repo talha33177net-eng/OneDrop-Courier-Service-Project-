@@ -1,0 +1,44 @@
+@page
+@model Web.Pages.Admin.CoverageModel
+@{
+    ViewData["Title"] = "Coverage";
+}
+
+<div class="page-head">
+    <div>
+        <h1>Coverage</h1>
+        <p>@Model.Hubs.Count hubs, @Model.Hubs.Sum(h => h.Zones.Count) zones, @Model.Hubs.Sum(h => h.Zones.Sum(z => z.Areas.Count)) areas. A zone's city and suburb flag decide which rate a parcel is charged.</p>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead><tr><th>Hub</th><th>Zone</th><th>City</th><th>Areas</th></tr></thead>
+            <tbody>
+                @foreach (var hub in Model.Hubs)
+                {
+                    var first = true;
+                    foreach (var zone in hub.Zones)
+                    {
+                        <tr>
+                            @if (first)
+                            {
+                                <td rowspan="@hub.Zones.Count" style="vertical-align:top">
+                                    <div class="cell-main"><span class="code-link">@hub.Code</span> @hub.Name</div>
+                                    <div class="cell-sub">@hub.Address</div>
+                                    <div class="cell-sub">@hub.Phone</div>
+                                </td>
+                                first = false;
+                            }
+                            <td><span class="code-link">@zone.Code</span> @zone.Name</td>
+                            <td>@zone.City @if (zone.Suburb) { <span class="badge badge-transit plain">Suburb</span> }</td>
+                            <td><div class="pill-row">@foreach (var area in zone.Areas) { <span class="pill">@area</span> }</div></td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="card-foot muted">Hubs, zones and areas are set up with the launch data. Ask the platform team to add a new city.</div>
+</div>

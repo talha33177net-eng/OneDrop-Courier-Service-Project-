@@ -1,23 +1,23 @@
 @page
 @model Web.Pages.Dev.WebhooksModel
 @{
-    ViewData["Title"] = "Shop webhooks";
+    ViewData["Title"] = "Webhooks received";
 }
 
-<h1>Shop webhooks</h1>
-<p class="lead">
-    Development only. A demo shop sets its webhook on <strong>Order updates</strong> to
+<div class="page-head"><div><h1>Webhooks received</h1>
+<p>
+    Development only. A demo merchant sets its webhook on <strong>Webhooks</strong> to
     <code>http://localhost:5080/Dev/Webhooks</code>; this page plays its website and keeps the last 50 updates.
-</p>
+</p></div></div>
 
-<div class="card table-wrap">
+<div class="card"><div class="table-wrap">
     @if (Model.Received.Count == 0)
     {
-        <p class="muted">No webhooks yet.</p>
+        <div class="empty"><h3>No webhooks yet</h3></div>
     }
     else
     {
-        <table>
+        <table class="table">
             <thead>
                 <tr><th>Received (UTC)</th><th>Id</th><th>Signature</th><th>Body</th></tr>
             </thead>
@@ -30,11 +30,11 @@
                         <td>
                             @if (shop is null)
                             {
-                                <span class="status status-problem">Does not check</span>
+                                <span class="badge badge-return">Does not check</span>
                             }
                             else
                             {
-                                <span class="status status-done">Checks: @shop</span>
+                                <span class="badge badge-done">Checks: @shop</span>
                             }
                         </td>
                         <td style="white-space: normal"><code>@webhook.Body</code></td>
@@ -43,4 +43,5 @@
             </tbody>
         </table>
     }
+</div>
 </div>

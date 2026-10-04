@@ -9,7 +9,7 @@ public class OutboxMessageTests
     [Fact]
     public void A_new_message_is_pending_and_due_at_once()
     {
-        var message = OutboxMessage.Create("OrderPlacedMessage", """{"OrderId":1}""");
+        var message = OutboxMessage.Create("RecipientTextMessage", """{"ParcelId":1}""");
 
         Assert.Equal(OutboxStatus.Pending, message.Status);
         Assert.Null(message.NextAttemptOn);
@@ -19,7 +19,7 @@ public class OutboxMessageTests
     [Fact]
     public void A_failed_message_sent_again_is_due_at_once_with_fresh_attempts()
     {
-        var message = OutboxMessage.Create("OrderPlacedMessage", """{"OrderId":1}""");
+        var message = OutboxMessage.Create("RecipientTextMessage", """{"ParcelId":1}""");
         for (var attempt = 0; attempt < OutboxMessage.MaxAttempts; attempt++)
         {
             message.MarkFailed("Gateway down", Now);
@@ -37,10 +37,10 @@ public class OutboxMessageTests
     [Fact]
     public void Only_a_failed_message_is_sent_again()
     {
-        var pending = OutboxMessage.Create("OrderPlacedMessage", """{"OrderId":1}""");
-        var sent = OutboxMessage.Create("OrderPlacedMessage", """{"OrderId":1}""");
+        var pending = OutboxMessage.Create("RecipientTextMessage", """{"ParcelId":1}""");
+        var sent = OutboxMessage.Create("RecipientTextMessage", """{"ParcelId":1}""");
         sent.MarkSent(Now);
-        var skipped = OutboxMessage.Create("OrderStatusChangedMessage", """{"OrderId":1}""");
+        var skipped = OutboxMessage.Create("ParcelStatusChangedMessage", """{"ParcelId":1}""");
         skipped.MarkSkipped();
 
         Assert.All(
@@ -52,7 +52,7 @@ public class OutboxMessageTests
     [Fact]
     public void A_sent_message_records_when()
     {
-        var message = OutboxMessage.Create("OrderPlacedMessage", """{"OrderId":1}""");
+        var message = OutboxMessage.Create("RecipientTextMessage", """{"ParcelId":1}""");
 
         message.MarkSent(Now);
 
@@ -64,7 +64,7 @@ public class OutboxMessageTests
     [Fact]
     public void Failures_wait_1_2_4_and_8_minutes_then_the_message_is_given_up()
     {
-        var message = OutboxMessage.Create("OrderPlacedMessage", """{"OrderId":1}""");
+        var message = OutboxMessage.Create("RecipientTextMessage", """{"ParcelId":1}""");
         var waits = new List<double>();
 
         for (var attempt = 1; attempt < OutboxMessage.MaxAttempts; attempt++)
@@ -86,7 +86,7 @@ public class OutboxMessageTests
     [Fact]
     public void A_long_error_is_cut_to_fit_its_column()
     {
-        var message = OutboxMessage.Create("OrderPlacedMessage", """{"OrderId":1}""");
+        var message = OutboxMessage.Create("RecipientTextMessage", """{"ParcelId":1}""");
 
         message.MarkFailed(new string('x', 5000), Now);
 
@@ -95,7 +95,7 @@ public class OutboxMessageTests
 
     [Theory]
     [InlineData("", "{}")]
-    [InlineData("OrderPlacedMessage", " ")]
+    [InlineData("RecipientTextMessage", " ")]
     public void A_message_needs_a_type_and_a_payload(string type, string payload)
     {
         Assert.ThrowsAny<ArgumentException>(() => OutboxMessage.Create(type, payload));

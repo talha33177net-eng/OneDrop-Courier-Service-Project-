@@ -1,0 +1,86 @@
+@using Application.Parcels.Browse
+@model (IReadOnlyList<ParcelRow> Rows, string Link, bool ShowMerchant, bool Selectable)
+@* A list of parcels: tracking code and reference, recipient, destination, status and money *@
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty">
+        @Icons.Get("inbox")
+        <h3>No parcels here</h3>
+        <p>Parcels that match show up in this list.</p>
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    @if (Model.Selectable)
+                    {
+                        <th class="check-col"><input type="checkbox" data-select-all aria-label="Select all" /></th>
+                    }
+                    <th>Parcel</th>
+                    @if (Model.ShowMerchant)
+                    {
+                        <th>Merchant</th>
+                    }
+                    <th>Recipient</th>
+                    <th>Destination</th>
+                    <th>Status</th>
+                    <th class="num">COD</th>
+                    <th class="num">Charge</th>
+                    <th>Booked</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.Rows)
+                {
+                    <tr>
+                        @if (Model.Selectable)
+                        {
+                            <td class="check-col"><input type="checkbox" name="codes" value="@row.TrackingCode" aria-label="Select @row.TrackingCode" /></td>
+                        }
+                        <td>
+                            <a class="code-link" href="@(Model.Link + row.TrackingCode)">@row.TrackingCode</a>
+                            @if (row.MerchantReference is not null)
+                            {
+                                <div class="cell-sub">@row.MerchantReference</div>
+                            }
+                        </td>
+                        @if (Model.ShowMerchant)
+                        {
+                            <td>@row.Merchant</td>
+                        }
+                        <td>
+                            <div class="cell-main">@row.RecipientName</div>
+                            <div class="cell-sub">@Money.Phone(row.RecipientPhone)</div>
+                        </td>
+                        <td>
+                            <div>@row.Area</div>
+                            <div class="cell-sub">@row.DeliveryHub</div>
+                        </td>
+                        <td>
+                            @Statuses.Badge(row.Status)
+                            @if (row.Attempts > 0)
+                            {
+                                <div class="cell-sub">@row.Attempts attempt@(row.Attempts == 1 ? "" : "s")</div>
+                            }
+                        </td>
+                        <td class="num">
+                            @Money.Taka(row.CodAmount)
+                            @if (row.CollectedAmount is { } collected && collected != row.CodAmount)
+                            {
+                                <div class="cell-sub">got @Money.Taka(collected)</div>
+                            }
+                        </td>
+                        <td class="num">@Money.Taka(row.DeliveryCharge)</td>
+                        <td class="nowrap">
+                            <div>@row.Booked.ToString("d MMM")</div>
+                            <div class="cell-sub">@row.Booked.ToString("h:mm tt")</div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

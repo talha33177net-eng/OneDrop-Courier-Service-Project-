@@ -4,11 +4,9 @@ using Hangfire.SqlServer;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Application.Delivery.PlanTrips;
-using Application.Grouping.LockDueGroups;
 using Application.Notifications.SendOutbox;
 using Application.Notifications.SendWebhooks;
-using Application.Payments.SettleMerchants;
+using Application.Payments.RunPayouts;
 
 namespace Infrastructure.Jobs;
 
@@ -23,11 +21,9 @@ public static class JobsSetup
     public static IServiceCollection AddJobs(this IServiceCollection services, bool runServer)
     {
         services.AddSingleton(new TenantJobRegistry(
-            typeof(LockDueGroupsJob),
             typeof(SendOutboxJob),
             typeof(SendWebhooksJob),
-            typeof(PlanTripsJob),
-            typeof(SettleMerchantsJob)));
+            typeof(PayoutsJob)));
         services.AddScoped<TenantJobRunner>();
         // The connection string is read when Hangfire first opens a connection, from the final configuration
         services.AddHangfire((provider, configuration) => configuration
@@ -56,16 +52,8 @@ public static class JobsSetup
     {
         var recurring = services.GetRequiredService<IRecurringJobManager>();
         recurring.AddOrUpdate<TenantJobRunner>(
-            "lock-due-groups",
-            runner => runner.EnqueueForEveryTenantAsync(nameof(LockDueGroupsJob), CancellationToken.None),
-            configuration["Jobs:LockDueGroups"] ?? throw new InvalidOperationException("Jobs:LockDueGroups is not set."));
-        recurring.AddOrUpdate<TenantJobRunner>(
-            "plan-trips",
-            runner => runner.EnqueueForEveryTenantAsync(nameof(PlanTripsJob), CancellationToken.None),
-            configuration["Jobs:PlanTrips"] ?? throw new InvalidOperationException("Jobs:PlanTrips is not set."));
-        recurring.AddOrUpdate<TenantJobRunner>(
-            "settle-merchants",
-            runner => runner.EnqueueForEveryTenantAsync(nameof(SettleMerchantsJob), CancellationToken.None),
-            configuration["Jobs:SettleMerchants"] ?? throw new InvalidOperationException("Jobs:SettleMerchants is not set."));
+            "merchant-payouts",
+            runner => runner.EnqueueForEveryTenantAsync(nameof(PayoutsJob), CancellationToken.None),
+            configuration["Jobs:Payouts"] ?? throw new InvalidOperationException("Jobs:Payouts is not set."));
     }
 }

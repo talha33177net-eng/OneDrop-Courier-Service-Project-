@@ -1,0 +1,41 @@
+@page
+@model Web.Pages.Admin.NewMerchantModel
+@{
+    ViewData["Title"] = "Add merchant";
+}
+
+<div class="page-head">
+    <div>
+        <div class="breadcrumb"><a asp-page="/Admin/Merchants">Merchants</a> <span>/</span> <span>Add</span></div>
+        <h1>Add a merchant</h1>
+        <p>The merchant is active at once and signs in with the email and password you set.</p>
+    </div>
+</div>
+
+@if (Model.Problem is not null)
+{
+    <div class="alert alert-error">@Icons.Get("alert")<div>@Model.Problem</div></div>
+}
+
+<form method="post" class="card">
+    <div class="card-body">
+        <h4 class="mb">Business</h4>
+        <div class="form-grid">
+            <div class="field"><label asp-for="Input.Business">Business name</label><input asp-for="Input.Business" /><span asp-validation-for="Input.Business" class="field-error"></span></div>
+            <div class="field"><label asp-for="Input.Owner">Owner's name</label><input asp-for="Input.Owner" /><span asp-validation-for="Input.Owner" class="field-error"></span></div>
+            <div class="field"><label asp-for="Input.Phone">Mobile number</label><input asp-for="Input.Phone" type="tel" /><span asp-validation-for="Input.Phone" class="field-error"></span></div>
+            <div class="field"><label asp-for="Input.Address">Business address</label><input asp-for="Input.Address" /><span asp-validation-for="Input.Address" class="field-error"></span></div>
+        </div>
+        <h4 class="mb mt">Pickup point</h4>
+        <div class="form-grid">
+            <div class="field"><label for="Input_PickupAreaId">Area</label>@await Html.PartialAsync("_AreaSelect", ("Input.PickupAreaId", Model.Input.PickupAreaId, Model.Areas))<span asp-validation-for="Input.PickupAreaId" class="field-error"></span></div>
+            <div class="field"><label asp-for="Input.PickupAddress">Pickup address</label><input asp-for="Input.PickupAddress" /><span asp-validation-for="Input.PickupAddress" class="field-error"></span></div>
+        </div>
+        <h4 class="mb mt">Sign in</h4>
+        <div class="form-grid">
+            <div class="field"><label asp-for="Input.Email">Email</label><input asp-for="Input.Email" type="email" /><span asp-validation-for="Input.Email" class="field-error"></span></div>
+            <div class="field"><label asp-for="Input.Password">First password</label><input asp-for="Input.Password" type="text" autocomplete="off" /><span class="hint">Tell the merchant; they can sign in with it.</span><span asp-validation-for="Input.Password" class="field-error"></span></div>
+        </div>
+    </div>
+    <div class="card-foot"><button class="btn btn-primary" type="submit">Add merchant</button></div>
+</form>

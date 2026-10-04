@@ -1,0 +1,21 @@
+@using Application.Dashboards
+@model IReadOnlyList<DayCount>
+@* The last seven days as bars: parcels booked, delivered and returned each day *@
+@{
+    var top = Math.Max(1, Model.Max(day => Math.Max(day.Booked, Math.Max(day.Delivered, day.Returned))));
+    string Height(int value) => $"height:{Math.Round(100.0 * value / top)}%";
+}
+<div class="chart" role="img" aria-label="Parcels booked, delivered and returned in the last seven days">
+    @foreach (var day in Model)
+    {
+        <div class="chart-day" title="@day.Day.ToString("ddd d MMM"): @day.Booked booked, @day.Delivered delivered, @day.Returned returned">
+            <div class="chart-bars">
+                <span class="chart-bar booked" style="@Height(day.Booked)"></span>
+                <span class="chart-bar delivered" style="@Height(day.Delivered)"></span>
+                <span class="chart-bar returned" style="@Height(day.Returned)"></span>
+            </div>
+            <span class="chart-label">@day.Day.ToString("ddd")</span>
+        </div>
+    }
+</div>
+<div class="legend mt"><span class="booked">Booked</span><span class="delivered">Delivered</span><span class="returned">Returned</span></div>

@@ -1,8 +1,8 @@
 namespace Application.Abstractions;
 
 /// <summary>
-/// Adapter for paying shops (bKash disbursement). The MVP ships a fake whose transfers are listed at /Dev/Payments; a
-/// real gateway plugs in later.
+/// Adapter for paying merchants (bKash, Nagad or bank transfer). The app ships a fake whose transfers are listed at
+/// /Dev/Payouts; a real gateway plugs in later.
 /// </summary>
 public interface IPayoutGateway
 {

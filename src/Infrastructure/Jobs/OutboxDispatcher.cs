@@ -10,7 +10,7 @@ namespace Infrastructure.Jobs;
 /// <summary>
 /// Runs the outbox senders, <see cref="SendOutboxJob"/> (texts) and <see cref="SendWebhooksJob"/> (shops' webhooks),
 /// for every active tenant every few seconds (<c>Jobs:OutboxInterval</c>), in process: Hangfire's recurring jobs run
-/// at most once a minute, too slow for "your order joined" texts. Each sender has a loop of its own, so a slow shop
+/// at most once a minute, too slow for "out for delivery" texts. Each sender has a loop of its own, so a slow shop
 /// server never holds up an SMS. Each tenant runs in its own scope through <see cref="TenantJobRunner"/>, and a
 /// failing tenant is logged and skipped.
 /// </summary>

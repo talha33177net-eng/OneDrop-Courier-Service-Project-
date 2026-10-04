@@ -1,15 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Domain.Customers;
 using Domain.Delivery;
-using Domain.Grouping;
 using Domain.Merchants;
 using Domain.Network;
 using Domain.Notifications;
-using Domain.Orders;
+using Domain.Parcels;
 using Domain.Payments;
 using Domain.Platform;
+using Domain.Pricing;
 
 namespace Application.Abstractions;
 
@@ -27,13 +26,7 @@ public interface IAppDbContext
 
     DbSet<Area> Areas { get; }
 
-    DbSet<PickupRoute> PickupRoutes { get; }
-
-    DbSet<Customer> Customers { get; }
-
-    DbSet<CustomerAddress> CustomerAddresses { get; }
-
-    DbSet<PhoneOtp> PhoneOtps { get; }
+    DbSet<DeliveryRate> DeliveryRates { get; }
 
     DbSet<Merchant> Merchants { get; }
 
@@ -41,29 +34,25 @@ public interface IAppDbContext
 
     DbSet<PickupPoint> PickupPoints { get; }
 
-    DbSet<Order> Orders { get; }
+    DbSet<Parcel> Parcels { get; }
 
-    DbSet<Package> Packages { get; }
-
-    DbSet<OrderStatusHistory> OrderStatusHistory { get; }
-
-    DbSet<DeliveryGroup> DeliveryGroups { get; }
-
-    DbSet<OutboxMessage> OutboxMessages { get; }
+    DbSet<ParcelEvent> ParcelEvents { get; }
 
     DbSet<Rider> Riders { get; }
 
-    DbSet<Trip> Trips { get; }
+    DbSet<PickupRequest> PickupRequests { get; }
 
-    DbSet<TripStop> TripStops { get; }
+    DbSet<DeliveryRun> DeliveryRuns { get; }
 
-    DbSet<Payment> Payments { get; }
+    DbSet<DeliveryAttempt> DeliveryAttempts { get; }
 
     DbSet<LedgerEntry> LedgerEntries { get; }
 
-    DbSet<Settlement> Settlements { get; }
+    DbSet<Payout> Payouts { get; }
 
-    /// <summary>For the rare change that needs two saves in one transaction (a shelf handed from one delivery to another).</summary>
+    DbSet<OutboxMessage> OutboxMessages { get; }
+
+    /// <summary>For the rare change that needs two saves in one transaction.</summary>
     DatabaseFacade Database { get; }
 
     EntityEntry<TEntity> Entry<TEntity>(TEntity entity)

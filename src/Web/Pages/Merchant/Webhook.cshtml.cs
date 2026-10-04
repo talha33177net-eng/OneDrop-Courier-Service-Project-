@@ -5,7 +5,7 @@ using Application.Merchants.Webhook;
 namespace Web.Pages.Merchant;
 
 /// <summary>
-/// Where the shop's website hears about its orders: the webhook address, the secret to check signatures with, and a
+/// Where the shop's website hears about its parcels: the webhook address, the secret to check signatures with, and a
 /// test message. Only the signed-in shop's own settings.
 /// </summary>
 public class WebhookModel(MerchantWebhookHandler handler) : PageModel
@@ -40,7 +40,7 @@ public class WebhookModel(MerchantWebhookHandler handler) : PageModel
             return Page();
         }
 
-        return Finished("Saved. Your order status changes now go to this address.", ok: true);
+        return Finished("Saved. Your parcel status changes now go to this address.", ok: true);
     }
 
     public async Task<IActionResult> OnPostSecretAsync(CancellationToken cancellationToken)
@@ -54,7 +54,7 @@ public class WebhookModel(MerchantWebhookHandler handler) : PageModel
     {
         await handler.RemoveAsync(cancellationToken);
 
-        return Finished("Removed. Order status changes are no longer sent to your website.", ok: true);
+        return Finished("Removed. Parcel status changes are no longer sent to your website.", ok: true);
     }
 
     public async Task<IActionResult> OnPostTestAsync(CancellationToken cancellationToken)

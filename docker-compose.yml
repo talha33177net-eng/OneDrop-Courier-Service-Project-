@@ -3,8 +3,8 @@
 #   cp .env.example .env        # then choose a SQL Server password in .env (git-ignored)
 #   docker compose up --build
 #
-# Open http://dhaka.localhost:5080 and http://chattogram.localhost:5080 (demo logins in the README). The app runs as
-# Development, so the demo data, the demo logins and the Dev pages (SMS inbox, wallet, shop webhooks) are there.
+# Open http://onedrop.localhost:5080 (demo logins in the README). The app runs as
+# Development, so the demo data, the demo logins and the Dev pages (SMS inbox, payouts sent, webhooks received) are there.
 # SQL Server is on localhost,14330 for your own queries. `docker compose down -v` deletes the data.
 name: onedrop
 

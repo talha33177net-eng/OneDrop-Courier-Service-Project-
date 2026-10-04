@@ -1,0 +1,51 @@
+@page
+@model TrackModel
+@{
+    ViewData["Title"] = Model.Parcel is null ? "Track a parcel" : $"Parcel {Model.Parcel.TrackingCode}";
+}
+
+<section class="hero">
+    <div class="site-section" style="max-width:780px">
+        <span class="eyebrow">Parcel tracking</span>
+        <h1>Where is my parcel?</h1>
+        <p class="lead">Enter the tracking code from your SMS or the parcel's label.</p>
+        <form class="track-form" method="get">
+            <input type="text" name="code" value="@Model.Code" placeholder="OD10000001" aria-label="Tracking code" required />
+            <button class="btn btn-primary" type="submit">@Icons.Get("search") Track</button>
+        </form>
+    </div>
+</section>
+
+<section class="site-section" style="max-width:780px;padding-top:32px">
+    @if (Model.Problem is not null)
+    {
+        <div class="alert alert-error">@Icons.Get("alert")<div>@Model.Problem</div></div>
+    }
+
+    @if (Model.Parcel is { } parcel)
+    {
+        <div class="card">
+            <div class="card-head">
+                <div>
+                    <h2 class="mono">@parcel.TrackingCode</h2>
+                    <p>From @parcel.Merchant to @parcel.Area, @parcel.City · booked @parcel.Booked.ToString("d MMM yyyy")</p>
+                </div>
+                @Statuses.Badge(parcel.Status)
+            </div>
+            <div class="card-body">
+                <partial name="_ParcelProgress" model="parcel.Status" />
+                <hr />
+                <ol class="timeline">
+                    @foreach (var step in parcel.Steps)
+                    {
+                        <li>
+                            <span class="dot"></span>
+                            <div class="tl-title">@step.Note</div>
+                            <div class="tl-meta">@step.When.ToString("ddd d MMM, h:mm tt")@(step.Hub is null ? "" : $" · {step.Hub}")</div>
+                        </li>
+                    }
+                </ol>
+            </div>
+        </div>
+    }
+</section>
