@@ -13,9 +13,9 @@ The one place to see where we are and what comes next. Built from the two projec
 
 | | |
 |---|---|
-| Current week | **Week 4 — Polish and proof** (7 of 9) |
-| Next task | 4.8 The open delivery as a shopping window |
-| Last session | 2026-10-02 — task 4.7 (combine deliveries and learn addresses) on `day4`, uncommitted for review. Tasks 4.2–4.6 are committed on `day4` (`c347729`); `main` holds everything up to 3.7 and the UI upgrade (merge `54733e6`) |
+| Current week | **Week 4 — Polish and proof** (8 of 9) |
+| Next task | 4.9 README, diagrams, demo |
+| Last session | 2026-10-04 — task 4.8 (the shopping window) on `day5`, uncommitted for review. Task 4.7 is committed (`81a1a24`), 4.2–4.6 as `c347729`; `main` holds everything up to 3.7 and the UI upgrade (merge `54733e6`) |
 | Blockers | None |
 
 ---
@@ -47,9 +47,9 @@ A task is **not done** until all of these pass. Record the result in the daily l
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
 | 3 | Operations and money | Group delivered, merchants settled | ✅ Done 2026-09-30 |
-| 4 | Polish and proof | Full demo runs end to end | 🔄 7 of 9 |
+| 4 | Polish and proof | Full demo runs end to end | 🔄 8 of 9 |
 
-Tests today: **410 passing** (269 domain, 6 architecture, 135 integration).
+Tests today: **425 passing** (281 domain, 6 architecture, 138 integration).
 
 ---
 
@@ -890,9 +890,48 @@ next morning each merchant is settled.
       once both deliveries hold a shelf or an advance, or once either is on a trip; no SMS confirming the combination
       (the page says it); the customer cannot undo a combination or a "keep separate"; spellings are learnt per customer,
       not shared between customers at one address.
-- [ ] **4.8 The open delivery as a shopping window** (market review). The "joined" SMS and "My deliveries" say
+- [x] **4.8 The open delivery as a shopping window** (market review). The "joined" SMS and "My deliveries" say
       "Your delivery is open until Tuesday: add from any OneDrop shop for +৳25" with the operator's partner shops.
       The list shows every shop, never the ones this customer bought from.
+      Owner's answers (2026-10-04): shops **opt in** with the address customers shop at (website or Facebook page);
+      "My deliveries" leaves out the shops already in that delivery; the SMS adds one line with a link to a shops page.
+      *Done 2026-10-04:* `Merchant.ShopUrl` and `ShopAbout` (`ListInWindow`: http or https, no user info, at most 500
+      characters, an optional line of at most 120; `LeaveWindow`; `IsListed` = an address and not archived). Shop page
+      **Shop window** (`/Merchant/Window`, `MerchantShopWindowHandler`, nav "Shop window"): list, change, leave; only the
+      signed-in shop's own row. `Application/Merchants/ShopWindow/ShoppingWindow.ShopsAsync(leaveOut)`: the operator's
+      listed shops by name. **SMS:** an order placed in an open delivery (the plain "joined" text, not the confirm or
+      advance questions) ends with "Add from any OneDrop shop for +৳25: http://dhaka.localhost:5080/Shops" when a listed
+      shop is not in the delivery yet (`ICustomerLinks.Shops`); otherwise the text is as before. **Shops page**
+      (`/Shops`, anonymous, the operator's host only, 404 on the platform's): every listed shop with its line and a
+      "Visit shop" link (`rel="noopener nofollow"`), the first-shop and extra-shop fees from the tenant; the same for
+      everyone, because a page filtered by a delivery number would tell anyone guessing one which shops are in it.
+      **"My deliveries":** each delivery still open to shops shows "Open until the end of Monday: add from any OneDrop
+      shop for +৳25" and the listed shops not in it (`CustomerDelivery.MoreShops`), in place of the old one-line hint.
+      SQL: `Merchants.Merchant.ShopUrl`, `ShopAbout`, `chk_Merchant_ShopWindow` (no line without an address).
+      *Tested:* build 0 errors, no new warnings; 12 new domain test cases (not listed until an address is given, trimmed;
+      http and https accepted; blank, no scheme, relative, ftp, `javascript:` and user info refused and nothing changed;
+      too long an address or line refused; leaving clears both) and 3 new integration tests (`ShopWindowTests`: an open
+      delivery offers the other listed shop of the operator with its link and line, not the shop in it, an unlisted one or
+      a Chattogram one; a next-day delivery offers nothing; the "joined" text ends with the line and `/Shops`, the next-day
+      text does not; `/Shops` lists Dhaka's listed shops with their links and not the others, Chattogram's only its own,
+      the platform host 404; a shop that leaves is offered no more; with no other listed shop the text is as before; a
+      shop lists itself on its page, a bad address is refused, another shop's page shows nothing of it and its "Leave"
+      changes only its own row, anonymous redirected), two sweep lines (`/Merchant/Window`, `/Shops`), and the outbox
+      test's "joined" text now checked as a prefix (a listed shop adds the line). Mutation: the window not leaving out the
+      delivery's shops fails the first test. 281 + 6 + 138 = 425 pass, none skipped. Both databases published (the script
+      reviewed first: `Merchants.Merchant` rebuilt with its rows, the policy dropped and re-created, the usual check
+      re-creates; 16 dev and 573 test merchants before and after, Fashion House's webhook kept, policy enabled). Live on
+      dev: Gadget BD's page refused "nope" and listed `https://www.facebook.com/gadgetbd.demo` ("Phones, chargers and
+      earbuds"), Beauty Shop listed `https://beautyshop.example.com.bd/`; Fashion House's page shows neither. Nasrin Akter
+      01819274141 with Gadget BD OD-100153 (DG-100094, ৳60): "… we deliver on Tue 6 Oct. Add from any OneDrop shop for
+      +৳25: http://dhaka.localhost:5080/Shops". `/Shops` at Dhaka lists Beauty Shop and Gadget BD with their links and
+      ৳60 / +৳25, Chattogram "No shops are listed here yet" at ৳70, the platform host 404. Signed in by SMS code, "My
+      deliveries" offers Beauty Shop and not Gadget BD; Beauty Shop OD-100154 then joined at ৳25, its text has no window
+      line and the card no list; the cookie on Chattogram's host goes to its sign-in. No errors in the app log.
+      *Left:* the shops page lists every listed shop on one page (no search or categories, fine while an operator has
+      tens); a shop's address is not checked to be reachable or its own; no merchant sees how many customers its listing
+      brought; next-day and shipped-now deliveries, which still take orders until the pickup route runs, show no window;
+      no phone-width screenshot of the window this time.
 - [ ] **4.9 README, diagrams, demo.** Final documentation and a recorded demo run.
 
 ### Final demo script
@@ -1056,6 +1095,7 @@ Payments stay fake in the MVP either way.
 | 2026-10-02 | Two deliveries to addresses in one area are combined only when the customer answers "same address"; the newer spelling is asked about; the delivery leaving sooner goes on and the other spelling stands for its address (`CustomerAddress.SameAsId`); "keep separate" is stored on the newer address (`KeptApartOn`) | A guess could merge two flats in one building; nothing arrives later than promised; the next order matches by itself, and one answer settles the pair for good |
 | 2026-10-02 | The question is worked out from the data whenever it is shown (SMS, order page, "My deliveries") and only for deliveries waiting at the hub and never on a trip, not both on shelves and not both with an advance; combining keeps each order's `AddedFee` | Nothing to keep in step; a trip's visit already makes them one stop; shelves and advances in both would need sorting by hand; the merchant's fee never changes under it |
 | 2026-10-02 | `publish.ps1` passes its SqlPackage settings as arguments, including `AllowUnsafeRowLevelSecurityDataMovement`, instead of reading `Local.publish.xml` | Since 4.4 any table rebuild was refused, and SqlPackage's unmarked connection copies every row; the profile is git-ignored, so CI's fresh checkout would not have had it |
+| 2026-10-04 | The shopping window lists only shops that list themselves with their shop's address; "My deliveries" leaves out the shops already in the delivery; the "joined" SMS adds one line linking the operator's public `/Shops` page, the same list for everyone (owner) | Nobody is advertised without agreeing, and a window needs a link to send the customer to; a shop in the delivery adds nothing; an SMS cannot hold a list, and a public page filtered by delivery would reveal, to anyone guessing a number, which shops are in it |
 
 ## Quick reference
 
@@ -1072,6 +1112,20 @@ Payments stay fake in the MVP either way.
 ## Daily log
 
 Newest first. One entry per working day: what was done, how it was tested, what is next.
+
+### 2026-10-04
+- **Decided with the owner:** shops opt in to the shopping window with their shop's address; "My deliveries" leaves
+  out the shops already in the delivery; the SMS carries one line with a link to a public shops page.
+- **Done (task 4.8):** `Merchant.ShopUrl` / `ShopAbout` with `ListInWindow`, `LeaveWindow`, `IsListed`;
+  `Application/Merchants/ShopWindow` (`ShoppingWindow`, `MerchantShopWindowHandler`); `ICustomerLinks.Shops`; the
+  window line in `CustomerTexts`; `CustomerDelivery.MoreShops`; pages `/Merchant/Window` (nav "Shop window"), `/Shops`
+  and the window on "My deliveries"; styles; SQL `Merchants.Merchant` (two columns, `chk_Merchant_ShopWindow`); README,
+  Project-Context.
+- **Tested:** see task 4.8 above: 12 new domain test cases and 3 new integration tests plus two sweep lines, one mutation
+  caught, 281 + 6 + 138 = 425 pass, none skipped; both databases published with row counts checked; live on dev
+  (OD-100153–OD-100154, DG-100094): two shops listed from their pages, the SMS line and link, `/Shops` per operator, the
+  customer's window without the shop already in the delivery.
+- **Next:** task 4.9, README, diagrams and the recorded demo.
 
 ### 2026-10-02
 - **Done (task 4.7):** `CustomerAddress.SameAsId` / `KeptApartOn` with `SameAs` and `KeepApart`; `DeliveryGroup.Combine`

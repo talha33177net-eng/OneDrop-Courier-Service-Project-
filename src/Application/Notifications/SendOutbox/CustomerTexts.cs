@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
 using Application.Grouping.CombineDeliveries;
+using Application.Merchants.ShopWindow;
 using Domain.Customers;
 using Domain.Grouping;
 using Domain.Notifications;
@@ -20,7 +21,8 @@ public class CustomerTexts(
     ITenantContext tenantContext,
     ICustomerLinks links,
     ISmsSender sms,
-    CombineDeliveriesHandler combine)
+    CombineDeliveriesHandler combine,
+    ShoppingWindow window)
 {
     /// <summary>The outbox messages that are texts; the others are for someone else (<c>SendWebhooksJob</c>).</summary>
     public static readonly string[] Types =
@@ -62,7 +64,8 @@ public class CustomerTexts(
                 order.CustomerStep,
                 order.ConfirmedOn,
                 order.CustomerToken,
-                order.CustomerId
+                order.CustomerId,
+                order.DeliveryGroupId
             })
             .AsNoTracking()
             .SingleAsync(cancellationToken);
@@ -96,6 +99,20 @@ public class CustomerTexts(
                 $"shops can join it until the end of {Format(deliveryDay.AddDays(-1))}; we deliver on {Format(deliveryDay)}."
             : $"Your {placed.Shop} order {placed.Order} is in OneDrop delivery {placed.Number}, arriving on " +
                 $"{Format(deliveryDay)}.";
+        if (placed.Status == DeliveryGroupStatus.Open)
+        {
+            // The shopping window, when the operator has a listed shop not in this delivery yet
+            var shopsIn = await db.Orders
+                .Where(order => order.DeliveryGroupId == placed.DeliveryGroupId)
+                .Select(order => order.MerchantId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+            if ((await window.ShopsAsync(shopsIn, cancellationToken)).Count > 0)
+            {
+                text += $" Add from any OneDrop shop for +৳{Tenant.ExtraShopFee:N0}: {links.Shops()}";
+            }
+        }
+
         if (question is not null)
         {
             text += $" Same address as your delivery {other} ({otherAddress})? Combine them for one delivery and one " +

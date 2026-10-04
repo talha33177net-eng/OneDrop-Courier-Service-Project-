@@ -1,0 +1,62 @@
+@page
+@model Web.Pages.Merchant.WindowModel
+@using Domain.Merchants
+@{
+    ViewData["Title"] = "Shop window";
+    var settings = Model.Settings;
+}
+
+<div class="page-head">
+    <div>
+        <p class="eyebrow">@settings.MerchantName</p>
+        <h1>Shop window</h1>
+        <p class="lead">
+            Customers whose OneDrop delivery is still open to other shops can add an order from you for only the
+            extra-shop fee. List your shop and we show it to them, with a link to where they buy from you.
+        </p>
+    </div>
+    <a class="button ghost" asp-page="/Merchant/Orders">My orders</a>
+</div>
+
+<details class="help">
+    <summary>Who sees it, and what they see</summary>
+    <ul>
+        <li>
+            Customers see your name, your line and the link: in the text we send when an order joins an open delivery,
+            on the operator's <a asp-page="/Shops">shops page</a>, and on their own deliveries.
+        </li>
+        <li>Shops are listed by name. A customer's list leaves out the shops already in their delivery.</li>
+        <li>No shop ever learns who bought where, from the window or anywhere else.</li>
+        <li>You can leave the window at any time.</li>
+    </ul>
+</details>
+
+@if (Model.Done is not null)
+{
+    <div class="notice notice-ok" role="status">@Model.Done</div>
+}
+
+@if (Model.Problem is not null)
+{
+    <div class="notice notice-problem" role="alert">@Model.Problem</div>
+}
+
+<section class="card">
+    <h2>@(settings.Url is null ? "List your shop" : "Your listing")</h2>
+    <form method="post" asp-page-handler="List">
+        <label asp-for="Address">Where customers shop</label>
+        <input asp-for="Address" type="url" inputmode="url" maxlength="@Merchant.MaxShopUrlLength" placeholder="https://www.facebook.com/myshop" required />
+        <label asp-for="About">What you sell (optional)</label>
+        <input asp-for="About" maxlength="@Merchant.MaxShopAboutLength" placeholder="Handmade kantha and nakshi kantha" />
+        <div class="door-actions">
+            <button type="submit" class="button">@(settings.Url is null ? "List my shop" : "Save")</button>
+        </div>
+    </form>
+    @if (settings.Url is not null)
+    {
+        <form method="post" asp-page-handler="Leave">
+            <p class="muted">Listed with <strong>@settings.Url</strong>.</p>
+            <button type="submit" class="button ghost compact">Leave the shop window</button>
+        </form>
+    }
+</section>

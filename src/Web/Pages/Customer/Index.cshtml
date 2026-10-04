@@ -127,10 +127,28 @@
 
         @if (open)
         {
-            <p class="muted">
-                Buying from another shop before then? Choose OneDrop at checkout: it adds only
-                ৳@deliveries.ExtraShopFee.ToString("N0") to this delivery.
-            </p>
+            <div class="shop-window">
+                <strong>Open until the end of @delivery.LastDayToJoin.ToString("dddd"): add from any OneDrop shop for +৳@deliveries.ExtraShopFee.ToString("N0")</strong>
+                <p class="muted">Choose OneDrop at checkout with the same mobile number and address, and it rides along.</p>
+                @if (delivery.MoreShops is { Count: > 0 } shops)
+                {
+                    <ul class="lines window">
+                        @foreach (var shop in shops)
+                        {
+                            <li>
+                                <div>
+                                    <strong>@shop.Name</strong>
+                                    @if (shop.About is not null)
+                                    {
+                                        <span class="muted">@shop.About</span>
+                                    }
+                                </div>
+                                <a class="button ghost compact" href="@shop.Url" target="_blank" rel="noopener nofollow">Visit shop</a>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
             <form method="post" asp-page-handler="ShipNow" class="ship-now">
                 <strong>In a hurry?</strong>
                 <input type="hidden" name="number" value="@delivery.Number" />

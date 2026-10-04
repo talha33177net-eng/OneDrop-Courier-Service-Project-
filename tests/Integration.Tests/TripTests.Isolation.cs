@@ -229,6 +229,36 @@ public partial class TripTests
                     }
                 }
             }),
+            ("/Merchant/Window", async () =>
+            {
+                var url = $"https://isolation-{Guid.NewGuid():N}.example/";
+                await ListFashionHouseAsync(url);
+                try
+                {
+                    Assert.Contains(url, await fashion.PageAsync("/Merchant/Window"));
+                    Assert.DoesNotContain(url, await gadget.PageAsync("/Merchant/Window"));
+                    Assert.DoesNotContain(url, await ctgShop.PageAsync("/Merchant/Window"));
+                }
+                finally
+                {
+                    await ListFashionHouseAsync(null);
+                }
+            }),
+            ("/Shops", async () =>
+            {
+                // Open to everyone, so it may show a listed shop to anyone, but only its own operator's
+                var url = $"https://isolation-{Guid.NewGuid():N}.example/";
+                await ListFashionHouseAsync(url);
+                try
+                {
+                    Assert.Contains(url, await Visit("dhaka").PageAsync("/Shops"));
+                    Assert.DoesNotContain(url, await ctgAnonymous.PageAsync("/Shops"));
+                }
+                finally
+                {
+                    await ListFashionHouseAsync(null);
+                }
+            }),
             ("GET /api/v1/areas", async () =>
                 Assert.DoesNotContain(hub.Area, await ctgKey.GetStringAsync("/api/v1/areas", Cancel))),
             ("GET /api/v1/orders/{number}", async () =>
@@ -537,6 +567,24 @@ public partial class TripTests
             .Where(m => m.WebhookSecret != null && !(m.TenantId == tenantId && m.Name == name))
             .Select(m => m.WebhookSecret!)
             .ToArrayAsync(Cancel);
+    }
+
+    /// <summary>Lists Dhaka's Fashion House in the shopping window with the address given, or takes it out.</summary>
+    private async Task ListFashionHouseAsync(string? url)
+    {
+        await using var scope = await ScopeAsync("dhaka");
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var merchant = await db.Merchants.SingleAsync(m => m.Name == "Fashion House", Cancel);
+        if (url is null)
+        {
+            merchant.LeaveWindow();
+        }
+        else
+        {
+            Assert.True(merchant.ListInWindow(url, null).IsSuccess);
+        }
+
+        await db.SaveChangesAsync(Cancel);
     }
 
     [GeneratedRegex(@"\{[^}]+\}")]

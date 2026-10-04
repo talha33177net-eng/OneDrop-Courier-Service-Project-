@@ -16,7 +16,7 @@ progress and daily log live in [Plans/Implementation-Plan.md](Plans/Implementati
 | 1 — Foundation | Solution, tenancy (catalog, resolvers, filters, save guard), domain + database, Identity with roles and phone OTP, seeded tenants/zones/hubs, merchant API key + Create Order | **Done** |
 | 2 — Grouping core | Customer matching, delivery groups + 3-day rule, quote (৳60 / +৳25), lock job + Ship now, outbox + fake SMS, customer group page | **Done** |
 | 3 — Operations & money | Pickup routes + QR labels, hub scan/shelves/shuttle, rider trips, market pricing (joinable fast deliveries, Ship now as an upgrade, weight allowance, staggered pickups), door payment, confirmation and advance payment, ledger + settlement, trust (advance after a refusal until 3 good deliveries; late shops drop off at the hub) | **Done** |
-| 4 — Polish & proof | SignalR dashboards, webhooks, Row-Level Security, Docker, CI, simulator, combining deliveries to two spellings of one address | In progress (4.1–4.7 done) |
+| 4 — Polish & proof | SignalR dashboards, webhooks, Row-Level Security, Docker, CI, simulator, combining deliveries to two spellings of one address, the shopping window | In progress (4.1–4.8 done) |
 
 ## Run it
 
@@ -144,6 +144,14 @@ Signed as [Standard Webhooks](https://www.standardwebhooks.com/): headers `webho
 base64-decoded secret. Any 2xx answer counts; otherwise it is retried after 1, 2, 4 and 8 minutes. The body never
 names the delivery or the customer's other shops. In Development, set the address to
 `http://localhost:5080/Dev/Webhooks` to see what arrives and whether its signature checks.
+
+### Shopping window
+
+A shop that wants new customers lists itself on **Shop window** (`/Merchant/Window`): the address customers shop at
+(website or Facebook page) and a line on what it sells. Customers whose delivery is still open to other shops see the
+listed shops: the "joined" SMS ends with "Add from any OneDrop shop for +৳25:" and a link to the operator's public
+**Shops** page (`/Shops`, the same list for everyone), and each open delivery on "My deliveries" lists the shops not
+already in it. Shops are never shown who bought where.
 
 Background jobs run on Hangfire in the web app; the dashboard is at http://localhost:5080/jobs (platform admin).
 

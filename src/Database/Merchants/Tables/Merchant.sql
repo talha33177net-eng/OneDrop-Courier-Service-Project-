@@ -8,6 +8,8 @@
 --             out from its recent late handovers (Orders.Order.ShopLateOn)
 -- 2026-09-30: WebhookUrl and WebhookSecret (task 4.2): where the shop's order status changes are posted, and the
 --             whsec_ secret they are signed with (kept as it is: signing needs it)
+-- 2026-10-04: ShopUrl and ShopAbout (task 4.8): where customers shop and what the shop sells, set by the shop to be
+--             listed in the operator's shopping window (NULL: not listed)
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Merchants].[Merchant] (
     [Id]            BIGINT         IDENTITY (1, 1) NOT NULL,
@@ -18,6 +20,8 @@ CREATE TABLE [Merchants].[Merchant] (
     [ContactEmail]  NVARCHAR (320) NULL,
     [WebhookUrl]    NVARCHAR (500) NULL,
     [WebhookSecret] NVARCHAR (100) NULL,
+    [ShopUrl]       NVARCHAR (500) NULL,
+    [ShopAbout]     NVARCHAR (120) NULL,
     [Archived]      BIT            DEFAULT ((0)) NOT NULL,
     [UpdatedId]     BIGINT         NULL,
     [UpdatedOn]     DATETIME2 (7)  DEFAULT (getutcdate()) NOT NULL,
@@ -26,7 +30,8 @@ CREATE TABLE [Merchants].[Merchant] (
     CONSTRAINT [FK_Merchant_Tenant] FOREIGN KEY ([TenantId]) REFERENCES [Platform].[Tenant] ([Id]),
     CONSTRAINT [FK_Merchant_Zone] FOREIGN KEY ([ZoneId]) REFERENCES [Network].[Zone] ([Id]),
     CONSTRAINT [FK_Merchant_User] FOREIGN KEY ([UpdatedId]) REFERENCES [Identity].[User] ([Id]),
-    CONSTRAINT [chk_Merchant_Webhook] CHECK ([WebhookUrl] IS NULL OR [WebhookSecret] IS NOT NULL)
+    CONSTRAINT [chk_Merchant_Webhook] CHECK ([WebhookUrl] IS NULL OR [WebhookSecret] IS NOT NULL),
+    CONSTRAINT [chk_Merchant_ShopWindow] CHECK ([ShopUrl] IS NOT NULL OR [ShopAbout] IS NULL)
 );
 
 

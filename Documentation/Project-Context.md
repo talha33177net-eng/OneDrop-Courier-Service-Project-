@@ -100,25 +100,25 @@ The user supplied two PDFs (not stored in the repo): *OneDrop Implementation Pla
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
 | 3 | Operations and money | Group delivered, merchants settled | ✅ Done 2026-09-30 |
-| 4 | Polish and proof | Full demo runs end to end | 🔄 4.1–4.7 done, next 4.8 (the open delivery as a shopping window) |
+| 4 | Polish and proof | Full demo runs end to end | 🔄 4.1–4.8 done, next 4.9 (README, diagrams, demo) |
 
 Task-level detail, the cut list, the job schedule, must-pass tests and the daily log are in
 [Plans/Implementation-Plan.md](../Plans/Implementation-Plan.md). **That file is the source of truth for progress.**
 
 ---
 
-## 3. What exists today (Weeks 1–3, tasks 4.1–4.7)
+## 3. What exists today (Weeks 1–3, tasks 4.1–4.8)
 
 ### Solution layout (`Courier.sln`)
 | Project | Path | Contents |
 |---|---|---|
-| Domain | `src/Domain` | Entities and rules, no packages. `Common` (Entity with domain events, TenantEntity, Result/Error), `Platform/Tenant`, `Network` (Hub, Zone, Area, PickupRoute), `Customers` (Customer, CustomerAddress, PhoneNumber, PhoneOtp, CustomerStanding + CustomerStep + TrustRules), `Merchants` (Merchant with its webhook, MerchantApiKey, PickupPoint, DropOffRule, WebhookSignature), `Orders` (Order + state machine and scans, Package with its hub, PackageLabel, OrderStatusHistory, OrderStatusChanged), `Grouping` (DeliveryGroup + state machine, lock time and shelf, events), `Delivery` (Rider, Trip, TripStop, TripLoad, TripPlanner), `Pricing` (DeliveryFeeCalculator, FeeSchedule), `Payments` (Payment: cash or wallet, at the door or in advance, pending until paid; LedgerEntry: what each shop is owed or owes per order; Settlement: a payout), `Notifications` (OutboxMessage + retry rule) |
-| Application | `src/Application` | Use cases as vertical slices: `Orders/CreateOrder`, `Orders/GetOrder`, `Orders/ConfirmOrder` (the SMS link: confirm, or pay the fee in advance), `Network/ListAreas`, `Network/PickupRoutes` (route list and sheet), `Network/HubScan` (collect, receive at a hub, shelves, shuttle load and manifest), `Orders/PackageLabels`, `Auth/PhoneLogin`, `Customers/CustomerDirectory` (find-or-create by phone/address), `Grouping/DeliveryGrouping` (join or open the order's group; quote), `Grouping/LockDueGroups` (the lock job), `Grouping/ShipNow`, `Grouping/CustomerDeliveries` ("My deliveries"), `Delivery/PlanTrips` (planner and job), `Delivery/HubTrips`, `Delivery/RiderDay` (the rider's stops, Start trip), `Delivery/Door` (at the door: amount due, QR, hand over, nobody home; writes the ledger), `Delivery/HubCash` (riders' cash hand-in), `Payments/SettleMerchants` (the payout job), `Payments/MerchantPayouts` (the shop's money), `Operations/Dashboard` (live counts per hub and packages per delivery), `Merchants/ShopDropOffs` (shops that bring their parcels to the hub), `Merchants/Webhook` (the shop's webhook settings and test), `Pricing/GetQuote`, `Notifications` (outbox contracts, `SendOutbox` job and SMS texts, `SendWebhooks` job and signed bodies). Interfaces: `IAppDbContext`, `IOperationsFeed`, `ITenantJob`, `ITenantContext` (`TenantInfo.Fees`, `Trust`, `DropOff`), `ITenantCatalog`, `ICurrentUser`, `ISmsSender`, `IWebhookSender`, `IPaymentGateway`, `IPayoutGateway`, `ICustomerLinks`; `QueryFilters` (filter names) |
+| Domain | `src/Domain` | Entities and rules, no packages. `Common` (Entity with domain events, TenantEntity, Result/Error), `Platform/Tenant`, `Network` (Hub, Zone, Area, PickupRoute), `Customers` (Customer, CustomerAddress, PhoneNumber, PhoneOtp, CustomerStanding + CustomerStep + TrustRules), `Merchants` (Merchant with its webhook and shop window listing, MerchantApiKey, PickupPoint, DropOffRule, WebhookSignature), `Orders` (Order + state machine and scans, Package with its hub, PackageLabel, OrderStatusHistory, OrderStatusChanged), `Grouping` (DeliveryGroup + state machine, lock time and shelf, events), `Delivery` (Rider, Trip, TripStop, TripLoad, TripPlanner), `Pricing` (DeliveryFeeCalculator, FeeSchedule), `Payments` (Payment: cash or wallet, at the door or in advance, pending until paid; LedgerEntry: what each shop is owed or owes per order; Settlement: a payout), `Notifications` (OutboxMessage + retry rule) |
+| Application | `src/Application` | Use cases as vertical slices: `Orders/CreateOrder`, `Orders/GetOrder`, `Orders/ConfirmOrder` (the SMS link: confirm, or pay the fee in advance), `Network/ListAreas`, `Network/PickupRoutes` (route list and sheet), `Network/HubScan` (collect, receive at a hub, shelves, shuttle load and manifest), `Orders/PackageLabels`, `Auth/PhoneLogin`, `Customers/CustomerDirectory` (find-or-create by phone/address), `Grouping/DeliveryGrouping` (join or open the order's group; quote), `Grouping/LockDueGroups` (the lock job), `Grouping/ShipNow`, `Grouping/CustomerDeliveries` ("My deliveries"), `Delivery/PlanTrips` (planner and job), `Delivery/HubTrips`, `Delivery/RiderDay` (the rider's stops, Start trip), `Delivery/Door` (at the door: amount due, QR, hand over, nobody home; writes the ledger), `Delivery/HubCash` (riders' cash hand-in), `Payments/SettleMerchants` (the payout job), `Payments/MerchantPayouts` (the shop's money), `Operations/Dashboard` (live counts per hub and packages per delivery), `Merchants/ShopDropOffs` (shops that bring their parcels to the hub), `Merchants/Webhook` (the shop's webhook settings and test), `Merchants/ShopWindow` (the shopping window and the shop's listing), `Pricing/GetQuote`, `Notifications` (outbox contracts, `SendOutbox` job and SMS texts, `SendWebhooks` job and signed bodies). Interfaces: `IAppDbContext`, `IOperationsFeed`, `ITenantJob`, `ITenantContext` (`TenantInfo.Fees`, `Trust`, `DropOff`), `ITenantCatalog`, `ICurrentUser`, `ISmsSender`, `IWebhookSender`, `IPaymentGateway`, `IPayoutGateway`, `ICustomerLinks`; `QueryFilters` (filter names) |
 | Infrastructure | `src/Infrastructure` | `Persistence/AppDbContext` (EF Core, query filters), `Configurations/*` (mapping), `TenantSaveInterceptor`, `MultiTenancy` (TenantContext, TenantCatalog, CustomerLinks), `Identity` (AppUser, AppRole, claims), `Sms/FakeSmsSender`, `Payments/FakePaymentGateway` (paid by hand on `/Dev/Payments`) and `FakePayoutGateway` (payouts listed there), `Webhooks/HttpWebhookSender`, `Seeding/DemoDataSeeder`, `Jobs` (Hangfire setup, TenantJobRunner, TenantJobRegistry, OutboxDispatcher); `AppDbContext.SaveChangesAsync` writes the outbox |
 | Web | `src/Web` | Razor Pages portals (merchant, customer, hub, operator admin, platform), `Live` (SignalR `OperationsHub`, `OperationsFeed`), `Labels/LabelQrCode` (QRCoder), `Api/V1` (orders, quote, areas by API key; deliveries by customer cookie), `Authentication/ApiKeyAuthenticationHandler`, `MultiTenancy` middleware, `Program.cs` |
 | Database | `src/Database` | SQL project (Microsoft.Build.Sql 2.1.0) → `Database.dacpac`. Owns the schema |
 | Database Update | `src/Database Update` | DbUp console (`dbup.exe`): data migrations in `Scripts/<Year>/`, data-loss scripts in `Scripts/Pre/` |
-| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 269 + 6 + 135 = **410 tests, all passing** |
+| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 281 + 6 + 138 = **425 tests, all passing** |
 | Tools | `tools/db/publish.ps1` | Deploys a database: `dbup pre` → dacpac publish → `dbup` (Windows PowerShell 5.1 and PowerShell 7 on Linux) |
 | Simulator | `tools/Simulator` | Demo data (4.6): made-up shops per operator (a new API key each run), then orders from customers who buy at several shops, sent through the running app's quote and Create Order: `dotnet run --project tools/Simulator -- --orders 40 --pace 2` |
 | Docker and CI | `Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml` | Images `web` and `database` (runs `publish.ps1`); compose = SQL Server 2025 + deploy + app on `localhost:5080`, password in git-ignored `.env`; CI deploys a throwaway SQL Server from nothing and runs every suite (4.5) |
@@ -323,13 +323,21 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   follow, so the next order typed that way joins by itself. **Keep separate**: `KeptApartOn` on the newer address, never
   asked again. Not offered when both deliveries hold a shelf or both have an advance. Deliveries in other areas are never
   asked about.
+- **Shopping window** (4.8, `Application/Merchants/ShopWindow`): a shop lists itself on **Shop window**
+  (`/Merchant/Window`, `Merchant.ListInWindow`: the http(s) address customers shop at and an optional line on what it
+  sells; **Leave the shop window** takes it out). `ShoppingWindow.ShopsAsync` lists the operator's listed shops by name,
+  leaving out the ones given. The "joined" SMS of an order in an open delivery ends with "Add from any OneDrop shop for
+  +৳25: …/Shops" when a listed shop is not in the delivery yet (`ICustomerLinks.Shops`); `/Shops` is open to everyone on
+  the operator's host (404 on the platform's) and the same for everyone, so it names no customer or delivery; "My
+  deliveries" shows each open delivery's window without the shops already in it (`CustomerDelivery.MoreShops`). No
+  shop ever sees the window's customers.
 - **Not yet:** a screen to add riders or change a bike's limit, a screen to change route times or weight settings, Ship now by SMS "reply 1" (needs an inbound SMS gateway), a screen for failed outbox messages or webhooks,
   merchant screens to create API keys, tenant admin screens.
 
 ### Database
 - Schemas: `Platform` (Tenant), `Identity` (User, Role, UserRole, UserClaim, UserLogin, UserToken, RoleClaim),
   `Network` (Hub, Zone, Area, PickupRoute), `Customers` (Customer, CustomerAddress with `SameAsId` and `KeptApartOn`, PhoneOtp), `Merchants` (Merchant
-  with `WebhookUrl` and `WebhookSecret`, `chk_Merchant_Webhook`; MerchantApiKey, PickupPoint), `Orders` (Order, Package, OrderStatusHistory, sequence OrderNumber → `OD-100001`),
+  with `WebhookUrl` and `WebhookSecret`, `chk_Merchant_Webhook`, `ShopUrl` and `ShopAbout`, `chk_Merchant_ShopWindow`; MerchantApiKey, PickupPoint), `Orders` (Order, Package, OrderStatusHistory, sequence OrderNumber → `OD-100001`),
   `Grouping` (DeliveryGroup, sequence DeliveryGroupNumber → `DG-100001`; one `Open` group per customer + address
   by filtered unique index), `Delivery` (Rider, Trip — one per rider a day, TripStop — a delivery on one trip a
   day), `Notifications` (OutboxMessage: `Status` 1 Pending / 2 Sent / 3 Failed / 4 Skipped), `Payments` (Payment: `Purpose` 1 Door / 2 Advance, `Method` 1 Cash / 2 Bkash / 3 Nagad,
@@ -373,7 +381,8 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   made. Some delivery deadlines were moved into the past by hand for live checks (DG-100012, DG-100020,
   DG-100027–29, DG-100045–46), so those show as due today with no parcel at the hub. The 3.7 live check dated its ledger
   lines a day back by hand to see the payout (settlements 1 and 2). The 3.9 demo run (DG-100065, OD-100100–OD-100102, Parveen Sultana 01819274111) was delivered and settled (settlements 3–5); the 3.8 check gave OD-100062 its `ShopLateOn` by
-  hand and put Beauty Shop on drop-off (three late handovers, until 29 October). Orders before OD-100031 have no outbox rows, and orders before the 4.2 live check (OD-100108) no status-change rows. Dev Fashion House (Dhaka) has its webhook set to `http://localhost:5080/Dev/Webhooks` from the 4.2 live check.
+  hand and put Beauty Shop on drop-off (three late handovers, until 29 October). Orders before OD-100031 have no outbox rows, and orders before the 4.2 live check (OD-100108) no status-change rows. Dev Fashion House (Dhaka) has its webhook set to `http://localhost:5080/Dev/Webhooks` from the 4.2 live check. Dev
+  Gadget BD and Beauty Shop (Dhaka) are listed in the shopping window from the 4.8 live check.
   The Hangfire tables are installed at app start in both databases; only `OneDrop` runs jobs, as the integration
   tests start no job server. Group numbers have gaps: a sequence value used in a rolled-back dry run is not reused.
 
@@ -461,6 +470,7 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
 | UI (2026-09-29): a home per role, "Hub today" with the hub's six steps and a step bar, a folded "how this works" box per page, the hub remembered in a host-only cookie; the **New order** form uses the API's handler; demo logins as buttons in Development | The owner could not tell where to click; one path for price and grouping; the cookie is a preference, each page still checks the hub |
 | 4.7: two deliveries to addresses in one area are combined only when the customer says so; the newer spelling is the one asked about; the delivery leaving sooner goes on and the other spelling points at its address (`SameAsId`); "keep separate" is stored on the newer address | A guess could merge two flats in one building; nothing arrives later than promised; the alias makes the next order match by itself, and one answer settles the pair for good |
 | Combining keeps each order's `AddedFee` (as for an order left behind) and is offered only for deliveries not yet on a trip, not both on shelves and not both with an advance | The merchant's fee never changes under it; a trip's visit already makes one stop of them; two shelves or two advances would need sorting out by hand |
+| 4.8 (owner, 2026-10-04): a shop is in the shopping window only once it lists itself with its shop's address; "My deliveries" leaves out the shops already in that delivery; the SMS adds one line with a link to the operator's public `/Shops` page, which is the same for everyone | Nobody is advertised without agreeing, and a window needs somewhere to send the customer; a shop already in the delivery adds nothing; an SMS cannot hold a list, and a public page filtered by delivery would tell anyone guessing a delivery number which shops are in it |
 
 ---
 

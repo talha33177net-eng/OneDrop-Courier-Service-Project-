@@ -1684,3 +1684,17 @@ code.secret {
     gap: 8px;
     margin-top: 10px;
 }
+
+.shop-window {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px dashed var(--line);
+}
+
+.shop-window p {
+    margin: 4px 0 0;
+}
+
+.lines.window li .button {
+    flex-shrink: 0;
+}

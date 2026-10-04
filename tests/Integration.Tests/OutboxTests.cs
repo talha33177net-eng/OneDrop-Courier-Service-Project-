@@ -100,10 +100,12 @@ public class OutboxTests(WebAppFactory factory)
 
         var texts = Texts(phone);
         Assert.All(texts, sms => Assert.Equal(dhaka.SmsSenderName, sms.Sender));
+        // The shopping window's line follows when a shop of the operator is listed (task 4.8, ShopWindowTests)
         Assert.Contains(
-            $"Your Fashion House order {fashion.Number} is in OneDrop delivery {group.Number}. Orders from other shops " +
-            $"can join it until the end of {Format(deliveryDay.AddDays(-1))}; we deliver on {Format(deliveryDay)}.",
-            texts.Select(sms => sms.Text));
+            texts,
+            sms => sms.Text.StartsWith(
+                $"Your Fashion House order {fashion.Number} is in OneDrop delivery {group.Number}. Orders from other shops " +
+                $"can join it until the end of {Format(deliveryDay.AddDays(-1))}; we deliver on {Format(deliveryDay)}."));
         Assert.Contains(texts, sms => sms.Text.StartsWith($"Your Gadget BD order {gadget.Number} is in OneDrop delivery {group.Number}."));
         Assert.Contains(
             texts,

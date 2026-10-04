@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
 using Application.Grouping.CombineDeliveries;
+using Application.Merchants.ShopWindow;
 using Domain.Delivery;
 using Domain.Grouping;
 using Domain.Orders;
@@ -17,6 +18,7 @@ public sealed record CustomerDeliveryOrder(string Number, string Shop, OrderStat
 /// join until the end of the day before. <see cref="ShipNowFee"/> is what Ship now would add to the fee (the fast
 /// difference when it brings the day forward, 0 on the last day to join); null when the delivery is not open.
 /// <see cref="SameAddress"/> asks whether its address is the same place as another delivery's in the area.
+/// <see cref="MoreShops"/>, while it is open, are the listed shops of the operator not in it yet (the shopping window).
 /// </summary>
 public sealed record CustomerDelivery(
     string Number,
@@ -27,7 +29,8 @@ public sealed record CustomerDelivery(
     decimal Fee,
     decimal Savings,
     decimal? ShipNowFee,
-    SameAddressQuestion? SameAddress = null)
+    SameAddressQuestion? SameAddress = null,
+    IReadOnlyList<WindowShop>? MoreShops = null)
 {
     public DateOnly LastDayToJoin => DeliveryDay.AddDays(-1);
 
@@ -62,6 +65,7 @@ public class CustomerDeliveriesHandler(
     IAppDbContext db,
     ITenantContext tenantContext,
     CombineDeliveriesHandler combine,
+    ShoppingWindow window,
     TimeProvider time)
 {
     public const int EarlierShown = 10;
@@ -131,6 +135,14 @@ public class CustomerDeliveriesHandler(
 
         var questions = await combine.QuestionsAsync(customerId, cancellationToken);
 
+        // The shopping window of each delivery still open to shops: every listed shop but the ones already in it
+        var moreShops = new Dictionary<long, IReadOnlyList<WindowShop>>();
+        foreach (var delivery in onTheWay.Where(delivery => delivery.Group.CanJoin(now)))
+        {
+            var shopsIn = orders[delivery.Id].Select(order => order.Line.MerchantId).Distinct().ToList();
+            moreShops[delivery.Id] = await window.ShopsAsync(shopsIn, cancellationToken);
+        }
+
         return new CustomerDeliveries([.. onTheWay.Select(Describe)], [.. earlier.Select(Describe)], tenant.ExtraShopFee);
 
         CustomerDelivery Describe(DeliveryRow delivery)
@@ -151,7 +163,8 @@ public class CustomerDeliveriesHandler(
                 collected.TryGetValue(delivery.Id, out var fee) ? fee : fees.GroupFee(lines, delivery.Group.Kind),
                 fees.Savings(lines, delivery.Group.Kind),
                 shipNowFee,
-                questions.FirstOrDefault(question => question.Delivery == delivery.Number));
+                questions.FirstOrDefault(question => question.Delivery == delivery.Number),
+                moreShops.GetValueOrDefault(delivery.Id));
         }
     }
 

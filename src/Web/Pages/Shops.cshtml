@@ -1,0 +1,47 @@
+@page
+@model ShopsModel
+@{
+    ViewData["Title"] = "Shops";
+    var tenant = Model.Tenant;
+}
+
+@section Head {
+    <partial name="_CustomerApp" />
+}
+
+<p class="eyebrow">@tenant.Name</p>
+<h1>Shops that deliver with OneDrop</h1>
+<p class="lead">
+    Buying from more than one shop? Choose OneDrop at each checkout with the same mobile number and address. Orders
+    placed while your delivery is open travel together: the first shop ৳@tenant.BaseDeliveryFee.ToString("N0"), each
+    other shop only +৳@tenant.ExtraShopFee.ToString("N0"), one delivery.
+</p>
+
+@if (Model.Shops.Count == 0)
+{
+    <div class="card">
+        <p class="muted">No shops are listed here yet. Any shop that offers OneDrop at checkout works the same way.</p>
+    </div>
+}
+else
+{
+    <div class="card">
+        <ul class="lines window">
+            @foreach (var shop in Model.Shops)
+            {
+                <li>
+                    <div>
+                        <strong>@shop.Name</strong>
+                        @if (shop.About is not null)
+                        {
+                            <span class="muted">@shop.About</span>
+                        }
+                    </div>
+                    <a class="button ghost compact" href="@shop.Url" target="_blank" rel="noopener nofollow">Visit shop</a>
+                </li>
+            }
+        </ul>
+    </div>
+}
+
+<p class="muted">Already ordered? Your deliveries, and the shops not in them yet, are on <a asp-page="/Customer/Index">My deliveries</a>.</p>

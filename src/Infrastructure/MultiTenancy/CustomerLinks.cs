@@ -15,6 +15,11 @@ public class CustomerLinks(IConfiguration configuration, ITenantContext tenantCo
         return Portal() + "Customer/Order?token=" + Uri.EscapeDataString(token);
     }
 
+    public string Shops()
+    {
+        return Portal() + "Shops";
+    }
+
     public string Deliveries()
     {
         return Portal() + "Customer";

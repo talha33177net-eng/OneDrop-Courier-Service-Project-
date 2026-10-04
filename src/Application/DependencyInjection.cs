@@ -13,6 +13,7 @@ using Application.Grouping.CustomerDeliveries;
 using Application.Grouping.LockDueGroups;
 using Application.Grouping.ShipNow;
 using Application.Merchants;
+using Application.Merchants.ShopWindow;
 using Application.Merchants.Webhook;
 using Application.Network.HubScan;
 using Application.Network.ListAreas;
@@ -44,6 +45,8 @@ public static class DependencyInjection
         services.AddScoped<SendWebhooksJob>();
         services.AddScoped<MerchantWebhooks>();
         services.AddScoped<MerchantWebhookHandler>();
+        services.AddScoped<ShoppingWindow>();
+        services.AddScoped<MerchantShopWindowHandler>();
         services.AddScoped<CreateOrderHandler>();
         services.AddScoped<GetOrderHandler>();
         services.AddScoped<ConfirmOrderHandler>();
