@@ -13,9 +13,9 @@ The one place to see where we are and what comes next. Built from the two projec
 
 | | |
 |---|---|
-| Current week | **Week 4 — Polish and proof** (8 of 9) |
-| Next task | 4.9 README, diagrams, demo |
-| Last session | 2026-10-04 — task 4.8 (the shopping window) on `day5`, uncommitted for review. Task 4.7 is committed (`81a1a24`), 4.2–4.6 as `c347729`; `main` holds everything up to 3.7 and the UI upgrade (merge `54733e6`) |
+| Current week | **The 4-week MVP is complete** (Week 4 done 2026-10-04) |
+| Next task | None in the plan. After the MVP (owner's list): API key screens, tenant admin screens, SMS "reply 1", a failed-message screen, the app's own SQL login; merge `day5` into `main` |
+| Last session | 2026-10-04 — task 4.8 committed (`90669ca`) and `day5` pushed (first CI run on GitHub green); task 4.9 (documents and the recorded demo) on `day5`, uncommitted for review. `main` holds everything up to 3.7 and the UI upgrade (merge `54733e6`) |
 | Blockers | None |
 
 ---
@@ -47,7 +47,7 @@ A task is **not done** until all of these pass. Record the result in the daily l
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
 | 3 | Operations and money | Group delivered, merchants settled | ✅ Done 2026-09-30 |
-| 4 | Polish and proof | Full demo runs end to end | 🔄 8 of 9 |
+| 4 | Polish and proof | Full demo runs end to end | ✅ Done 2026-10-04 |
 
 Tests today: **425 passing** (281 domain, 6 architecture, 138 integration).
 
@@ -596,7 +596,7 @@ next morning each merchant is settled.
 
 ---
 
-## Week 4 — Polish and proof 🔄
+## Week 4 — Polish and proof ✅
 
 **Done when:** the final demo script below runs end to end.
 
@@ -932,14 +932,36 @@ next morning each merchant is settled.
       tens); a shop's address is not checked to be reachable or its own; no merchant sees how many customers its listing
       brought; next-day and shipped-now deliveries, which still take orders until the pickup route runs, show no window;
       no phone-width screenshot of the window this time.
-- [ ] **4.9 README, diagrams, demo.** Final documentation and a recorded demo run.
+- [x] **4.9 README, diagrams, demo.** Final documentation and a recorded demo run.
+      *Done 2026-10-04:* `Documentation/Architecture.md`: Mermaid diagrams of the layers, the life of one delivery
+      (sequence), delivery states, the three isolation layers, the outbox, and a day at an operator.
+      `Documentation/Demo.md`: the final demo as a presenter's script (who, where, what to show), the two SQL shortcuts
+      that compress three days and the next morning into one sitting, and the run recorded below. README: what OneDrop
+      costs the customer against couriers, a table of the documents, the MVP marked complete with what is not built yet,
+      the layout brought up to date. The final demo script now says ৳95 (Ship now on Day 1 adds the fast difference since
+      the market review; ৳85 on Day 2). No code change.
+      *Tested:* the script run on dev through the app's pages and API (curl), app started with the payout and lock jobs
+      every minute: Taslima Rahman 01819274151, Fashion House OD-100155 (quote ৳60, fee ৳60, COD ৳1,200) and Gadget BD
+      OD-100156 (quote +৳25, fee ৳25, COD ৳800) in DG-100095, both confirmed from their SMS links; "My deliveries" ৳85,
+      "You save ৳35", Ship now → Monday, fee ৳95; collected and received at MIR onto MIR-04 (2 of 2, Ready); dates moved
+      back a day by hand, **Plan trips now** put it on Rafiq Hasan's trip; Start trip, "Collect ৳2,095", cash handed over,
+      receipt "৳2,095 paid in cash … Delivery fee ৳95. Fashion House OD-100155 ৳1,200, Gadget BD OD-100156 ৳800"; the two
+      old test deliveries on the trip (DG-100064, DG-100069) nobody home; ৳2,095 handed in at **Cash**; ledger lines dated
+      yesterday by hand, the job "2 payouts, 2000.00 sent" (settlements 6 and 7, ৳1,200 and ৳800, `Paid`); Gadget BD's
+      payouts page and API key show nothing of OD-100155; the same phone at Chattogram quoted ৳70 and OD-100157 opened
+      DG-100097, its customer page shows only that, its key 404 on OD-100155. No errors in the app log. The same commit's
+      first CI run on GitHub (pushed `day5`) passed: 281 + 6 + 138, none skipped, both Docker images built.
+      *Left:* the recorded run is a written transcript, not a video; the Mermaid diagrams were checked by reading, not
+      rendered before the push; GitHub warns that `actions/checkout@v4` and `actions/setup-dotnet@v4` run on the
+      deprecated Node 20 (move to their next major versions); the demo needs the two SQL shortcuts (a Development button
+      to make a delivery due, suggested in Week 3, would remove them).
 
 ### Final demo script
 1. Log in to OneDrop Dhaka.
 2. Shop A and Shop B send orders for the same phone through the API.
 3. The customer sees one group and taps **Ship now**.
 4. The hub scans and shelves the parcels.
-5. The rider delivers and collects ৳85 + COD.
+5. The rider delivers and collects ৳95 + COD (৳60 + ৳25, and +৳10 because Ship now on Day 1 brings the day forward; ৳85 when pressed on Day 2).
 6. Next morning, both merchants are settled.
 7. Switch to OneDrop Chattogram: same phone number, completely separate data and its own prices.
 
@@ -1126,6 +1148,14 @@ Newest first. One entry per working day: what was done, how it was tested, what 
   (OD-100153–OD-100154, DG-100094): two shops listed from their pages, the SMS line and link, `/Shops` per operator, the
   customer's window without the shop already in the delivery.
 - **Next:** task 4.9, README, diagrams and the recorded demo.
+- **Committed and pushed:** task 4.8 as `90669ca` on `day5`, pushed to `origin/day5` (owner); the first CI run on
+  GitHub passed (281 + 6 + 138, none skipped, Docker images built). `day4` was already on GitHub.
+- **Done (task 4.9):** `Documentation/Architecture.md` (diagrams), `Documentation/Demo.md` (script and recorded run),
+  README (documents, MVP complete, not built yet, layout), the final demo script's amount. **The 4-week MVP is
+  complete.**
+- **Tested:** see task 4.9 above: the final demo run end to end on dev (OD-100155–OD-100157, DG-100095, DG-100097,
+  settlements 6 and 7).
+- **Next:** the owner's after-MVP list; merging `day5` into `main` when reviewed.
 
 ### 2026-10-02
 - **Done (task 4.7):** `CustomerAddress.SameAsId` / `KeptApartOn` with `SameAs` and `KeepApart`; `DeliveryGroup.Combine`

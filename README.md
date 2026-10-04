@@ -6,17 +6,36 @@ hubs, merchants and prices.
 
 .NET 10 · ASP.NET Core (Razor Pages + REST API) · EF Core 10 · SQL Server · Clean Architecture modular monolith.
 
+In Dhaka, three shops sent separately cost the customer three courier charges (৳180 or more). With OneDrop the first
+shop costs ৳60 and every other shop in the same delivery ৳25, so three shops cost ৳110. The customer pays at the door
+on delivery day, when the group is complete. Shops pay nothing, hand their parcels to a scheduled zone pickup and are
+paid their cash on delivery the next morning.
+
+## Documents
+
+| Read | For |
+|---|---|
+| [Documentation/Project-Context.md](Documentation/Project-Context.md) | The product, every decision and why, the environment, traps already found. Start here |
+| [Documentation/Architecture.md](Documentation/Architecture.md) | Diagrams: layers, the life of a delivery, delivery states, tenant isolation, the outbox, a day at an operator |
+| [Documentation/Demo.md](Documentation/Demo.md) | The final demo script, step by step, and a recorded run |
+| [Plans/Implementation-Plan.md](Plans/Implementation-Plan.md) | Every task with how it was tested, the decisions log and the daily log |
+| [Documentation/Conventions.md](Documentation/Conventions.md), [Documentation/Database.md](Documentation/Database.md) | Rules for code and SQL |
+
 ## Status
 
-New here? Start with [Documentation/Project-Context.md](Documentation/Project-Context.md). The detailed task list,
-progress and daily log live in [Plans/Implementation-Plan.md](Plans/Implementation-Plan.md).
+The 4-week MVP is complete: the final demo runs end to end ([Documentation/Demo.md](Documentation/Demo.md)).
 
 | Week | Scope | State |
 |---|---|---|
 | 1 — Foundation | Solution, tenancy (catalog, resolvers, filters, save guard), domain + database, Identity with roles and phone OTP, seeded tenants/zones/hubs, merchant API key + Create Order | **Done** |
 | 2 — Grouping core | Customer matching, delivery groups + 3-day rule, quote (৳60 / +৳25), lock job + Ship now, outbox + fake SMS, customer group page | **Done** |
 | 3 — Operations & money | Pickup routes + QR labels, hub scan/shelves/shuttle, rider trips, market pricing (joinable fast deliveries, Ship now as an upgrade, weight allowance, staggered pickups), door payment, confirmation and advance payment, ledger + settlement, trust (advance after a refusal until 3 good deliveries; late shops drop off at the hub) | **Done** |
-| 4 — Polish & proof | SignalR dashboards, webhooks, Row-Level Security, Docker, CI, simulator, combining deliveries to two spellings of one address, the shopping window | In progress (4.1–4.8 done) |
+| 4 — Polish & proof | SignalR dashboards, webhooks, Row-Level Security, Docker, CI, simulator, combining deliveries to two spellings of one address, the shopping window, documentation and the final demo | **Done** |
+
+Not built yet (after the MVP): screens for shops to create their own API keys, operator admin screens for zones,
+hubs, riders, bikes, route times and prices (today SQL only), Ship now by replying "1" to the SMS (needs an inbound
+SMS gateway), a screen for texts and webhooks that failed, real bKash/Nagad and SMS gateways (fakes today), and a
+database login of the app's own instead of `sa`.
 
 ## Run it
 
@@ -160,17 +179,24 @@ Background jobs run on Hangfire in the web app; the dashboard is at http://local
 ```
 src/
   Domain            entities and business rules, no packages
-  Application       one folder per use case (Orders/CreateOrder, Auth/PhoneLogin, ...)
-  Infrastructure    EF Core mapping, tenancy, Identity, SMS adapter, demo seeder
-  Web               Razor Pages portals, /api/v1, middleware, composition root
+  Application       one folder per use case (Orders/CreateOrder, Grouping/DeliveryGrouping, Delivery/Door, ...)
+  Infrastructure    EF Core mapping, tenancy, Identity, Hangfire, fake SMS/payment/payout gateways, webhooks, demo seeder
+  Web               Razor Pages portals, /api/v1, SignalR, middleware, composition root
   Database          SQL project: owns the schema, builds a dacpac
   Database Update   DbUp data migrations (dbup.exe)
 tests/
   Domain.Tests          business rules
   Architecture.Tests    every entity has a TenantId; the SQL project lists every .sql file
-  Integration.Tests     real database: schema matches EF, API isolation, save guard
-tools/db/publish.ps1        deploy the database
+  Integration.Tests     real database: grouping, fees, hub, door, payouts, isolation sweep, Row-Level Security
+tools/
+  db/publish.ps1        deploy the database (Windows PowerShell and PowerShell 7 on Linux)
+  Simulator             demo shops and orders through the running app's API
+Dockerfile, docker-compose.yml, .github/workflows/ci.yml
+Documentation/          context, architecture diagrams, demo, conventions
+Plans/                  the implementation plan and daily log
 ```
+
+See [Documentation/Architecture.md](Documentation/Architecture.md) for how the parts work together.
 
 ## Database
 

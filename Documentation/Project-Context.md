@@ -8,6 +8,7 @@ what exists, every decision taken and the reason for it, the environment, and th
 2. [Plans/Implementation-Plan.md](../Plans/Implementation-Plan.md) — the "Today" section says where we stopped and
    what is next; the daily log says what was done and tested.
 3. [Conventions.md](Conventions.md) and [Database.md](Database.md) — the rules code and SQL must follow.
+4. [Architecture.md](Architecture.md) for diagrams of how the parts fit, and [Demo.md](Demo.md) for the final demo.
 
 Keep this file current: when a decision, a working rule or the environment changes, update it in the same change.
 
@@ -100,14 +101,14 @@ The user supplied two PDFs (not stored in the repo): *OneDrop Implementation Pla
 | 1 | Foundation | An order can be created for a tenant | ✅ Done 2026-09-27 |
 | 2 | Grouping core | 3 shops' orders form 1 group | ✅ Done 2026-09-28 |
 | 3 | Operations and money | Group delivered, merchants settled | ✅ Done 2026-09-30 |
-| 4 | Polish and proof | Full demo runs end to end | 🔄 4.1–4.8 done, next 4.9 (README, diagrams, demo) |
+| 4 | Polish and proof | Full demo runs end to end | ✅ Done 2026-10-04: the final demo runs end to end ([Demo.md](Demo.md)) |
 
 Task-level detail, the cut list, the job schedule, must-pass tests and the daily log are in
 [Plans/Implementation-Plan.md](../Plans/Implementation-Plan.md). **That file is the source of truth for progress.**
 
 ---
 
-## 3. What exists today (Weeks 1–3, tasks 4.1–4.8)
+## 3. What exists today (the complete 4-week MVP)
 
 ### Solution layout (`Courier.sln`)
 | Project | Path | Contents |
@@ -382,7 +383,7 @@ Task-level detail, the cut list, the job schedule, must-pass tests and the daily
   DG-100027–29, DG-100045–46), so those show as due today with no parcel at the hub. The 3.7 live check dated its ledger
   lines a day back by hand to see the payout (settlements 1 and 2). The 3.9 demo run (DG-100065, OD-100100–OD-100102, Parveen Sultana 01819274111) was delivered and settled (settlements 3–5); the 3.8 check gave OD-100062 its `ShopLateOn` by
   hand and put Beauty Shop on drop-off (three late handovers, until 29 October). Orders before OD-100031 have no outbox rows, and orders before the 4.2 live check (OD-100108) no status-change rows. Dev Fashion House (Dhaka) has its webhook set to `http://localhost:5080/Dev/Webhooks` from the 4.2 live check. Dev
-  Gadget BD and Beauty Shop (Dhaka) are listed in the shopping window from the 4.8 live check.
+  Gadget BD and Beauty Shop (Dhaka) are listed in the shopping window from the 4.8 live check. The final demo (4.9: DG-100095, OD-100155–OD-100156, Taslima Rahman 01819274151) was delivered by Rafiq Hasan and settled (settlements 6 and 7); DG-100064 and DG-100069 were recorded nobody home on that trip.
   The Hangfire tables are installed at app start in both databases; only `OneDrop` runs jobs, as the integration
   tests start no job server. Group numbers have gaps: a sequence value used in a rolled-back dry run is not reused.
 
