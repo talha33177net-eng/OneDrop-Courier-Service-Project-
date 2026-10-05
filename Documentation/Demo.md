@@ -12,7 +12,7 @@ every stage, so the dashboards are not empty. Open http://onedrop.localhost:5080
 |---|---|---|---|
 | 1 | Visitor | `/` | The public site: services, the rate card (Inside city ৳60, Suburb ৳100, Outside city ৳120), tracking box, "Become a merchant" |
 | 2 | New shop | `/Account/Register` | Sign up a shop with a pickup address; it lands on its dashboard "waiting for approval" and cannot book yet |
-| 3 | Courier admin `admin@onedrop.test` | `/Admin` | The live dashboard; the yellow "merchant waiting for approval" banner → **Approve** on the merchant's page |
+| 3 | Courier admin `admin@onedrop.test` | `/Admin` | The live dashboard; the dark "merchants waiting for approval" banner → **Approve** on the merchant's page |
 | 4 | Merchant `fashion@onedrop.test` | **Book a parcel** | Pick an area: the charges appear as you type (service area, delivery charge, COD charge). Book with ৳1,250 COD to Gulshan 2 |
 | 5 | Merchant | **Fraud check** | Type the recipient's number: delivered and returned counts at every merchant, no merchant named |
 | 6 | Merchant | **Bulk upload** | Download the template, upload it: every row booked, or nothing and the rows to fix |

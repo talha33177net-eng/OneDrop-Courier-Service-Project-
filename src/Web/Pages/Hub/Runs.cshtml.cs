@@ -1,11 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
-using Application.Hubs;
+using Application.Hubs.HubOverview;
 using Application.Hubs.Runs;
 
 namespace Web.Pages.Hub;
 
 /// <summary>Rider closing: count each rider's cash against their deliveries and take back what they could not deliver.</summary>
-public class RunsModel(HubDirectory hubs, RunsHandler runs) : HubPage(hubs)
+public class RunsModel(HubOverviewHandler hubs, RunsHandler runs) : HubPage(hubs)
 {
     public IReadOnlyList<RunRow> Runs { get; private set; } = [];
 

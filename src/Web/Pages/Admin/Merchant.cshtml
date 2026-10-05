@@ -24,7 +24,7 @@
         }
         else
         {
-            <form method="post" asp-page-handler="Suspend" asp-route-id="@m.Id" class="inline-form"><button class="btn btn-danger" type="submit" onclick="return confirm('Suspend this merchant? They cannot book parcels until reactivated.')">Suspend</button></form>
+            <form method="post" asp-page-handler="Suspend" asp-route-id="@m.Id" class="inline-form"><button class="btn btn-danger" type="submit" data-confirm="They cannot book parcels until you reactivate them." data-confirm-title="Suspend this merchant?" data-confirm-ok="Suspend">Suspend</button></form>
         }
     </div>
 </div>

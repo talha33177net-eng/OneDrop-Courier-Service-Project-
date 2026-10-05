@@ -10,10 +10,22 @@
         <h1>Rider closing</h1>
         <p>At the end of the day count each rider's cash and take back the parcels they could not deliver.</p>
     </div>
-    <div class="page-actions">@await Html.PartialAsync("_HubSwitch", (Model.Hubs, Model.Hub))</div>
+    <div class="page-actions">@await Html.PartialAsync("_HubSwitch", (Model.Work, Model.Hub))</div>
 </div>
 
 <partial name="_Alerts" />
+
+<div class="tip" data-tip="hub-runs">
+    @Icons.Get("bulb")
+    <div>
+        <div class="tip-title">Closing a rider's day</div>
+        <ol>
+            <li>The rider records every parcel on their phone</li>
+            <li>Count the cash they hand in and enter it</li>
+            <li>Close the run: parcels not delivered go back on the shelf</li>
+        </ol>
+    </div>
+</div>
 
 <div class="card">
     @if (Model.Runs.Count == 0)
@@ -51,13 +63,14 @@
                                 else if (run.WithoutOutcome > 0)
                                 {
                                     <span class="badge badge-out">Rider still out</span>
+                                    <div class="cell-sub">@run.WithoutOutcome to record on their phone</div>
                                 }
                                 else
                                 {
-                                    <form method="post" asp-page-handler="Close" asp-route-id="@run.Id" asp-route-hub="@Model.Hub?.Code" class="gap">
+                                    <form method="post" asp-page-handler="Close" asp-route-id="@run.Id" asp-route-hub="@Model.Hub?.Code" class="gap" data-expected="@run.CashCollected.ToString("0")" data-rider="@run.Rider">
                                         <div class="input-group" style="width:150px">
                                             <span class="prefix">৳</span>
-                                            <input type="number" name="received" value="@run.CashCollected.ToString("0")" min="0" step="1" style="height:32px" aria-label="Cash received" />
+                                            <input type="number" name="received" value="@run.CashCollected.ToString("0")" min="0" step="1" style="height:32px" aria-label="Cash received" required />
                                         </div>
                                         <button class="btn btn-primary btn-sm" type="submit">Close run</button>
                                     </form>
@@ -70,3 +83,24 @@
         </div>
     }
 </div>
+
+@section Scripts {
+    <script>
+        // Closing with less cash than the rider collected is allowed (the shortfall is recorded) but asked about first
+        for (const form of document.querySelectorAll("form[data-expected]")) {
+            const input = form.querySelector("input[name=received]");
+            const check = () => {
+                const short = Number(form.dataset.expected) - Number(input.value || 0);
+                if (short > 0) {
+                    form.dataset.confirm = `${form.dataset.rider} hands in ৳${short.toLocaleString("en-US")} less than they collected. The shortfall is recorded on the run for follow-up.`;
+                    form.dataset.confirmTitle = "Close with cash short?";
+                    form.dataset.confirmOk = "Close run anyway";
+                } else {
+                    delete form.dataset.confirm;
+                }
+            };
+            input.addEventListener("input", check);
+            check();
+        }
+    </script>
+}

@@ -7,6 +7,7 @@ using Application.Delivery.Riders;
 using Application.Hubs;
 using Application.Hubs.AssignParcels;
 using Application.Hubs.HubBoard;
+using Application.Hubs.HubOverview;
 using Application.Hubs.HubScan;
 using Application.Hubs.Runs;
 using Application.Merchants.Account;
@@ -56,6 +57,7 @@ public static class DependencyInjection
         services.AddScoped<HubDirectory>();
         services.AddScoped<HubScanHandler>();
         services.AddScoped<HubBoardHandler>();
+        services.AddScoped<HubOverviewHandler>();
         services.AddScoped<AssignParcelsHandler>();
         services.AddScoped<RunsHandler>();
 

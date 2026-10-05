@@ -1,12 +1,16 @@
 using System.Net;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Domain.Delivery;
 using Domain.Parcels;
 
 namespace Integration.Tests;
 
-/// <summary>Each role's home, public tracking, the admin's riders and rate card, and a pickup from request to collection.</summary>
-public class PortalPagesTests(WebAppFactory factory) : AppTests(factory)
+/// <summary>
+/// Each role's home, the front page, public tracking, the admin's riders and rate card, and a pickup from request to
+/// collection.
+/// </summary>
+public partial class PortalPagesTests(WebAppFactory factory) : AppTests(factory)
 {
     [Theory]
     [InlineData("admin@onedrop.test", "/Admin")]
@@ -22,7 +26,48 @@ public class PortalPagesTests(WebAppFactory factory) : AppTests(factory)
 
         Assert.Equal(HttpStatusCode.Redirect, landing.StatusCode);
         Assert.Equal(home, landing.Headers.Location!.OriginalString);
-        Assert.Equal(HttpStatusCode.OK, (await visitor.GetAsync(home)).StatusCode);
+        var page = await visitor.GetAsync(home);
+        if (home == "/Hub")
+        {
+            // Hub staff first choose the hub they work at
+            Assert.Equal("/Hub/Choose?next=Index", page.Headers.Location!.OriginalString);
+            page = await visitor.GetAsync(page.Headers.Location.OriginalString);
+        }
+
+        Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+    }
+
+    [Fact]
+    public async Task Hub_staff_choose_their_hub_after_signing_in_and_see_where_pickups_wait()
+    {
+        WebAppFactory.RequireDatabase();
+        var shop = await NewMerchantAsync(area: "Mirpur 10");
+        var merchant = await SignInAsync("onedrop", shop.Email);
+        var point = await QueryAsync("onedrop", db => db.PickupPoints.Where(p => p.MerchantId == shop.Id).Select(p => p.Id).SingleAsync(Cancel));
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Dhaka")));
+        await merchant.SubmitAsync("/Merchant/Pickups", "/Merchant/Pickups", ("PointId", $"{point}"), ("Date", today.ToString("yyyy-MM-dd")), ("Expected", "1"), ("Note", ""));
+        var hub = await SignInAsync("onedrop", "hub@onedrop.test");
+
+        var asked = await hub.GetAsync("/Hub/Pickups");
+        Assert.Equal(HttpStatusCode.Redirect, asked.StatusCode);
+        Assert.Equal("/Hub/Choose?next=Pickups", asked.Headers.Location!.OriginalString);
+
+        // The admin's "Pickups open" tile: straight to the hub when only one has pickups, else every hub with its count
+        var choose = await hub.GetAsync("/Hub/Choose?next=Pickups");
+        if (choose.StatusCode == HttpStatusCode.Redirect)
+        {
+            Assert.Equal("/Hub/Pickups?hub=MIR", choose.Headers.Location!.OriginalString);
+        }
+        else
+        {
+            var cards = WebUtility.HtmlDecode(await choose.Content.ReadAsStringAsync(Cancel));
+            Assert.Contains("/Hub/Pickups?hub=MIR", cards);
+            Assert.Contains("Mirpur hub", cards);
+        }
+
+        Assert.Contains(shop.Name, await hub.PageAsync("/Hub/Pickups?hub=MIR"));
+        var remembered = Visit("onedrop", $"{await SignInCookieAsync("onedrop", "hub@onedrop.test")}; {Web.Pages.Hub.RememberHub.Cookie}=MIR");
+        Assert.Contains(shop.Name, await remembered.PageAsync("/Hub/Pickups"));
     }
 
     [Fact]
@@ -43,6 +88,45 @@ public class PortalPagesTests(WebAppFactory factory) : AppTests(factory)
         Assert.Equal(HttpStatusCode.NotFound, (await Visit("").GetAsync($"/Track?code={code}")).StatusCode);
         Assert.Contains("Sylhet Sadar", await Visit("onedrop").PageAsync("/Coverage"));
     }
+
+    [Fact]
+    public async Task The_front_page_shows_the_courier_with_its_drawings_rates_and_a_tracking_box()
+    {
+        WebAppFactory.RequireDatabase();
+
+        var page = await Visit("onedrop").PageAsync("/");
+
+        Assert.Contains("OneDrop Courier", page);
+        Assert.Contains("class=\"brand-mark\"", page);
+        Assert.Contains("action=\"/Track\"", page);
+        Assert.Contains("class=\"scene art\"", page);
+        Assert.Contains("art-paid", page);
+        Assert.Matches(Landing(), page);
+        Assert.Contains("Inside city", page);
+        Assert.DoesNotMatch(Landing(), await Visit("").PageAsync("/"));
+    }
+
+    [Fact]
+    public async Task Every_icon_the_rider_app_installs_with_exists()
+    {
+        WebAppFactory.RequireDatabase();
+        var site = Visit("onedrop");
+        var manifest = await site.PageAsync("/rider.webmanifest");
+        var icons = IconSource().Matches(manifest).Select(match => match.Groups[1].Value).ToList();
+
+        Assert.NotEmpty(icons);
+        foreach (var icon in icons)
+        {
+            Assert.Equal(HttpStatusCode.OK, (await site.GetAsync(icon)).StatusCode);
+        }
+    }
+
+    // The front page's own stylesheet, by its name with or without the fingerprint static assets may add
+    [GeneratedRegex(@"/css/landing(\.\w+)?\.css")]
+    private static partial Regex Landing();
+
+    [GeneratedRegex("\"src\": \"([^\"]+)\"")]
+    private static partial Regex IconSource();
 
     [Fact]
     public async Task The_admin_adds_a_rider_who_signs_in_to_the_rider_app_and_another_couriers_hub_is_refused()
@@ -75,7 +159,7 @@ public class PortalPagesTests(WebAppFactory factory) : AppTests(factory)
 
         Assert.Contains("Outside city", await admin.PageAsync("/Admin/Rates"));
         Assert.NotEqual(HttpStatusCode.OK, (await hub.GetAsync("/Admin/Rates")).StatusCode);
-        await hub.PostFormAsync("/Hub", "/Admin/Rates", ("area", "InsideCity"), ("includedKg", "1"), ("baseCharge", "1"), ("extraKgCharge", "1"), ("codChargePercent", "0"), ("returnCharge", "0"));
+        await hub.PostFormAsync("/Hub?hub=MIR", "/Admin/Rates", ("area", "InsideCity"), ("includedKg", "1"), ("baseCharge", "1"), ("extraKgCharge", "1"), ("codChargePercent", "0"), ("returnCharge", "0"));
         Assert.Contains("৳120", await (await SignInAsync("onedrop", shop.Email)).PageAsync("/Merchant/Pricing"));
         Assert.Equal(60, await QueryAsync("onedrop", db => db.DeliveryRates.Where(r => r.ServiceArea == Domain.Pricing.ServiceArea.InsideCity).Select(r => r.BaseCharge).SingleAsync(Cancel)));
     }

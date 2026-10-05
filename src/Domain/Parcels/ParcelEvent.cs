@@ -38,3 +38,9 @@ public class ParcelEvent : TenantEntity, IMerchantOwned
 
 /// <summary>A parcel changed status: post it to its merchant's webhook and text the recipient when it matters.</summary>
 public sealed record ParcelStatusChanged(Parcel Parcel, ParcelStatus Status) : IDomainEvent;
+
+/// <summary>
+/// A parcel was booked: text the recipient a tracking link. Separate from <see cref="ParcelStatusChanged"/> so booking
+/// never posts to the merchant's webhook (that starts at the first real move, pickup).
+/// </summary>
+public sealed record ParcelBooked(Parcel Parcel) : IDomainEvent;

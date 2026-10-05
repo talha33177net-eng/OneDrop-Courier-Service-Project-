@@ -1,7 +1,15 @@
-@* The result of the last form, carried over a redirect: TempData "Done" (success) and "Problem" (what went wrong) *@
+@* The result of the last form, carried over a redirect: TempData "Done" (success, a toast that goes by itself) and
+   "Problem" (what went wrong, kept on the page until the next action) *@
 @if (TempData["Done"] is string done)
 {
-    <div class="alert alert-success" role="status">@Icons.Get("check-circle")<div>@done</div></div>
+    <div class="toasts">
+        <div class="toast" role="status">
+            @Icons.Get("check-circle")
+            <div>@done</div>
+            <button type="button" class="toast-close" aria-label="Close">@Icons.Get("x")</button>
+            <span class="toast-timer"></span>
+        </div>
+    </div>
 }
 @if (TempData["Problem"] is string problem)
 {

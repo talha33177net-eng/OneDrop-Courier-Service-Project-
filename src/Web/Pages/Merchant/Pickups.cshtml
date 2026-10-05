@@ -14,6 +14,18 @@
 
 <partial name="_Alerts" />
 
+<div class="tip" data-tip="merchant-pickups">
+    @Icons.Get("bulb")
+    <div>
+        <div class="tip-title">How pickups work</div>
+        <ol>
+            <li>Book your parcels first</li>
+            <li>Ask for a pickup on the day you want</li>
+            <li>A rider collects every parcel booked at that point</li>
+        </ol>
+    </div>
+</div>
+
 <div class="grid grid-side">
     <div class="card">
         <div class="card-head"><h2>Your requests</h2></div>
@@ -48,7 +60,7 @@
                                     @if (request.Status is PickupStatus.Requested or PickupStatus.Assigned)
                                     {
                                         <form method="post" asp-page-handler="Cancel" asp-route-id="@request.Id" class="inline-form">
-                                            <button class="btn btn-ghost btn-sm" type="submit">Cancel</button>
+                                            <button class="btn btn-ghost btn-sm" type="submit" data-confirm="The hub will not send a rider for this pickup." data-confirm-title="Cancel this pickup?" data-confirm-ok="Cancel pickup">Cancel</button>
                                         </form>
                                     }
                                 </td>
@@ -75,9 +87,12 @@
                         <select asp-for="PointId">
                             @foreach (var point in Model.Data.Points)
                             {
-                                <option value="@point.Id" selected="@point.IsDefault">@point.Name, @point.Area (@point.Waiting waiting)</option>
+                                <option value="@point.Id" selected="@point.IsDefault" data-waiting="@point.Waiting">@point.Name, @point.Area (@point.Waiting waiting)</option>
                             }
                         </select>
+                        <div class="alert alert-warning mt" style="margin-bottom:0" data-none-waiting hidden>
+                            @Icons.Get("alert")<div>No parcels are booked at this point yet. <a asp-page="/Merchant/NewParcel">Book them first</a> so the rider knows what to collect.</div>
+                        </div>
                     </div>
                     <div class="field">
                         <label for="Date">Day</label>
@@ -98,3 +113,29 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+    <script>
+    (() => {
+        const point = document.getElementById("PointId");
+        const expected = document.getElementById("Expected");
+        const warning = document.querySelector("[data-none-waiting]");
+        if (!point) {
+            return;
+        }
+
+        // The number of parcels follows the point's bookings until the merchant types their own
+        let typed = false;
+        expected.addEventListener("input", () => typed = true);
+        const update = () => {
+            const waiting = Number(point.selectedOptions[0]?.dataset.waiting || 0);
+            warning.hidden = waiting > 0;
+            if (!typed && waiting > 0) {
+                expected.value = waiting;
+            }
+        };
+        point.addEventListener("change", update);
+        update();
+    })();
+    </script>
+}

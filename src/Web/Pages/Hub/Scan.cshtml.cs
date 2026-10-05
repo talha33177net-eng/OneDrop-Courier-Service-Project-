@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using Application.Hubs;
+using Application.Hubs.HubOverview;
 using Application.Hubs.HubScan;
 
 namespace Web.Pages.Hub;
@@ -8,7 +8,7 @@ namespace Web.Pages.Hub;
 /// Hub staff scan labels with a hand scanner (it types into the box and presses Enter) or type the code. Three modes:
 /// receive a parcel, send it to another hub, or hand a return back to its merchant. The answer says what to do next.
 /// </summary>
-public class ScanModel(HubDirectory hubs, HubScanHandler scans) : HubPage(hubs)
+public class ScanModel(HubOverviewHandler hubs, HubScanHandler scans) : HubPage(hubs)
 {
     [BindProperty(SupportsGet = true)]
     public ScanMode Mode { get; set; }

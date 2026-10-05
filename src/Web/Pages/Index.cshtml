@@ -28,81 +28,122 @@
     return;
 }
 
+@section Head {
+    <link rel="stylesheet" href="~/css/landing.css" asp-append-version="true" />
+}
+
 @{
     var inside = Model.Rates.FirstOrDefault(r => r.ServiceArea == ServiceArea.InsideCity);
+    string[] offers = ["Free pickup", "Cash on delivery", "Next-day payout", "Live tracking", "Fraud check", "Bulk booking", "API and webhooks"];
 }
 
 <section class="hero">
     <div class="site-section" style="padding-top:0;padding-bottom:0">
         <div class="hero-grid">
-            <div>
-                <span class="eyebrow">Courier for online businesses</span>
-                <h1>Doorstep delivery across Bangladesh, <em>cash collected</em> for you.</h1>
+            <div class="hero-copy">
+                <span class="eyebrow">Courier service for online businesses</span>
+                <h1>Reliable delivery. <span class="mark">Next-day payouts.</span></h1>
                 <p class="lead">
-                    Book parcels in seconds, we pick them up from your shop, deliver them to your customers and pay the
-                    cash on delivery into your bKash, Nagad or bank account the next day.
+                    We collect parcels from your shop, deliver them to your customers' doors and collect the cash on
+                    delivery. Your money reaches your bKash, Nagad or bank account the next day.
                 </p>
-                <div class="gap">
-                    <a class="btn btn-primary btn-lg" asp-page="/Account/Register">Become a merchant @Icons.Get("arrow-right")</a>
-                    <a class="btn btn-outline btn-lg" href="#pricing">See our rates</a>
-                </div>
-                <div class="hero-points">
-                    <span>@Icons.Get("check-circle") Next-day payout</span>
-                    <span>@Icons.Get("check-circle") Free pickup</span>
-                    <span>@Icons.Get("check-circle") Live tracking</span>
-                </div>
-            </div>
-            <div class="track-card">
-                <h2>Track your parcel</h2>
-                <p class="muted mt-0">Enter the tracking code from the SMS or the label.</p>
-                <form class="track-form" method="get" asp-page="/Track">
-                    <input type="text" name="code" placeholder="OD10000001" aria-label="Tracking code" required />
+                <form class="hero-track" method="get" asp-page="/Track" role="search">
+                    <input type="text" name="code" placeholder="Enter your tracking code" aria-label="Tracking code" required />
                     <button class="btn btn-primary" type="submit">@Icons.Get("search") Track</button>
                 </form>
-                <div class="stats mt-lg" style="margin-bottom:0">
-                    <div class="stat"><div><div class="stat-label">Cities</div><div class="stat-value">@Model.Cities</div></div></div>
-                    <div class="stat"><div><div class="stat-label">Hubs</div><div class="stat-value">@Model.Hubs</div></div></div>
-                    <div class="stat"><div><div class="stat-label">Areas</div><div class="stat-value">@Model.Areas</div></div></div>
+                <p class="hero-track-hint">Waiting for a parcel? The code is in our SMS and on the label.</p>
+                <div class="hero-actions">
+                    <a class="btn btn-accent btn-lg" asp-page="/Account/Register">Become a merchant @Icons.Get("arrow-right")</a>
+                    <a class="btn btn-ghost btn-lg" href="#pricing">See our rates</a>
                 </div>
+                <div class="hero-facts">
+                    <div><strong data-count>@Model.Cities</strong><span>cities</span></div>
+                    <div><strong data-count>@Model.Hubs</strong><span>hubs</span></div>
+                    <div><strong data-count>@Model.Areas</strong><span>delivery areas</span></div>
+                </div>
+            </div>
+            <div class="hero-scene">
+                <partial name="~/Pages/Shared/Art/_Planet.cshtml" />
             </div>
         </div>
     </div>
 </section>
 
-<section class="site-section" id="services">
+<div class="ribbon">
+    <div class="ribbon-track">
+        <div class="ribbon-items">@foreach (var offer in offers) { <span>@offer</span> }</div>
+        <div class="ribbon-items" aria-hidden="true">@foreach (var offer in offers) { <span>@offer</span> }</div>
+    </div>
+</div>
+
+<section class="site-section" id="how">
     <div class="section-head">
-        <span class="eyebrow">Why merchants choose us</span>
+        <span class="section-kicker">How it works</span>
+        <h2>From your shop to their door, and the cash back to you</h2>
+        <p>You book the parcel. We do the rest.</p>
+    </div>
+    <div class="how-steps">
+        <div class="how-step" data-reveal>
+            <div class="how-step-art"><partial name="~/Pages/Shared/Art/_StepBook.cshtml" /></div>
+            <span class="how-step-num">01</span>
+            <h3>Book</h3>
+            <p>Add the parcel on your panel, upload a spreadsheet of orders, or book it from your website.</p>
+        </div>
+        <div class="how-step" data-reveal>
+            <div class="how-step-art"><partial name="~/Pages/Shared/Art/_StepPickup.cshtml" /></div>
+            <span class="how-step-num">02</span>
+            <h3>Pick up</h3>
+            <p>Ask for a pickup and a rider collects your parcels from the shop and brings them to our hub.</p>
+        </div>
+        <div class="how-step" data-reveal>
+            <div class="how-step-art"><partial name="~/Pages/Shared/Art/_StepHub.cshtml" /></div>
+            <span class="how-step-num">03</span>
+            <h3>Sort and deliver</h3>
+            <p>We send each parcel to the hub nearest your customer, and a rider takes it to their door.</p>
+        </div>
+        <div class="how-step" data-reveal>
+            <div class="how-step-art"><partial name="~/Pages/Shared/Art/_StepPaid.cshtml" /></div>
+            <span class="how-step-num">04</span>
+            <h3>Get paid</h3>
+            <p>The cash collected at the door reaches your account the next day, less our charges.</p>
+        </div>
+    </div>
+</section>
+
+<section class="site-section" id="services" style="padding-top:0">
+    <div class="section-head">
+        <span class="section-kicker">For merchants</span>
         <h2>Everything an online shop needs to deliver</h2>
         <p>From a Facebook page to a busy website: one panel for booking, pickups, tracking and payments.</p>
     </div>
-    <div class="features">
+    <div class="features" data-reveal>
         <div class="feature">
-            <div class="stat-icon">@Icons.Get("truck")</div>
+            <span class="feature-icon">@Icons.Get("truck")</span>
             <h3>Pickup from your door</h3>
-            <p>Ask for a pickup and a rider comes the same day to collect your parcels.</p>
+            <p>Ask for a pickup and a rider comes to collect your parcels. No pickup charge.</p>
         </div>
         <div class="feature">
-            <div class="stat-icon blue">@Icons.Get("cash")</div>
+            <span class="feature-icon">@Icons.Get("cash")</span>
             <h3>Cash on delivery</h3>
             <p>Riders collect the price at the door. We pay it out every day, less our charges.</p>
         </div>
         <div class="feature">
-            <div class="stat-icon violet">@Icons.Get("map-pin")</div>
+            <span class="feature-icon">@Icons.Get("map-pin")</span>
             <h3>Live tracking</h3>
-            <p>You and your customers follow every parcel from your shop to their hands.</p>
+            <p>You and your customers follow every parcel from your shop to their hands, with an SMS at each step that matters.</p>
         </div>
         <div class="feature">
-            <div class="stat-icon amber">@Icons.Get("shield")</div>
+            <span class="feature-icon">@Icons.Get("shield")</span>
             <h3>Fraud check</h3>
             <p>See how often a phone number accepts its parcels before you send one.</p>
         </div>
         <div class="feature">
-            <div class="stat-icon green">@Icons.Get("upload")</div>
+            <span class="feature-icon">@Icons.Get("upload")</span>
             <h3>Bulk booking</h3>
             <p>Upload a spreadsheet of orders and book hundreds of parcels at once.</p>
         </div>
         <div class="feature">
-            <div class="stat-icon grey">@Icons.Get("code")</div>
+            <span class="feature-icon">@Icons.Get("code")</span>
             <h3>API and webhooks</h3>
             <p>Connect your website: book parcels from your checkout and hear every status change.</p>
         </div>
@@ -111,20 +152,20 @@
 
 <section class="site-section" id="pricing" style="padding-top:0">
     <div class="section-head">
-        <span class="eyebrow">Simple pricing</span>
+        <span class="section-kicker">Pricing</span>
         <h2>Pay only for what you send</h2>
-        <p>No monthly fee and no pickup charge. Charges are taken from the cash we collect for you.</p>
+        <p>No monthly fee and no pickup charge. Our charges come out of the cash we collect for you.</p>
     </div>
-    <div class="price-cards">
+    <div class="price-cards" data-reveal>
         @foreach (var rate in Model.Rates)
         {
             <div class="price-card @(rate.ServiceArea == ServiceArea.InsideCity ? "featured" : "")">
                 <h3>@rate.ServiceArea.DisplayName()</h3>
                 <div class="price">@Money.Taka(rate.BaseCharge) <small>up to @Money.Kg(rate.IncludedWeightGrams)</small></div>
                 <ul>
-                    <li>@Icons.Get("check") @Money.Taka(rate.ExtraKgCharge) for each extra kg</li>
-                    <li>@Icons.Get("check") @rate.CodChargePercent.ToString("0.##")% COD charge</li>
-                    <li>@Icons.Get("check") @if (rate.ReturnCharge == 0) { <text>No extra charge for a return</text> } else { <text>@Money.Taka(rate.ReturnCharge) extra for a return</text> }</li>
+                    <li>@Icons.Get("check") <span>@Money.Taka(rate.ExtraKgCharge) for each extra kg</span></li>
+                    <li>@Icons.Get("check") <span>@rate.CodChargePercent.ToString("0.##")% COD charge</span></li>
+                    <li>@Icons.Get("check") <span>@if (rate.ReturnCharge == 0) { <text>No extra charge for a return</text> } else { <text>@Money.Taka(rate.ReturnCharge) extra for a return</text> }</span></li>
                     <li>@Icons.Get("check") @(rate.ServiceArea switch { ServiceArea.InsideCity => "Delivered within 24 to 48 hours", ServiceArea.Suburb => "Delivered within 48 to 72 hours", _ => "Delivered within 3 to 5 days" })</li>
                 </ul>
             </div>
@@ -133,24 +174,12 @@
 </section>
 
 <section class="site-section" style="padding-top:0">
-    <div class="section-head">
-        <span class="eyebrow">How it works</span>
-        <h2>From your shop to your customer in four steps</h2>
-    </div>
-    <div class="steps-row">
-        <div class="step-card"><h3>Book</h3><p>Add the parcel on your panel, by spreadsheet or from your website.</p></div>
-        <div class="step-card"><h3>Pickup</h3><p>A rider collects it from your shop and brings it to our hub.</p></div>
-        <div class="step-card"><h3>Deliver</h3><p>We sort it to the nearest hub and a rider takes it to your customer.</p></div>
-        <div class="step-card"><h3>Get paid</h3><p>The cash collected lands in your account the next day.</p></div>
-    </div>
-</section>
-
-<section class="site-section" style="padding-top:0">
-    <div class="cta">
+    <div class="cta" data-reveal>
         <div>
             <h2>Start sending today</h2>
-            <p>Sign up in two minutes.@if (inside is not null) { <text> Deliveries inside the city from @Money.Taka(inside.BaseCharge).</text> }</p>
+            <p>Sign up in two minutes and book your first parcel.@if (inside is not null) { <text> Deliveries inside the city from @Money.Taka(inside.BaseCharge).</text> }</p>
+            <a class="btn btn-accent btn-lg" asp-page="/Account/Register">Create a merchant account @Icons.Get("arrow-right")</a>
         </div>
-        <a class="btn btn-primary btn-lg" asp-page="/Account/Register">Create a merchant account</a>
+        <partial name="~/Pages/Shared/Art/_Pin.cshtml" />
     </div>
 </section>

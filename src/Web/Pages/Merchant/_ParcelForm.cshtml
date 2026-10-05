@@ -18,7 +18,8 @@
                     </div>
                     <div class="field">
                         <label for="Input_RecipientPhone">Mobile number</label>
-                        <input type="tel" id="Input_RecipientPhone" name="Input.RecipientPhone" value="@f.RecipientPhone" placeholder="01712345678" required />
+                        <input type="tel" id="Input_RecipientPhone" name="Input.RecipientPhone" value="@f.RecipientPhone" placeholder="01712345678" inputmode="tel" required />
+                        <a class="hint" data-fraud-link hidden target="_blank" rel="noopener">@Icons.Get("shield") Check how often this number accepts parcels</a>
                         @Html.ValidationMessage("Input.RecipientPhone", null, new { @class = "field-error" })
                     </div>
                     <div class="field field-full">
@@ -134,13 +135,33 @@
         }
 
         const q = await response.json();
-        out("area").textContent = q.service;
-        out("delivery").textContent = taka(q.deliveryCharge);
-        out("cod").textContent = taka(q.codCharge);
-        out("total").textContent = taka(q.total);
+        const show = (name, text) => {
+            const element = out(name);
+            if (element.textContent !== text) {
+                element.textContent = text;
+                element.classList.remove("updated");
+                void element.offsetWidth;
+                element.classList.add("updated");
+            }
+        };
+        show("area", q.service);
+        show("delivery", taka(q.deliveryCharge));
+        show("cod", taka(q.codCharge));
+        show("total", taka(q.total));
         out("return").textContent = taka(q.returnCharge);
         out("hub").textContent = "Delivered from " + q.deliveryHub + ".";
     };
+    // A full mobile number gets a link to its delivery record, before cash on delivery is sent to it
+    const phone = form.querySelector("[name='Input.RecipientPhone']");
+    const fraud = form.querySelector("[data-fraud-link]");
+    const checkLink = () => {
+        const digits = phone.value.replace(/\D/g, "");
+        fraud.hidden = digits.length < 11;
+        fraud.href = "@Url.Page("/Merchant/FraudCheck")?phone=" + encodeURIComponent(phone.value.trim());
+    };
+    phone.addEventListener("input", checkLink);
+    checkLink();
+
     form.addEventListener("input", () => {
         clearTimeout(timer);
         timer = setTimeout(quote, 250);

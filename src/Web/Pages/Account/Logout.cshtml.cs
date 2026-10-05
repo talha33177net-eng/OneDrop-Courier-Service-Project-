@@ -15,6 +15,7 @@ public class LogoutModel(SignInManager<AppUser> signInManager) : PageModel
     public async Task<IActionResult> OnPostAsync()
     {
         await signInManager.SignOutAsync();
+        Response.Cookies.Delete(Hub.RememberHub.Cookie);
 
         return RedirectToPage("/Index");
     }

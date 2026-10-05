@@ -131,6 +131,16 @@ public class WebhookTests
     }
 
     [Fact]
+    public void Booking_raises_a_parcel_booked_event_not_a_status_change()
+    {
+        var parcel = Build.Parcel(pickupHub: Build.Mirpur, deliveryHub: Build.Gulshan);
+
+        // A tracking-link text goes out, but no webhook: a shop's server never hears about a booking it made itself
+        Assert.Single(parcel.GetDomainEvents().OfType<ParcelBooked>());
+        Assert.Empty(Changes(parcel));
+    }
+
+    [Fact]
     public void A_refused_move_raises_nothing()
     {
         var parcel = Build.Parcel();

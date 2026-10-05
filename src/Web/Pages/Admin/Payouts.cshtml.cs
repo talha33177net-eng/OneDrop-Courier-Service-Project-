@@ -22,8 +22,10 @@ public class PayoutsModel(AdminPayoutsHandler payouts, PayoutsJob job) : PageMod
     public async Task<IActionResult> OnPostRunAsync(CancellationToken cancellationToken)
     {
         var run = await job.PayAsync(cancellationToken);
-        TempData["Done"] = $"{run.Paid} payout{(run.Paid == 1 ? "" : "s")} sent, ৳{run.Amount:N0} in all." +
-            (run.Waiting > 0 ? $" {run.Waiting} merchant{(run.Waiting == 1 ? "" : "s")} wait: charges more than cash, or no payout account." : "");
+        TempData["Done"] = run is { Paid: 0, Waiting: 0 }
+            ? "Nothing payable yet. Payouts cover parcels finished up to yesterday; today's are paid from tomorrow."
+            : $"{run.Paid} payout{(run.Paid == 1 ? "" : "s")} sent, ৳{run.Amount:N0} in all." +
+                (run.Waiting > 0 ? $" {run.Waiting} merchant{(run.Waiting == 1 ? "" : "s")} wait: charges more than cash, or no payout account." : "");
 
         return RedirectToPage();
     }

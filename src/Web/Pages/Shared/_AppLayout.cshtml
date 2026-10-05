@@ -22,14 +22,12 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0f1d2e" />
+    <meta name="theme-color" content="#141820" />
     <title>@ViewData["Title"] · @(tenant?.Name ?? "OneDrop")</title>
     <link rel="icon" href="~/icons/icon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
-    @* Only the taka sign, which Inter lacks *@
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@500;700&text=%E0%A7%B3&display=swap" />
+    <partial name="_Fonts" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     @await RenderSectionAsync("Head", required: false)
 </head>
@@ -38,7 +36,7 @@
         <input type="checkbox" id="nav-open" aria-hidden="true" />
         <aside class="sidebar" aria-label="Main menu">
             <a class="sidebar-brand" href="/">
-                <span class="brand-mark">@Icons.Get("package")</span>
+                <partial name="_BrandMark" />
                 <span>
                     <span class="brand-name">@(tenant?.Name ?? "OneDrop")</span>
                     <span class="brand-sub">@panel</span>
@@ -130,6 +128,29 @@
                 </nav>
             }
 
+            @if (isMerchant)
+            {
+                <div class="sidebar-help">
+                    <strong>@Icons.Get("bulb") How it works</strong>
+                    Book a parcel, ask for a pickup, and we deliver it. The cash we collect is paid to you the next day.
+                    <a asp-page="/Merchant/Pricing">See the rates</a>
+                </div>
+            }
+            else if (isHub && !isAdmin)
+            {
+                <div class="sidebar-help">
+                    <strong>@Icons.Get("bulb") Your day at the hub</strong>
+                    Scan parcels in, send on what belongs to other hubs, give the rest to riders, then close each rider's run with the cash.
+                </div>
+            }
+            else if (isRider)
+            {
+                <div class="sidebar-help">
+                    <strong>@Icons.Get("bulb") Your day</strong>
+                    Open a parcel at each door and record what happened. Bring the cash and any parcel left to the hub at the end.
+                </div>
+            }
+
             <div class="sidebar-footer">
                 @if (tenant is not null)
                 {
@@ -158,6 +179,7 @@
                         <form class="topbar-search no-print" method="get" action="@(isMerchant ? "/Merchant/Parcels" : "/Hub/Parcels")" role="search">
                             @Icons.Get("search")
                             <input type="search" name="search" placeholder="Tracking code, phone or name" aria-label="Search parcels" />
+                            <kbd title="Press / to search">/</kbd>
                         </form>
                     }
                     <div class="user-chip">
@@ -182,8 +204,12 @@
             <main class="content">
                 @RenderBody()
             </main>
+            <footer class="app-credit no-print">
+                Developed and designed by <a class="credit-link" href="https://talha.portfolio.bdcorex.com/" target="_blank" rel="noopener">Talha</a>
+            </footer>
         </div>
     </div>
+    <script src="~/js/site.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

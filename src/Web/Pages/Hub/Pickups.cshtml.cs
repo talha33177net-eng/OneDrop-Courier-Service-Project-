@@ -1,12 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 using Application.Delivery.Pickups;
-using Application.Hubs;
+using Application.Hubs.HubOverview;
 using Application.Hubs.AssignParcels;
 
 namespace Web.Pages.Hub;
 
 /// <summary>The pickups this hub collects: merchants waiting for a rider, and who is going where.</summary>
-public class PickupsModel(HubDirectory hubs, PickupsHandler pickups, AssignParcelsHandler riders) : HubPage(hubs)
+public class PickupsModel(HubOverviewHandler hubs, PickupsHandler pickups, AssignParcelsHandler riders) : HubPage(hubs)
 {
     public IReadOnlyList<PickupRow> Requests { get; private set; } = [];
 

@@ -2,6 +2,7 @@ using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
+using Application.Payments.AdminPayouts;
 using Application.Payments.RunPayouts;
 using Domain.Parcels;
 using Domain.Payments;
@@ -50,6 +51,31 @@ public class PayoutTests(WebAppFactory factory) : AppTests(factory)
         var other = await SignInAsync("onedrop", owing.Email);
         Assert.Equal(HttpStatusCode.NotFound, (await other.GetAsync($"/Merchant/Payment/{payout.Number}")).StatusCode);
         Assert.Contains(payout.Number, await (await SignInAsync("onedrop", "admin@onedrop.test")).PageAsync("/Admin/Payouts"));
+    }
+
+    [Fact]
+    public async Task Lines_from_today_are_owed_but_payable_only_from_tomorrow()
+    {
+        WebAppFactory.RequireDatabase();
+        var shop = await NewMerchantAsync();
+        await DeliveredAsync(shop, cod: 1000);
+
+        var today = await OwedAsync(shop.Id, DateTime.UtcNow);
+        Assert.Equal(0, today.Payable);
+        Assert.True(today.DueTomorrow > 0);
+
+        var tomorrow = await OwedAsync(shop.Id, DateTime.UtcNow.AddDays(1));
+        Assert.Equal(today.Net, tomorrow.Payable);
+        Assert.Equal(0, tomorrow.DueTomorrow);
+    }
+
+    private async Task<MerchantBalance> OwedAsync(long merchantId, DateTime utcNow)
+    {
+        await using var scope = await ScopeAsync("onedrop");
+        var handler = ActivatorUtilities.CreateInstance<AdminPayoutsHandler>(scope.ServiceProvider, (TimeProvider)new FakeTimeProvider(utcNow));
+        var overview = await handler.GetAsync(null, Cancel);
+
+        return overview.Owed.Single(m => m.MerchantId == merchantId);
     }
 
     private async Task<(PayoutRun Run, IReadOnlyList<Payout> Payouts)> RunAsync(DateTime utcNow)

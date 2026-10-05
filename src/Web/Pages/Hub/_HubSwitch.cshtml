@@ -1,13 +1,16 @@
 @using Application.Hubs
-@model (IReadOnlyList<HubItem> Hubs, HubItem? Current)
-@* Which hub the page is about; changing it reloads the page for that hub *@
+@using Application.Hubs.HubOverview
+@model (IReadOnlyList<HubWork> Hubs, HubItem? Current)
+@* Which hub the page is about, with what waits at each; changing it reloads the page for that hub *@
 <form method="get" class="hub-switch no-print">
     @Icons.Get("warehouse")
     <select name="hub" aria-label="Hub" onchange="this.form.submit()">
-        @foreach (var hub in Model.Hubs)
+        @foreach (var work in Model.Hubs)
         {
-            <option value="@hub.Code" selected="@(hub.Code == Model.Current?.Code)">@hub.Name (@hub.Code)</option>
+            var waiting = work.Total == 0 ? "" : $" · {work.Total} waiting";
+            <option value="@work.Hub.Code" selected="@(work.Hub.Code == Model.Current?.Code)">@work.Hub.Name (@work.Hub.Code)@waiting</option>
         }
     </select>
     <noscript><button class="btn btn-outline btn-sm" type="submit">Go</button></noscript>
 </form>
+<a class="btn btn-ghost btn-sm no-print" asp-page="/Hub/Choose" asp-route-next="@ViewContext.RouteData.Values["page"]?.ToString()?.Split('/')[^1]">All hubs</a>

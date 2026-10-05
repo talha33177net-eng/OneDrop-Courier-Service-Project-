@@ -1,0 +1,79 @@
+@page
+@using Application.Hubs.HubOverview
+@model Web.Pages.Hub.ChooseModel
+@{
+    ViewData["Title"] = "Choose your hub";
+    var what = Model.Next switch
+    {
+        "Pickups" => "to see its pickup requests",
+        "Assign" => "to give its parcels to riders",
+        "Scan" => "to scan parcels",
+        "Runs" => "to close its riders' runs",
+        _ => "to open its board"
+    };
+
+    void HubCard(HubWork work)
+    {
+        <a class="card hub-card @(work.Total == 0 ? "quiet" : "")" href="@Url.Page($"/Hub/{Model.Next}", new { hub = work.Hub.Code })">
+            <div class="hub-card-head"><span class="code-link">@work.Hub.Code</span> <strong>@work.Hub.Name</strong></div>
+            <div class="cell-sub">@work.Hub.Address</div>
+            <div class="hub-card-counts">
+                @if (work.Total == 0)
+                {
+                    <span>Nothing waiting</span>
+                }
+                @if (work.PickupsOpen > 0)
+                {
+                    <span><strong>@work.PickupsOpen</strong> @(work.PickupsOpen == 1 ? "pickup" : "pickups")</span>
+                }
+                @if (work.ToAssign > 0)
+                {
+                    <span><strong>@work.ToAssign</strong> waiting for a rider</span>
+                }
+                @if (work.Incoming > 0)
+                {
+                    <span><strong>@work.Incoming</strong> coming in</span>
+                }
+                @if (work.WithRiders > 0)
+                {
+                    <span><strong>@work.WithRiders</strong> out with riders</span>
+                }
+            </div>
+        </a>
+    }
+}
+
+<div class="page-head">
+    <div>
+        <h1>Choose your hub</h1>
+        <p>Pick the hub you are working at @what. You can switch at any time from the hub menu at the top of each hub page.</p>
+    </div>
+</div>
+
+@if (Model.Busy.Count == 0 && Model.Quiet.Count == 0)
+{
+    <div class="card"><div class="empty">@Icons.Get("warehouse")<h3>No hubs yet</h3></div></div>
+    return;
+}
+
+@if (Model.Busy.Count > 0)
+{
+    <h2 class="hub-cards-title">@Icons.Get("alert") Work waiting</h2>
+    <div class="hub-cards">
+        @foreach (var work in Model.Busy)
+        {
+            HubCard(work);
+        }
+    </div>
+}
+
+@if (Model.Quiet.Count > 0)
+{
+    <h2 class="hub-cards-title @(Model.Busy.Count > 0 ? "mt-lg" : "")">@(Model.Busy.Count > 0 ? "Other hubs" : "Nothing is waiting at any hub")</h2>
+    <div class="hub-cards">
+        @foreach (var work in Model.Quiet)
+        {
+            HubCard(work);
+        }
+    </div>
+}

@@ -167,6 +167,7 @@ public class Parcel : TenantEntity, IMerchantOwned
         }
 
         parcel.events.Add(new ParcelEvent(parcel, ParcelStatus.Pending, "Parcel booked", null));
+        parcel.Raise(new ParcelBooked(parcel));
 
         return parcel;
     }
@@ -392,9 +393,10 @@ public class Parcel : TenantEntity, IMerchantOwned
 
     /// <summary>
     /// The recipient could not take the parcel today (not reachable, asked for another day). The rider brings it back to
-    /// the hub for another attempt; after <paramref name="maxAttempts"/> attempts it must be delivered or returned.
+    /// the hub for another attempt; after <paramref name="maxAttempts"/> attempts it must be delivered or returned. The
+    /// day the recipient asked for, when given, is after <paramref name="today"/> (the courier's date).
     /// </summary>
-    public Result Hold(string? reason, DateOnly? until, int maxAttempts)
+    public Result Hold(string? reason, DateOnly? until, DateOnly today, int maxAttempts)
     {
         if (Status != ParcelStatus.OutForDelivery)
         {
@@ -405,6 +407,11 @@ public class Parcel : TenantEntity, IMerchantOwned
         if (why is null || why.Length > 200)
         {
             return Error.Validation("parcel.hold.reason", "Say why the parcel could not be delivered, at most 200 characters.");
+        }
+
+        if (until <= today)
+        {
+            return Error.Validation("parcel.hold.until", "The day the customer asked for must be after today.");
         }
 
         if (Attempts + 1 >= maxAttempts)

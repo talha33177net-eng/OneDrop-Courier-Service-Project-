@@ -15,44 +15,227 @@
 <div class="page-head">
     <div>
         <h1>Scan parcels</h1>
-        <p>@current.Help</p>
+        <p>Choose what is happening, then scan each label. The answer tells you what to do with the parcel next.</p>
     </div>
     <div class="page-actions">
-        @await Html.PartialAsync("_HubSwitch", (Model.Hubs, Model.Hub))
+        <button type="button" class="btn btn-ghost btn-sm" data-sound hidden>@Icons.Get("bell") <span>Sound on</span></button>
+        @await Html.PartialAsync("_HubSwitch", (Model.Work, Model.Hub))
     </div>
 </div>
 
-<div class="segmented mb">
+<div class="segmented mb" role="tablist" aria-label="What is happening">
     @foreach (var mode in modes)
     {
-        <a class="@(mode.Mode == Model.Mode ? "active" : "")" asp-page="/Hub/Scan" asp-route-mode="@mode.Mode" asp-route-hub="@Model.Hub?.Code">@Icons.Get(mode.Icon) @mode.Name</a>
+        <a class="@(mode.Mode == Model.Mode ? "active" : "")" role="tab" aria-selected="@(mode.Mode == Model.Mode ? "true" : "false")" asp-page="/Hub/Scan" asp-route-mode="@mode.Mode" asp-route-hub="@Model.Hub?.Code">@Icons.Get(mode.Icon) @mode.Name</a>
     }
 </div>
 
-<div class="card">
-    <div class="card-body">
-        <form method="post" asp-route-mode="@Model.Mode" asp-route-hub="@Model.Hub?.Code" class="scan-box">
-            <input asp-for="Code" autofocus autocomplete="off" placeholder="Scan or type the tracking code" aria-label="Tracking code" />
-            <button class="btn btn-primary" type="submit">@Icons.Get(current.Icon) @current.Name</button>
-        </form>
-
-        @if (Model.Answer is { } answer)
-        {
-            var tone = answer.Tone switch { ScanTone.Success => "success", ScanTone.Info => "info", _ => "error" };
-            <div class="scan-answer @tone" role="status">
-                @Icons.Get(answer.Tone == ScanTone.Error ? "x-circle" : answer.Tone == ScanTone.Info ? "info" : "check-circle")
-                <div>
-                    <h2>@answer.Title</h2>
-                    @if (answer.Detail is not null)
-                    {
-                        <p>@answer.Detail</p>
-                    }
-                    @if (answer.TrackingCode is not null)
-                    {
-                        <p class="mono" style="font-size:13px;opacity:.8"><a asp-page="/Hub/Parcel" asp-route-code="@answer.TrackingCode">@answer.TrackingCode</a></p>
-                    }
+<div class="grid grid-side">
+    <div class="card">
+        <div class="card-body">
+            <p class="muted mt-0" style="display:flex;gap:8px;align-items:flex-start">@Icons.Get("info") <span>@current.Help</span></p>
+            <form method="post" asp-route-mode="@Model.Mode" asp-route-hub="@Model.Hub?.Code" class="scan-box" data-scan-form>
+                <div class="scan-field">
+                    @Icons.Get("scan")
+                    <input asp-for="Code" autofocus autocomplete="off" spellcheck="false" placeholder="Scan or type the tracking code" aria-label="Tracking code" />
                 </div>
+                <button class="btn btn-primary" type="submit">@Icons.Get(current.Icon) @current.Name</button>
+            </form>
+
+            <div data-scan-result aria-live="polite">
+                @if (Model.Answer is { } answer)
+                {
+                    var tone = answer.Tone switch { ScanTone.Success => "success", ScanTone.Info => "info", _ => "error" };
+                    <div class="scan-answer @tone" role="status" data-tone="@tone" data-code="@answer.TrackingCode">
+                        @Icons.Get(answer.Tone == ScanTone.Error ? "x-circle" : answer.Tone == ScanTone.Info ? "info" : "check-circle")
+                        <div>
+                            <h2>@answer.Title</h2>
+                            @if (answer.Detail is not null)
+                            {
+                                <p>@answer.Detail</p>
+                            }
+                            @if (answer.TrackingCode is not null)
+                            {
+                                <p class="mono" style="font-size:13px;opacity:.8"><a asp-page="/Hub/Parcel" asp-route-code="@answer.TrackingCode">@answer.TrackingCode</a></p>
+                            }
+                        </div>
+                    </div>
+                }
             </div>
-        }
+
+            <div class="scan-history" data-scan-history hidden>
+                <div class="spread"><h4>This session</h4><span class="muted" style="font-size:12px" data-scan-tally></span></div>
+                <ol></ol>
+            </div>
+        </div>
+    </div>
+
+    <div class="card sticky-card">
+        <div class="card-head"><h2>@Icons.Get("bulb") Scanning tips</h2></div>
+        <div class="card-body">
+            <ol class="timeline">
+                <li><span class="dot"></span><div class="tl-title">Pick the mode first</div><div class="tl-meta">Receive when parcels arrive, Send when they leave for another hub, Hand back when a merchant collects returns.</div></li>
+                <li><span class="dot"></span><div class="tl-title">Scan one label at a time</div><div class="tl-meta">A hand scanner types the code and presses Enter for you. The box stays ready for the next one.</div></li>
+                <li><span class="dot"></span><div class="tl-title">Listen and look</div><div class="tl-meta">A high tone and green card mean done. A low buzz and red card mean stop and read the message.</div></li>
+                <li><span class="dot"></span><div class="tl-title">Scanning twice is safe</div><div class="tl-meta">A parcel already recorded here is simply reported, nothing changes.</div></li>
+            </ol>
+        </div>
     </div>
 </div>
+
+@section Scripts {
+    <script>
+    (() => {
+        const form = document.querySelector("[data-scan-form]");
+        const input = form.querySelector("input[name=Code]");
+        const button = form.querySelector("button[type=submit]");
+        const history = document.querySelector("[data-scan-history]");
+        const tally = document.querySelector("[data-scan-tally]");
+        const soundButton = document.querySelector("[data-sound]");
+        const key = "scan-history:@Model.Hub?.Code";
+        let result = document.querySelector("[data-scan-result]");
+        let audio;
+
+        let soundOn = true;
+        try {
+            soundOn = localStorage.getItem("scan-sound") !== "off";
+        } catch {
+            // Sound stays on
+        }
+        const showSound = () => {
+            soundButton.hidden = false;
+            soundButton.querySelector("span").textContent = soundOn ? "Sound on" : "Sound off";
+            soundButton.classList.toggle("muted", !soundOn);
+        };
+        soundButton.addEventListener("click", () => {
+            soundOn = !soundOn;
+            try {
+                localStorage.setItem("scan-sound", soundOn ? "on" : "off");
+            } catch {
+                // Not remembered in a private window
+            }
+            showSound();
+        });
+        showSound();
+
+        // A short tone a hand scanner's user hears without looking: high for done, middle for nothing changed, low for a problem
+        const beep = tone => {
+            if (!soundOn) {
+                return;
+            }
+
+            try {
+                audio ??= new AudioContext();
+                const notes = tone === "success" ? [[880, 0, .09], [1320, .1, .12]] : tone === "info" ? [[660, 0, .14]] : [[200, 0, .16], [170, .2, .22]];
+                for (const [frequency, at, length] of notes) {
+                    const oscillator = audio.createOscillator();
+                    const gain = audio.createGain();
+                    oscillator.type = tone === "error" ? "square" : "sine";
+                    oscillator.frequency.value = frequency;
+                    gain.gain.setValueAtTime(.0001, audio.currentTime + at);
+                    gain.gain.exponentialRampToValueAtTime(tone === "error" ? .08 : .18, audio.currentTime + at + .015);
+                    gain.gain.exponentialRampToValueAtTime(.0001, audio.currentTime + at + length);
+                    oscillator.connect(gain).connect(audio.destination);
+                    oscillator.start(audio.currentTime + at);
+                    oscillator.stop(audio.currentTime + at + length + .02);
+                }
+            } catch {
+                // No sound on this device
+            }
+        };
+
+        const saved = () => {
+            try {
+                return JSON.parse(sessionStorage.getItem(key) || "[]");
+            } catch {
+                return [];
+            }
+        };
+        const icons = {
+            success: '<polyline points="20 6 9 17 4 12"/>',
+            info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+            error: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'
+        };
+        const render = () => {
+            const items = saved();
+            history.hidden = items.length === 0;
+            const list = history.querySelector("ol");
+            list.replaceChildren(...items.slice(0, 12).map(item => {
+                const row = document.createElement("li");
+                row.className = item.tone;
+                row.innerHTML = `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${icons[item.tone] ?? icons.info}</svg><span class="mono strong"></span><span class="muted"></span><time></time>`;
+                row.children[1].textContent = item.code;
+                row.children[2].textContent = item.title;
+                row.children[3].textContent = item.time;
+                return row;
+            }));
+            const good = items.filter(item => item.tone === "success").length;
+            tally.textContent = `${good} done · ${items.length - good} other`;
+        };
+        const remember = answer => {
+            if (!answer) {
+                return;
+            }
+
+            const items = saved();
+            items.unshift({
+                tone: answer.dataset.tone,
+                code: answer.dataset.code || "",
+                title: answer.querySelector("h2").textContent,
+                time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+            });
+            try {
+                sessionStorage.setItem(key, JSON.stringify(items.slice(0, 50)));
+            } catch {
+                // The list just stays shorter
+            }
+            render();
+        };
+
+        // A scan answered by an ordinary post (no script, or the fallback below) counts too, but not again on a reload
+        render();
+        if (performance.getEntriesByType("navigation")[0]?.type !== "reload") {
+            remember(result.querySelector(".scan-answer"));
+        }
+
+        form.addEventListener("submit", async event => {
+            event.preventDefault();
+            if (!input.value.trim()) {
+                input.focus();
+                return;
+            }
+
+            button.classList.add("is-busy");
+            try {
+                const response = await fetch(form.action, { method: "POST", body: new FormData(form), credentials: "same-origin" });
+                if (!response.ok || response.redirected) {
+                    throw new Error("Scan not answered");
+                }
+
+                const page = new DOMParser().parseFromString(await response.text(), "text/html");
+                const fresh = page.querySelector("[data-scan-result]");
+                result.replaceWith(fresh);
+                result = fresh;
+                const answer = fresh.querySelector(".scan-answer");
+                beep(answer?.dataset.tone);
+                remember(answer);
+                input.value = "";
+            } catch {
+                // Fall back to an ordinary post
+                HTMLFormElement.prototype.submit.call(form);
+            } finally {
+                button.classList.remove("is-busy");
+                input.focus();
+            }
+        });
+
+        // Typing anywhere goes to the scan box, so a scanner never types into nothing
+        addEventListener("keydown", event => {
+            if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey &&
+                !event.target.closest("input, select, textarea, button, a")) {
+                input.focus();
+            }
+        });
+    })();
+    </script>
+}

@@ -5,33 +5,59 @@
 }
 
 <div class="auth-page">
-    <div style="width:100%;max-width:760px">
-        <div class="auth-card" style="margin:0 auto">
-            <h1>Welcome back</h1>
-            <p class="sub">Sign in to @Model.Where.</p>
-            <form method="post">
-                <div asp-validation-summary="ModelOnly" class="alert alert-error"></div>
-                <div class="field">
-                    <label asp-for="Input.Email">Email</label>
-                    <input asp-for="Input.Email" type="email" autocomplete="username" placeholder="you@example.com" />
-                    <span asp-validation-for="Input.Email" class="field-error"></span>
+    <div style="width:100%;max-width:980px">
+        <div class="auth-shell">
+            <aside class="auth-aside">
+                <div>
+                    <span class="eyebrow">One panel for every role</span>
+                    <h2>Every parcel, from the shop to the door, in one place.</h2>
+                    <p>Sign in with the email and password your courier gave you. You land on the screen for your work.</p>
                 </div>
-                <div class="field">
-                    <label asp-for="Input.Password">Password</label>
-                    <input asp-for="Input.Password" type="password" autocomplete="current-password" />
-                    <span asp-validation-for="Input.Password" class="field-error"></span>
-                </div>
-                <div class="field">
-                    <label class="check"><input asp-for="Input.RememberMe" /> Keep me signed in</label>
-                </div>
-                <button class="btn btn-primary btn-block btn-lg" type="submit">Sign in</button>
-            </form>
-            @if (Model.OnCourierSite)
-            {
-                <p class="muted text-center mt">
-                    New merchant? <a asp-page="/Account/Register">Create an account</a> · Sending to you? <a asp-page="/Track">Track a parcel</a>
-                </p>
-            }
+                <ul>
+                    <li><span class="stat-icon">@Icons.Get("store")</span><span><strong>Merchants</strong>Book parcels, ask for pickups and follow your money.</span></li>
+                    <li><span class="stat-icon">@Icons.Get("warehouse")</span><span><strong>Hub staff</strong>Scan parcels, hand them to riders, close the day.</span></li>
+                    <li><span class="stat-icon">@Icons.Get("bike")</span><span><strong>Riders</strong>Today's doors, the cash to collect, one tap per outcome.</span></li>
+                </ul>
+                <svg class="route-art" viewBox="0 0 320 200" aria-hidden="true">
+                    <path class="road" d="M10 180 C 80 180, 90 110, 160 110 S 250 30, 310 20">
+                        <animate attributeName="stroke-dashoffset" from="0" to="-48" dur="2.4s" repeatCount="indefinite" />
+                    </path>
+                    <circle class="runner" r="6">
+                        <animateMotion dur="5s" repeatCount="indefinite" path="M10 180 C 80 180, 90 110, 160 110 S 250 30, 310 20" />
+                    </circle>
+                    <circle class="stop" cx="10" cy="180" r="7" />
+                    <circle class="stop" cx="160" cy="110" r="7" />
+                    <circle class="stop end" cx="310" cy="20" r="7" />
+                </svg>
+            </aside>
+            <div class="auth-card">
+                <h1>Welcome back</h1>
+                <p class="sub">Sign in to @Model.Where.</p>
+                <form method="post">
+                    <div asp-validation-summary="ModelOnly" class="alert alert-error"></div>
+                    <div class="field">
+                        <label asp-for="Input.Email">Email</label>
+                        <input asp-for="Input.Email" type="email" autocomplete="username" placeholder="you@example.com" autofocus />
+                        <span asp-validation-for="Input.Email" class="field-error"></span>
+                    </div>
+                    <div class="field">
+                        <label asp-for="Input.Password">Password</label>
+                        <input asp-for="Input.Password" type="password" autocomplete="current-password" data-reveal />
+                        <span asp-validation-for="Input.Password" class="field-error"></span>
+                    </div>
+                    <div class="field">
+                        <label class="check"><input asp-for="Input.RememberMe" /> Keep me signed in</label>
+                    </div>
+                    <button class="btn btn-primary btn-block btn-lg" type="submit">Sign in @Icons.Get("arrow-right")</button>
+                </form>
+                @if (Model.OnCourierSite)
+                {
+                    <hr />
+                    <p class="muted text-center" style="margin:0">
+                        New merchant? <a asp-page="/Account/Register">Create an account</a> · Sending to you? <a asp-page="/Track">Track a parcel</a>
+                    </p>
+                }
+            </div>
         </div>
 
         @if (Model.DemoLogins.Count > 0)

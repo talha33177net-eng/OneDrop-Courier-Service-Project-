@@ -6,17 +6,26 @@ using Domain.Payments;
 
 namespace Application.Payments.AdminPayouts;
 
-/// <summary>A merchant's balance not yet paid out, and whether it can be paid.</summary>
-public sealed record MerchantBalance(long MerchantId, string Merchant, decimal Cod, decimal Charges, bool HasPayoutAccount)
+/// <summary>
+/// A merchant's balance not yet paid out. <see cref="Payable"/> is the part the next run pays: the lines up to yesterday.
+/// The rest belongs to today's parcels and is paid from tomorrow.
+/// </summary>
+public sealed record MerchantBalance(long MerchantId, string Merchant, decimal Cod, decimal Charges, bool HasPayoutAccount, decimal Payable)
 {
     public decimal Net => Cod - Charges;
+
+    public decimal DueTomorrow => Net - Payable;
 }
 
 public sealed record PayoutsOverview(
     IReadOnlyList<MerchantBalance> Owed,
     IReadOnlyList<PayoutRow> Payouts,
     decimal PaidThisMonth,
-    decimal PendingTotal);
+    decimal PendingTotal)
+{
+    /// <summary>What the next run sends: each merchant with a payout account whose lines up to yesterday come to more than ৳0.</summary>
+    public decimal PayableNow => Owed.Where(m => m.HasPayoutAccount && m.Payable > 0).Sum(m => m.Payable);
+}
 
 /// <summary>
 /// The courier's payouts: what it owes each merchant now, and the payouts made, newest first. Courier admins only.
@@ -30,6 +39,7 @@ public class AdminPayoutsHandler(
     public async Task<PayoutsOverview> GetAsync(PayoutStatus? status, CancellationToken cancellationToken = default)
     {
         var tenant = tenantContext.Require();
+        var upTo = tenant.Today(time.GetUtcNow().UtcDateTime).AddDays(-1);
         var balances = await db.LedgerEntries
             .Where(line => line.PayoutId == null)
             .GroupBy(line => line.MerchantId)
@@ -37,7 +47,8 @@ public class AdminPayoutsHandler(
             {
                 MerchantId = lines.Key,
                 Cod = lines.Sum(l => l.Kind == LedgerEntryKind.Cod ? l.Amount : 0),
-                Charges = -lines.Sum(l => l.Kind != LedgerEntryKind.Cod ? l.Amount : 0)
+                Charges = -lines.Sum(l => l.Kind != LedgerEntryKind.Cod ? l.Amount : 0),
+                Payable = lines.Sum(l => l.EntryDate <= upTo ? l.Amount : 0)
             })
             .ToListAsync(cancellationToken);
         var merchantIds = balances.Select(b => b.MerchantId).ToList();
@@ -47,7 +58,7 @@ public class AdminPayoutsHandler(
             .ToDictionaryAsync(m => m.Id, cancellationToken);
         var owed = balances
             .Select(b =>
-                new MerchantBalance(b.MerchantId, merchants[b.MerchantId].Name, b.Cod, b.Charges, merchants[b.MerchantId].HasAccount))
+                new MerchantBalance(b.MerchantId, merchants[b.MerchantId].Name, b.Cod, b.Charges, merchants[b.MerchantId].HasAccount, b.Payable))
             .ToList();
 
         var payouts = db.Payouts.AsQueryable();

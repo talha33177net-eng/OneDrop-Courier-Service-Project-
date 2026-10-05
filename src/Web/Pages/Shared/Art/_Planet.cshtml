@@ -1,0 +1,230 @@
+@* The front page's picture: a rider driving round a little planet of shops, a hub and homes, parcels coming down on
+   parachutes and cards following one parcel along its way. Three layers so the planet turns as one picture under the
+   rider. Decoration only; the motion is in landing.css *@
+<div class="scene art" aria-hidden="true" data-motion>
+    <svg class="scene-back" viewBox="0 0 640 600">
+        <ellipse class="g" cx="320" cy="590" rx="150" ry="9" />
+        <g transform="translate(548 118)">
+            <circle class="sun-rays n" r="50" stroke-dasharray="3 11" stroke-linecap="round" style="stroke:#7cc6f2;stroke-width:4" />
+            <circle class="o w" r="33" />
+        </g>
+        <g class="cloud" transform="translate(0 0)">
+            <path class="o w" transform="translate(250 58)" d="M-34 0H38A13 13 0 0 0 33-24A19 19 0 0 0-1-33A15 15 0 0 0-27-20A11 11 0 0 0-34 0Z" />
+        </g>
+        <g class="cloud slow">
+            <path class="o w" transform="translate(84 352) scale(.8)" d="M-34 0H38A13 13 0 0 0 33-24A19 19 0 0 0-1-33A15 15 0 0 0-27-20A11 11 0 0 0-34 0Z" />
+        </g>
+        <path class="spark y" transform="translate(470 30)" d="M0-9 2.2-2.2 9 0 2.2 2.2 0 9-2.2 2.2-9 0-2.2-2.2Z" />
+        <path class="spark y" transform="translate(70 250)" d="M0-9 2.2-2.2 9 0 2.2 2.2 0 9-2.2 2.2-9 0-2.2-2.2Z" />
+        <path class="spark y" transform="translate(600 450)" d="M0-9 2.2-2.2 9 0 2.2 2.2 0 9-2.2 2.2-9 0-2.2-2.2Z" />
+        <g class="birds">
+            <path class="bird o-thin" transform="translate(0 40)" d="M0 0Q6-6 12 0Q18-6 24 0" style="stroke-width:2.2" />
+            <path class="bird o-thin" transform="translate(30 26) scale(.75)" d="M0 0Q6-6 12 0Q18-6 24 0" style="stroke-width:2.6" />
+        </g>
+    </svg>
+
+    <div class="planet">
+        <svg viewBox="0 0 640 600">
+            <!-- Each place is drawn standing on top of the planet, then turned to its spot on the rim -->
+            <g transform="rotate(34 320 330) translate(320 180)">
+                <rect class="o w" x="-28" y="-46" width="56" height="58" />
+                <rect class="o g" x="-21" y="-32" width="19" height="17" rx="1.5" />
+                <rect class="o k" x="5" y="-32" width="15" height="44" />
+                <rect class="o w" x="-19" y="-74" width="38" height="12" rx="2" />
+                <path class="o-thin" d="M-12-68h18" />
+                <path class="o y" d="M-34-60H34V-50A5.67 5.67 0 0 1 22.67-50 5.67 5.67 0 0 1 11.33-50 5.67 5.67 0 0 1 0-50 5.67 5.67 0 0 1-11.33-50 5.67 5.67 0 0 1-22.67-50 5.67 5.67 0 0 1-34-50Z" />
+                <rect class="o y" x="30" y="-8" width="15" height="13" rx="1.5" />
+                <rect class="o w" x="32" y="-20" width="11" height="12" rx="1.5" />
+            </g>
+            <g transform="rotate(62 320 330) translate(320 180)">
+                <path class="o n" d="M0 12V-24M0-14-8-24M0-18 7-28" style="stroke-width:4" />
+                <path class="o g" d="M-12-20C-26-20-28-38-16-42-16-58 2-64 10-52 22-54 28-38 20-30 24-20 14-16 6-20 2-14-8-14-12-20Z" />
+                <path class="o-thin" d="M-6-46Q-4-52 3-53M8-32Q12-30 14-34" />
+            </g>
+            <g transform="rotate(92 320 330) translate(320 180)">
+                <path class="o w" d="M-48 12V-30L0-50 48-30V12Z" />
+                <path class="o n" d="M-54-27 0-52 54-27" style="stroke-width:5" />
+                <rect class="o g" x="-20" y="-22" width="40" height="34" />
+                <path class="o-thin" d="M-20-14H20M-20-6H20M-20 2H20" />
+                <rect class="o y" x="-17" y="-43" width="34" height="13" rx="2.5" />
+                <text x="0" y="-33" text-anchor="middle" font-size="9" font-weight="800" fill="#141820" font-family="Plus Jakarta Sans, sans-serif" letter-spacing=".08em">HUB</text>
+                <rect class="o g" x="-40" y="-20" width="12" height="11" rx="1.5" />
+                <rect class="o g" x="28" y="-20" width="12" height="11" rx="1.5" />
+            </g>
+            <g transform="rotate(122 320 330) translate(320 180)">
+                <path class="o-thin" d="M0 12V-52Q0-60 8-60H12" style="stroke-width:3" />
+                <path class="o k" d="M9-64H21L24-57H6Z" />
+                <circle class="y" cx="15" cy="-52" r="3.5" />
+            </g>
+            <g transform="rotate(150 320 330) translate(320 180)">
+                <rect class="o w" x="-18" y="-104" width="36" height="116" />
+                <path class="o-thin" d="M-6-104V12M6-104V12M-18-88H18M-18-72H18M-18-56H18M-18-40H18M-18-24H18M-18-8H18" />
+                <rect class="y" x="-16.5" y="-86.5" width="9.5" height="13" />
+                <rect class="y" x="7.5" y="-54.5" width="9.5" height="13" />
+                <path class="o-thin" d="M0-104V-116" style="stroke-width:2.4" />
+                <circle class="o y" cx="0" cy="-119" r="3.5" style="stroke-width:1.8" />
+            </g>
+            <g transform="rotate(180 320 330) translate(320 180)">
+                <path class="o y2" d="M-40-34C-42-72 0-74-2-34Z" />
+                <path class="o-thin" d="M-35-42C-35-62-8-64-7-42M-21-66V-34" />
+                <rect class="o y" x="-40" y="-37" width="40" height="12" rx="3" />
+                <path class="o-thin" d="M-20-25V-12M-4-25 12-10 28-8M12-10V-30M7-31H18M28-8 24-36M19-37H29" style="stroke-width:2.6" />
+                <circle class="o n" cx="-20" cy="-12" r="14" style="stroke-width:3" />
+                <circle class="o n" cx="28" cy="-8" r="10" style="stroke-width:3" />
+                <path class="o-thin" d="M-20-26V2M-34-12H-6M28-18V2M18-8H38" style="stroke-width:1.4" />
+            </g>
+            <g transform="rotate(212 320 330) translate(320 180)">
+                <path class="o-thin" d="M-6 12V-8" style="stroke-width:3" />
+                <path class="o k" d="M-16 4V-34A10 10 0 0 1 4-34V4Z" />
+                <path d="M-11-28H-1" stroke="#fff" stroke-width="2.4" stroke-linecap="round" />
+                <rect class="y" x="-15" y="-16" width="18" height="5" />
+                <path class="o g" d="M8 12C4 0 10-10 18-8 22-16 34-14 34-4 40-2 40 8 36 12Z" />
+            </g>
+            <g transform="rotate(240 320 330) translate(320 180)">
+                <rect class="o w" x="-27" y="-96" width="54" height="108" />
+                <rect class="o k" x="6" y="-106" width="15" height="10" rx="2" />
+                <g class="o g" style="stroke-width:1.8">
+                    <rect x="-19" y="-86" width="10" height="12" /><rect x="-5" y="-86" width="10" height="12" /><rect x="9" y="-86" width="10" height="12" />
+                    <rect x="-19" y="-66" width="10" height="12" /><rect x="-5" y="-66" width="10" height="12" /><rect x="9" y="-66" width="10" height="12" />
+                    <rect x="-19" y="-46" width="10" height="12" /><rect x="-5" y="-46" width="10" height="12" /><rect x="9" y="-46" width="10" height="12" />
+                    <rect x="-19" y="-26" width="10" height="12" /><rect x="9" y="-26" width="10" height="12" />
+                </g>
+                <rect class="o y" x="-5" y="-66" width="10" height="12" style="stroke-width:1.8" />
+                <rect class="o y" x="-19" y="-26" width="10" height="12" style="stroke-width:1.8" />
+                <rect class="o k" x="-5" y="-22" width="10" height="34" />
+            </g>
+            <g transform="rotate(270 320 330) translate(320 180)">
+                <path class="o w" d="M-24 12V-28H24V12Z" />
+                <rect class="o g" x="-18" y="-22" width="36" height="16" />
+                <path class="o k" d="M-31-27-23-44H23L31-27Z" />
+                <rect class="o y" x="-24" y="-6" width="48" height="7" />
+                <path class="o k" d="M-11-6V-14A5 5 0 0 1-1-14V-6ZM-1-12 4-16" />
+                <rect class="o w" x="6" y="-13" width="6" height="7" rx="1" style="stroke-width:1.8" />
+                <path class="o-thin" d="M-6-48Q-9-53-6-57T-6-66M2-48Q-1-53 2-57T2-66" style="stroke-width:1.6" />
+                <path class="o-thin" d="M28 2H46M31 2V12M43 2V12" style="stroke-width:3" />
+            </g>
+            <g transform="rotate(298 320 330) translate(320 180)">
+                <path class="o n" d="M0 12V-18L-16-32M0-18 14-34M0-18V-34" style="stroke-width:4.5" />
+                <path class="o y2" d="M-46-32C-54-34-52-46-42-46-42-56-30-60-22-54-16-64-2-66 4-58 12-66 26-62 28-54 38-58 50-50 44-42 52-38 48-30 40-32 30-28 20-34 10-30 0-34-10-30-20-34-30-28-38-34-46-32Z" />
+                <circle class="y" cx="-30" cy="-44" r="3" /><circle class="y" cx="-12" cy="-52" r="3" /><circle class="y" cx="6" cy="-46" r="3" /><circle class="y" cx="24" cy="-50" r="3" /><circle class="y" cx="38" cy="-42" r="2.4" /><circle class="y" cx="-40" cy="-38" r="2.4" /><circle class="y" cx="-4" cy="-60" r="2.2" /><circle class="y" cx="16" cy="-38" r="2.2" />
+            </g>
+            <g transform="rotate(326 320 330) translate(320 180)">
+                <rect class="o w" x="-24" y="-34" width="48" height="46" />
+                <path class="o k" d="M-31-32 0-58 31-32Z" />
+                <circle class="o w" cx="0" cy="-41" r="5" style="stroke-width:1.8" />
+                <rect class="o y" x="-6" y="-20" width="13" height="32" />
+                <rect class="o g" x="-19" y="-24" width="10" height="10" style="stroke-width:1.8" />
+                <rect class="o g" x="11" y="-24" width="10" height="10" style="stroke-width:1.8" />
+            </g>
+            <g transform="rotate(352 320 330) translate(320 180)">
+                <path class="o g" d="M-18 12C-22 0-14-10-6-8-2-16 10-14 10-4 16-2 16 8 12 12Z" />
+            </g>
+
+            <circle class="o w" cx="320" cy="330" r="150" style="stroke-width:3" />
+            <path class="g" d="M235 300C230 270 262 252 290 262 312 270 300 300 276 306 256 311 238 316 235 300Z" />
+            <path class="g" d="M352 392C344 372 368 356 394 364 416 371 420 398 398 410 378 420 358 410 352 392Z" />
+            <path class="g" d="M300 438C306 428 324 430 326 442 328 452 312 458 304 452 300 449 298 443 300 438Z" />
+            <circle class="o w" cx="320" cy="330" r="128" stroke-dasharray="2 9" style="fill:none;stroke-width:1.6" />
+            <path class="o-thin" d="M214 356C250 350 266 378 302 370S366 330 392 304 416 286 426 290" stroke-dasharray="1 7" style="stroke-width:2.4" />
+            <circle class="o w" cx="214" cy="356" r="6" />
+            <path class="k" d="M432 292C429.5 288.5 423 283.5 423 278A9 9 0 0 1 441 278C441 283.5 434.5 288.5 432 292Z" />
+            <circle class="w" cx="432" cy="278" r="3.2" />
+        </svg>
+    </div>
+
+    <svg class="scene-front" viewBox="0 0 640 600">
+        <g transform="translate(320 180)">
+            <path class="wind o-thin" d="M-118-62H-80" />
+            <path class="wind o-thin" d="M-130-42H-84" />
+            <path class="wind o-thin" d="M-112-22H-76" />
+            <circle class="puff g o-thin" cx="-48" cy="-6" r="6" />
+            <circle class="puff g o-thin" cx="-48" cy="-6" r="6" />
+            <g class="rider">
+                <path class="o-thin" d="M-58-74-64-100" style="stroke-width:2" />
+                <path class="pennant o y" d="M-64-100-86-95-64-89Z" style="stroke-width:2" />
+                <rect class="o y" x="-62" y="-75" width="38" height="33" rx="4" />
+                <path class="k" d="M-43-49C-45-52-50-56-50-61A7 7 0 0 1-36-61C-36-56-41-52-43-49Z" />
+                <rect x="-46" y="-65" width="6" height="6" fill="#fff" />
+                <path class="o w" d="M-50-12C-52-30-40-40-22-40H6C12-40 14-35 11-30L4-14Z" />
+                <path class="o k" d="M-32-44H-4A4 4 0 0 1-4-36H-32A4 4 0 0 1-32-44Z" />
+                <path class="o n" d="M0-16H22" style="stroke-width:5" />
+                <path class="o w" d="M18-12 30-56C31-61 37-61 38-56L42-38C44-26 42-16 36-10Z" />
+                <path class="o n" d="M21-14A13 13 0 0 1 47-14" style="stroke-width:3" />
+                <circle class="o y" cx="39" cy="-49" r="4" style="stroke-width:1.8" />
+                <path class="o n" d="M-10-42 12-40 15-22" style="stroke-width:9" />
+                <path class="o k" d="M8-21H22A3 3 0 0 1 22-15H8Z" style="stroke-width:1.6" />
+                <path class="o k" d="M-16-40C-18-58-8-78 6-78 14-78 17-70 13-62L4-40Z" />
+                <path class="o n" d="M8-70 26-62" style="stroke-width:7" />
+                <path class="o n" d="M28-64 24-70" style="stroke-width:4" />
+                <circle class="o y" cx="10" cy="-89" r="12" />
+                <path class="o k" d="M12-93H21A3.5 3.5 0 0 1 21-86H12Z" style="stroke-width:1.6" />
+                <path class="o-thin" d="M-1-92Q4-99 12-100" style="stroke:#fff;stroke-width:1.6" />
+                <g transform="translate(-30 -10)">
+                    <circle class="o w" r="13" style="stroke-width:4" />
+                    <g class="spokes"><path class="o-thin" d="M0-8V8M-8 0H8" /></g>
+                    <circle class="k" r="2.6" />
+                </g>
+                <g transform="translate(34 -10)">
+                    <circle class="o w" r="13" style="stroke-width:4" />
+                    <g class="spokes"><path class="o-thin" d="M0-8V8M-8 0H8" /></g>
+                    <circle class="k" r="2.6" />
+                </g>
+            </g>
+        </g>
+
+        <g transform="translate(455 0)">
+            <g class="chute"><g class="sway">
+                <path class="o y" d="M-22 0A22 19 0 0 1 22 0Q16.5-5 11 0 5.5-5 0 0-5.5-5-11 0-16.5-5-22 0Z" />
+                <path class="o-thin" d="M-21 0-7 26M21 0 7 26M0 0V26" style="stroke-width:1.2" />
+                <rect class="o w" x="-9" y="26" width="18" height="15" rx="2" style="stroke-width:2" />
+                <path class="o-thin" d="M0 26V41" style="stroke:#3a9bd5;stroke-width:2.4" />
+            </g></g>
+        </g>
+        <g transform="translate(606 120)">
+            <g class="chute late"><g class="sway">
+                <path class="o y" d="M-18 0A18 16 0 0 1 18 0Q13.5-4 9 0 4.5-4 0 0-4.5-4-9 0-13.5-4-18 0Z" />
+                <path class="o-thin" d="M-17 0-6 21M17 0 6 21M0 0V21" style="stroke-width:1.2" />
+                <rect class="o w" x="-7.5" y="21" width="15" height="12" rx="2" style="stroke-width:2" />
+            </g></g>
+        </g>
+
+        <g transform="translate(16 74)">
+            <g class="chip">
+                <rect class="k" x="3" y="4" width="200" height="52" rx="14" />
+                <rect class="o w" width="200" height="52" rx="14" style="stroke-width:2" />
+                <circle class="k" cx="27" cy="26" r="15" />
+                <path d="M21 23 27 20 33 23V30L27 33 21 30ZM21 23 27 26 33 23M27 26V33" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round" />
+                <text class="t" x="52" y="23">Picked up</text>
+                <text class="s" x="52" y="40">From the shop, 10:20</text>
+            </g>
+            <g class="chip">
+                <rect class="k" x="3" y="4" width="200" height="52" rx="14" />
+                <rect class="o w" width="200" height="52" rx="14" style="stroke-width:2" />
+                <circle class="k" cx="27" cy="26" r="15" />
+                <path d="M20 33V24L27 19 34 24V33M24 33V27H30V33" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round" />
+                <text class="t" x="52" y="23">At the hub</text>
+                <text class="s" x="52" y="40">Sorted for your area</text>
+            </g>
+            <g class="chip">
+                <rect class="k" x="3" y="4" width="200" height="52" rx="14" />
+                <rect class="o w" width="200" height="52" rx="14" style="stroke-width:2" />
+                <circle class="k" cx="27" cy="26" r="15" />
+                <path d="M21 31A3 3 0 1 0 21.01 31M33 31A3 3 0 1 0 33.01 31M24 31H30L33 24H28" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" />
+                <text class="t" x="52" y="23">Out for delivery</text>
+                <text class="s" x="52" y="40">The rider is on the way</text>
+            </g>
+            <g class="chip">
+                <rect class="k" x="3" y="4" width="200" height="52" rx="14" />
+                <rect class="o w" width="200" height="52" rx="14" style="stroke-width:2" />
+                <circle class="y" cx="27" cy="26" r="15" />
+                <path d="M20.5 26.5 25 31 33.5 21.5" fill="none" stroke="#141820" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" />
+                <text class="t" x="52" y="23">Delivered</text>
+                <text class="s" x="52" y="40">Cash on its way to you</text>
+            </g>
+        </g>
+
+        <g class="cloud slow">
+            <path class="o w" transform="translate(574 400) scale(.7)" d="M-34 0H38A13 13 0 0 0 33-24A19 19 0 0 0-1-33A15 15 0 0 0-27-20A11 11 0 0 0-34 0Z" />
+        </g>
+    </svg>
+</div>

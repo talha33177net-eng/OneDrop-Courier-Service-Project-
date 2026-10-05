@@ -12,10 +12,12 @@
 
 <div class="page-head">
     <div>
+        <div class="page-kicker">@TenantContext.Require().Local(DateTime.UtcNow).ToString("dddd d MMMM")</div>
         <h1>Dashboard</h1>
-        <p>@TenantContext.Tenant?.Name today · <span class="badge badge-brand plain" data-live-status>Live</span></p>
+        <p>@TenantContext.Tenant?.Name today, across every hub. <span class="badge badge-brand" data-live-status>Live</span></p>
     </div>
     <div class="page-actions">
+        <a class="btn btn-outline" asp-page="/Hub/Choose">@Icons.Get("warehouse") Choose a hub</a>
         <a class="btn btn-outline" asp-page="/Hub/Parcels">@Icons.Get("package") All parcels</a>
         <a class="btn btn-primary" asp-page="/Admin/NewMerchant">@Icons.Get("plus") Add merchant</a>
     </div>
@@ -24,7 +26,14 @@
 <div data-live="dashboard">
     @if (d.PendingMerchants > 0)
     {
-        <a class="alert alert-warning" asp-page="/Admin/Merchants" asp-route-status="Pending" style="text-decoration:none">@Icons.Get("store")<div><strong>@d.PendingMerchants merchant@(d.PendingMerchants == 1 ? "" : "s") waiting for approval.</strong> Review the sign-ups.</div></a>
+        <div class="next-step">
+            <span class="stat-icon">@Icons.Get("store")</span>
+            <div class="next-step-text">
+                <strong>@d.PendingMerchants merchant@(d.PendingMerchants == 1 ? "" : "s") waiting for approval</strong>
+                <span>They can look around but cannot book parcels until you approve them.</span>
+            </div>
+            <a class="btn btn-primary" asp-page="/Admin/Merchants" asp-route-status="Pending">Review sign-ups @Icons.Get("arrow-right")</a>
+        </div>
     }
 
     <div class="stats">
@@ -62,8 +71,8 @@
     </div>
 
     <div class="stats mt-lg">
-        <a class="stat" asp-page="/Hub/Pickups"><div class="stat-icon amber">@Icons.Get("truck")</div><div><div class="stat-label">Pickups open</div><div class="stat-value">@d.OpenPickups</div></div></a>
-        <a class="stat" asp-page="/Hub/Runs"><div class="stat-icon violet">@Icons.Get("cash")</div><div><div class="stat-label">Cash with riders</div><div class="stat-value">@Money.Taka(d.CashWithRiders)</div></div></a>
+        <a class="stat @(d.OpenPickups > 0 ? "attention" : "")" asp-page="/Hub/Choose" asp-route-next="Pickups"><div class="stat-icon amber">@Icons.Get("truck")</div><div><div class="stat-label">Pickups open</div><div class="stat-value">@d.OpenPickups</div></div></a>
+        <a class="stat" asp-page="/Hub/Choose" asp-route-next="Runs"><div class="stat-icon dark">@Icons.Get("cash")</div><div><div class="stat-label">Cash with riders</div><div class="stat-value">@Money.Taka(d.CashWithRiders)</div></div></a>
         <a class="stat" asp-page="/Admin/Payouts"><div class="stat-icon">@Icons.Get("wallet")</div><div><div class="stat-label">Owed to merchants</div><div class="stat-value">@Money.Taka(d.OwedToMerchants)</div></div></a>
     </div>
 
@@ -78,10 +87,10 @@
                         {
                             <tr>
                                 <td><a asp-page="/Hub/Index" asp-route-hub="@hub.Code"><span class="code-link">@hub.Code</span> @hub.Name</a></td>
-                                <td class="num">@hub.AtHub</td>
-                                <td class="num">@hub.ToAssign</td>
-                                <td class="num">@hub.Incoming</td>
-                                <td class="num">@hub.WithRiders</td>
+                                <td class="num @(hub.AtHub == 0 ? "faint" : "")">@hub.AtHub</td>
+                                <td class="num @(hub.ToAssign == 0 ? "faint" : "strong")">@hub.ToAssign</td>
+                                <td class="num @(hub.Incoming == 0 ? "faint" : "")">@hub.Incoming</td>
+                                <td class="num @(hub.WithRiders == 0 ? "faint" : "")">@hub.WithRiders</td>
                             </tr>
                         }
                     </tbody>

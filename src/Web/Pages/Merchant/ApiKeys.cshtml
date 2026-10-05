@@ -66,7 +66,7 @@
                                     {
                                         <form method="post" asp-page-handler="Revoke" class="inline-form">
                                             <input type="hidden" name="prefix" value="@key.Prefix" />
-                                            <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Revoke this key? Calls with it stop working at once.')">Revoke</button>
+                                            <button type="submit" class="btn btn-danger btn-sm" data-confirm="Calls made with this key stop working at once. This cannot be undone." data-confirm-title="Revoke this key?" data-confirm-ok="Revoke key">Revoke</button>
                                         </form>
                                     }
                                 </td>

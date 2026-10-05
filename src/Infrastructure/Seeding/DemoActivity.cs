@@ -190,7 +190,7 @@ internal sealed class DemoActivity(
                     attempt.Complete(AttemptOutcome.PartlyDelivered, part, "Kept one of the two sarees", now);
                     break;
                 case Stage.OnHold:
-                    parcel.Hold("Recipient asked for tomorrow", today.AddDays(1), tenant.MaxDeliveryAttempts);
+                    parcel.Hold("Recipient asked for tomorrow", today.AddDays(1), today, tenant.MaxDeliveryAttempts);
                     attempt.Complete(AttemptOutcome.Hold, 0, "Recipient asked for tomorrow", now);
                     break;
                 default:

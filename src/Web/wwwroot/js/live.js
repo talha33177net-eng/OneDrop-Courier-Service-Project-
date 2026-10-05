@@ -42,6 +42,15 @@
                     next.querySelector(`details[id="${open.id}"]`)?.setAttribute("open", "");
                 }
 
+                // Point at the numbers that moved
+                const counts = ".stat-value, .flow-count";
+                const before = [...part.querySelectorAll(counts)].map(count => count.textContent);
+                next.querySelectorAll(counts).forEach((count, index) => {
+                    if (before[index] !== undefined && before[index] !== count.textContent) {
+                        count.classList.add("updated");
+                    }
+                });
+
                 part.replaceWith(next);
             }
 

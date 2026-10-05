@@ -170,9 +170,15 @@ public class RiderDayHandler(IAppDbContext db, ITenantContext tenantContext, ICu
 
     public Task<Result> HoldAsync(string trackingCode, string? reason, DateOnly? until, CancellationToken cancellationToken = default)
     {
-        var max = tenantContext.Require().MaxDeliveryAttempts;
+        var tenant = tenantContext.Require();
 
-        return RecordAsync(trackingCode, (parcel, _) => parcel.Hold(reason, until, max), _ => AttemptOutcome.Hold, _ => 0, reason, cancellationToken);
+        return RecordAsync(
+            trackingCode,
+            (parcel, now) => parcel.Hold(reason, until, tenant.Today(now), tenant.MaxDeliveryAttempts),
+            _ => AttemptOutcome.Hold,
+            _ => 0,
+            reason,
+            cancellationToken);
     }
 
     public Task<Result> RefuseAsync(string trackingCode, string? reason, CancellationToken cancellationToken = default)

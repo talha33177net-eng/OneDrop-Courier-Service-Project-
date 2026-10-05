@@ -1,0 +1,11 @@
+@* The typefaces both layouts load, and the first-paint flag: html.js-enter lets the page's parts arrive one after the
+   other, then goes so parts swapped in later (live dashboards) appear without moving *@
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" />
+@* Only the taka sign, which Plus Jakarta Sans lacks *@
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@500;700&text=%E0%A7%B3&display=swap" />
+<script>
+    document.documentElement.classList.add("js-enter");
+    setTimeout(() => document.documentElement.classList.remove("js-enter"), 1400);
+</script>

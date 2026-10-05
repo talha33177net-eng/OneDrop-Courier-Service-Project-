@@ -4,6 +4,8 @@
 @{
     ViewData["Title"] = "My deliveries";
     var t = Model.Today!;
+    var total = t.Deliveries.Count + t.Done.Count;
+    var percent = total == 0 ? 0 : 100 * t.Done.Count / total;
 }
 @section Head {
     <partial name="_RiderApp" />
@@ -12,8 +14,8 @@
 <div class="rider-wrap">
     <div class="page-head">
         <div>
+            <div class="page-kicker">@Icons.Get("warehouse") @t.Hub · @t.Date.ToString("dddd d MMMM")</div>
             <h1>Hello, @t.Rider</h1>
-            <p>@t.Hub · @t.Date.ToString("dddd d MMMM")</p>
         </div>
     </div>
 
@@ -30,19 +32,34 @@
         </div>
     </div>
 
+    @if (total > 0)
+    {
+        <div class="day-progress">
+            <div class="spread"><span>@t.Done.Count of @total done today</span><span>@percent%</span></div>
+            <div class="meter"><span style="width:@percent%"></span></div>
+        </div>
+    }
+
     @if (t.Pickups.Count > 0)
     {
-        <a class="alert alert-info" asp-page="/Rider/Pickups" style="text-decoration:none">@Icons.Get("truck")<div><strong>@t.Pickups.Count pickup@(t.Pickups.Count == 1 ? "" : "s") to make.</strong> Open your pickups.</div></a>
+        <a class="alert alert-info" asp-page="/Rider/Pickups">@Icons.Get("truck")<div><strong>@t.Pickups.Count pickup@(t.Pickups.Count == 1 ? "" : "s") to make.</strong> Open your pickups.</div></a>
     }
 
     <h4 class="mb">To deliver</h4>
     @if (t.Deliveries.Count == 0)
     {
-        <div class="card"><div class="empty">@Icons.Get("check-circle")<h3>Nothing to deliver</h3><p>The hub hands you parcels for your run.</p></div></div>
+        <div class="card">
+            <div class="empty">
+                @Icons.Get("check-circle")
+                <h3>@(t.Done.Count > 0 ? "All done for now" : "Nothing to deliver")</h3>
+                <p>@(t.Done.Count > 0 ? "Bring the cash and any parcel you could not deliver to the hub." : "The hub hands you parcels for your run.")</p>
+            </div>
+        </div>
     }
     @foreach (var d in t.Deliveries)
     {
-        <div class="task">
+        var place = $"{d.RecipientAddress}, {d.Area}";
+        <div class="task @(d.Attempts > 0 ? "retry" : "")">
             <div class="task-head">
                 <div>
                     <div class="task-name">@d.RecipientName</div>
@@ -50,7 +67,7 @@
                 </div>
                 <div class="text-right">
                     <div class="task-cod">@Money.Taka(d.CodAmount)</div>
-                    <div class="muted" style="font-size:12px">to collect</div>
+                    <div class="muted" style="font-size:12px">@(d.CodAmount == 0 ? "already paid" : "to collect")</div>
                 </div>
             </div>
             <div class="task-meta">
@@ -62,12 +79,13 @@
                 }
                 @if (d.Attempts > 0)
                 {
-                    <div>@Icons.Get("refresh") <span>Attempt @(d.Attempts + 1) of @d.MaxAttempts</span></div>
+                    <div class="row-note">@Icons.Get("refresh") <span>Attempt @(d.Attempts + 1) of @d.MaxAttempts</span></div>
                 }
             </div>
             <div class="task-actions">
                 <a class="btn btn-primary" asp-page="/Rider/Delivery" asp-route-code="@d.TrackingCode">@Icons.Get("check") Record outcome</a>
                 <a class="btn btn-outline" href="tel:@Money.Phone(d.RecipientPhone)">@Icons.Get("phone") Call</a>
+                <a class="btn btn-outline" href="https://www.google.com/maps/search/?api=1&query=@Uri.EscapeDataString(place)" target="_blank" rel="noopener">@Icons.Get("map-pin") Map</a>
             </div>
         </div>
     }

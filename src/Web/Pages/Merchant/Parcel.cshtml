@@ -30,7 +30,7 @@
             {
                 <form method="post" asp-page-handler="Cancel" asp-route-code="@p.TrackingCode" class="gap">
                     <input type="text" name="reason" maxlength="200" placeholder="Why cancel? (optional)" style="max-width:360px" />
-                    <button class="btn btn-danger" type="submit" onclick="return confirm('Cancel this parcel?')">@Icons.Get("x-circle") Cancel parcel</button>
+                    <button class="btn btn-danger" type="submit" data-confirm="The parcel will not be picked up or delivered, and nothing is charged." data-confirm-title="Cancel this parcel?" data-confirm-ok="Cancel parcel">@Icons.Get("x-circle") Cancel parcel</button>
                     <span class="muted">Possible until a rider picks it up.</span>
                 </form>
             }
@@ -38,7 +38,7 @@
             {
                 <form method="post" asp-page-handler="Return" asp-route-code="@p.TrackingCode" class="gap">
                     <input type="text" name="reason" maxlength="200" placeholder="Why do you want it back?" style="max-width:360px" />
-                    <button class="btn btn-danger" type="submit" onclick="return confirm('Ask for this parcel to come back to you?')">@Icons.Get("return") Ask for it back</button>
+                    <button class="btn btn-danger" type="submit" data-confirm="It comes back to your pickup hub. The delivery and return charges apply." data-confirm-title="Ask for this parcel back?" data-confirm-ok="Ask for it back">@Icons.Get("return") Ask for it back</button>
                     <span class="muted">The delivery and return charges apply.</span>
                 </form>
             }

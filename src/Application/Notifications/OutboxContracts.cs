@@ -34,6 +34,10 @@ public static class OutboxContracts
 
                 break;
 
+            case ParcelBooked booked:
+                yield return Write(new RecipientTextMessage(booked.Parcel.Id, ParcelStatus.Pending));
+                break;
+
             default:
                 throw new InvalidOperationException($"No outbox message is defined for {domainEvent.GetType().Name}.");
         }

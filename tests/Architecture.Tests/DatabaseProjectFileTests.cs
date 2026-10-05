@@ -27,13 +27,13 @@ public class DatabaseProjectFileTests
             .Where(path => !path.StartsWith("bin/", StringComparison.OrdinalIgnoreCase) &&
                            !path.StartsWith("obj/", StringComparison.OrdinalIgnoreCase));
 
-        Assert.Empty(onDisk.Where(path => !Listed.Contains(path)));
+        Assert.DoesNotContain(onDisk, path => !Listed.Contains(path));
     }
 
     [Fact]
     public void Every_listed_file_exists()
     {
-        Assert.Empty(Listed.Where(path => !File.Exists(Path.Combine(ProjectDirectory, path))));
+        Assert.DoesNotContain(Listed, path => !File.Exists(Path.Combine(ProjectDirectory, path)));
     }
 
     [Fact]

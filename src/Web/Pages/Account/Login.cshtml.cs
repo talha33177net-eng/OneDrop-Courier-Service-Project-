@@ -69,6 +69,9 @@ public class LoginModel(
             return Page();
         }
 
+        // Hub staff choose the hub they work at after each sign-in, never inherit someone else's choice
+        Response.Cookies.Delete(Hub.RememberHub.Cookie);
+
         return LocalRedirect(Url.IsLocalUrl(returnUrl) ? returnUrl : "/");
     }
 

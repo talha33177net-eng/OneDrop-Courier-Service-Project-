@@ -1,12 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
-using Application.Hubs;
+using Application.Hubs.HubOverview;
 using Application.Hubs.AssignParcels;
 using Application.Hubs.HubBoard;
 
 namespace Web.Pages.Hub;
 
 /// <summary>Hub staff tick the parcels waiting for a rider and hand them to one, for today's run.</summary>
-public class AssignModel(HubDirectory hubs, HubBoardHandler board, AssignParcelsHandler assign) : HubPage(hubs)
+public class AssignModel(HubOverviewHandler hubs, HubBoardHandler board, AssignParcelsHandler assign) : HubPage(hubs)
 {
     public IReadOnlyList<BoardParcel> Waiting { get; private set; } = [];
 

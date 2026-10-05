@@ -24,7 +24,7 @@
         <div class="card-body">
             <form method="post" asp-page-handler="Return" asp-route-code="@p.TrackingCode" class="gap">
                 <input type="text" name="reason" maxlength="200" placeholder="Why it goes back" style="max-width:360px" required />
-                <button class="btn btn-danger" type="submit">@Icons.Get("return") Return to merchant</button>
+                <button class="btn btn-danger" type="submit" data-confirm="The parcel travels back to the hub that collected it. The merchant pays the delivery and return charges." data-confirm-title="Return this parcel?" data-confirm-ok="Return it">@Icons.Get("return") Return to merchant</button>
             </form>
         </div>
     </div>

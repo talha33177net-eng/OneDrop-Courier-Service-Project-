@@ -42,7 +42,7 @@
                         <span class="muted">Updates go to <strong>@settings.Url</strong></span>
                         <span class="gap">
                             <form method="post" asp-page-handler="Test" class="inline-form"><button type="submit" class="btn btn-outline btn-sm">Send a test</button></form>
-                            <form method="post" asp-page-handler="Remove" class="inline-form"><button type="submit" class="btn btn-danger btn-sm">Stop sending</button></form>
+                            <form method="post" asp-page-handler="Remove" class="inline-form"><button type="submit" class="btn btn-danger btn-sm" data-confirm="Your website stops hearing about status changes until you save an address again." data-confirm-title="Stop sending updates?" data-confirm-ok="Stop sending">Stop sending</button></form>
                         </span>
                     </div>
                 }
@@ -57,7 +57,7 @@
                     <p>Your website checks each update's signature with this. Keep it on your server; never put it in a web page.</p>
                     <p><code style="word-break:break-all">@settings.Secret</code></p>
                     <form method="post" asp-page-handler="Secret">
-                        <button type="submit" class="btn btn-outline btn-sm">Make a new secret</button>
+                        <button type="submit" class="btn btn-outline btn-sm" data-confirm="Updates are signed with the new secret at once; your website must use it to check them." data-confirm-title="Make a new secret?" data-confirm-ok="Make new secret">Make a new secret</button>
                     </form>
                 </div>
             </div>

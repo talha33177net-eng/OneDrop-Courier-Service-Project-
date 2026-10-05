@@ -1,15 +1,30 @@
 @page
 @using Domain.Merchants
 @model Web.Pages.Merchant.IndexModel
+@inject ITenantContext TenantContext
 @{
     ViewData["Title"] = "Dashboard";
     var d = Model.Data;
     var s = d.Stages;
+    var active = d.Status == MerchantStatus.Active;
+    (bool Done, string Title, string Help, string? Page, string? Action)[] steps =
+    [
+        (true, "Create your account", "Your shop is registered with us.", null, null),
+        (active, "Get approved", "We check new merchants within a working day.", null, null),
+        (d.HasPayoutAccount, "Tell us where to pay you", "A bKash, Nagad or bank account for your cash.", "/Merchant/Settings", "Add account"),
+        (s.Total > 0, "Book your first parcel", "Recipient, address, area and the cash to collect.", "/Merchant/NewParcel", "Book a parcel"),
+        (d.HandedOver, "Hand your parcels over", "Ask for a pickup, or drop them at the nearest hub.", "/Merchant/Pickups", "Request pickup")
+    ];
+    var doneCount = steps.Count(step => step.Done);
+    var current = Array.FindIndex(steps, step => !step.Done);
+    var now = TenantContext.Require().Local(DateTime.UtcNow);
+    var greeting = now.Hour < 12 ? "Good morning" : now.Hour < 17 ? "Good afternoon" : "Good evening";
 }
 
 <div class="page-head">
     <div>
-        <h1>Hello, @d.Merchant</h1>
+        <div class="page-kicker">@now.ToString("dddd d MMMM")</div>
+        <h1>@greeting, @d.Merchant</h1>
         <p>Here is how your parcels are doing today.</p>
     </div>
     <div class="page-actions">
@@ -26,13 +41,49 @@ else if (d.Status == MerchantStatus.Suspended)
 {
     <div class="alert alert-error">@Icons.Get("alert")<div><strong>Your account is suspended.</strong> You cannot book new parcels. Call the hotline to sort it out.</div></div>
 }
-@if (!d.HasPayoutAccount)
+
+@if (current >= 0)
 {
-    <div class="alert alert-info">@Icons.Get("wallet")<div>Add a bKash, Nagad or bank account in <a asp-page="/Merchant/Settings">Settings</a> so we can pay you the cash we collect.</div></div>
+    <div class="card checklist mb">
+        <div class="card-head">
+            <div>
+                <h2>@Icons.Get("sparkle") Get started</h2>
+                <p>@doneCount of @steps.Length done. Finish these and your first parcel is on its way.</p>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="checklist-bar"><span style="width:@(100 * doneCount / steps.Length)%"></span></div>
+            <ol>
+                @for (var i = 0; i < steps.Length; i++)
+                {
+                    var step = steps[i];
+                    <li class="@(step.Done ? "done" : i == current ? "current" : "")">
+                        <span class="check-dot">@Icons.Get("check")</span>
+                        <span class="check-text">@step.Title<small>@step.Help</small></span>
+                        @if (!step.Done && step.Page is not null)
+                        {
+                            <a class="btn @(i == current ? "btn-primary" : "btn-outline") btn-sm" href="@step.Page">@step.Action</a>
+                        }
+                    </li>
+                }
+            </ol>
+        </div>
+    </div>
+}
+else if (active && s.Pending > 0 && !d.PickupOpen)
+{
+    <div class="next-step">
+        <span class="stat-icon">@Icons.Get("truck")</span>
+        <div class="next-step-text">
+            <strong>@s.Pending parcel@(s.Pending == 1 ? " is" : "s are") waiting to be collected</strong>
+            <span>Ask for a pickup and a rider comes to your shop, or drop them at the nearest hub.</span>
+        </div>
+        <a class="btn btn-primary" asp-page="/Merchant/Pickups">Request a pickup @Icons.Get("arrow-right")</a>
+    </div>
 }
 
 <div class="stats">
-    <a class="stat" asp-page="/Merchant/Parcels" asp-route-tab="Pending">
+    <a class="stat @(s.Pending > 0 && !d.PickupOpen && active ? "attention" : "")" asp-page="/Merchant/Parcels" asp-route-tab="Pending">
         <div class="stat-icon amber">@Icons.Get("clock")</div>
         <div><div class="stat-label">Waiting for pickup</div><div class="stat-value">@s.Pending</div></div>
     </a>
@@ -41,7 +92,7 @@ else if (d.Status == MerchantStatus.Suspended)
         <div><div class="stat-label">In transit</div><div class="stat-value">@s.InTransit</div></div>
     </a>
     <a class="stat" asp-page="/Merchant/Parcels" asp-route-tab="OutForDelivery">
-        <div class="stat-icon violet">@Icons.Get("bike")</div>
+        <div class="stat-icon dark">@Icons.Get("bike")</div>
         <div><div class="stat-label">Out for delivery</div><div class="stat-value">@s.OutForDelivery</div></div>
     </a>
     <a class="stat" asp-page="/Merchant/Parcels" asp-route-tab="Delivered">
@@ -67,7 +118,8 @@ else if (d.Status == MerchantStatus.Suspended)
         <div class="card-head"><h2>@Icons.Get("wallet") Your money</h2></div>
         <div class="card-body">
             <div class="stat-label">Waiting for your next payout</div>
-            <div class="stat-value @(d.Unpaid < 0 ? "negative" : "")">@Money.Taka(d.Unpaid)</div>
+            <div class="stat-value @(d.Unpaid < 0 ? "negative" : "")" style="font-size:30px">@Money.Taka(d.Unpaid)</div>
+            <p class="hint mt-0">Paid into your account every morning for the day before.</p>
             <div class="money-list mt">
                 <div><span class="muted">Collected in the last 30 days</span><span>@Money.Taka(d.CollectedLast30Days)</span></div>
                 <div><span class="muted">Paid to you this month</span><span>@Money.Taka(d.PaidThisMonth)</span></div>
@@ -76,7 +128,15 @@ else if (d.Status == MerchantStatus.Suspended)
                     <span>@(d.Stages.SuccessRate is { } rate ? $"{rate}%" : "—")</span>
                 </div>
             </div>
-            <a class="btn btn-outline btn-block mt" asp-page="/Merchant/Payments">See payments</a>
+            @if (d.Stages.SuccessRate is { } success)
+            {
+                <div class="meter mt" title="@success% of finished parcels delivered"><span style="width:@success%"></span></div>
+            }
+            @if (!d.HasPayoutAccount)
+            {
+                <div class="alert alert-info mt" style="margin-bottom:0">@Icons.Get("wallet")<div>Add a bKash, Nagad or bank account in <a asp-page="/Merchant/Settings">Settings</a> so we can pay you the cash we collect.</div></div>
+            }
+            <a class="btn btn-outline btn-block mt" asp-page="/Merchant/Payments">See payments @Icons.Get("arrow-right")</a>
         </div>
     </div>
 </div>
@@ -86,5 +146,17 @@ else if (d.Status == MerchantStatus.Suspended)
         <div><h2>Latest parcels</h2><p>@s.Total parcels in all, @s.Active on their way</p></div>
         <a class="btn btn-ghost btn-sm" asp-page="/Merchant/Parcels">View all @Icons.Get("arrow-right")</a>
     </div>
-    @await Html.PartialAsync("_ParcelTable", (d.Recent, "/Merchant/Parcel/", false, false))
+    @if (s.Total == 0)
+    {
+        <div class="empty">
+            @Icons.Get("package")
+            <h3>No parcels yet</h3>
+            <p>Book your first parcel and it shows up here, with every step from your shop to your customer.</p>
+            <a class="btn btn-primary" asp-page="/Merchant/NewParcel">@Icons.Get("plus") Book a parcel</a>
+        </div>
+    }
+    else
+    {
+        @await Html.PartialAsync("_ParcelTable", (d.Recent, "/Merchant/Parcel/", false, false))
+    }
 </div>

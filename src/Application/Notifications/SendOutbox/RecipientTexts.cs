@@ -8,9 +8,9 @@ using Domain.Parcels;
 namespace Application.Notifications.SendOutbox;
 
 /// <summary>
-/// Writes and sends the recipient's SMS for an outbox message, from the data as it is when sent: the rider and the cash
-/// to keep ready when the parcel is out for delivery, a thank-you when it is delivered. A message for a status the
-/// parcel has since left is dropped (sent with nothing to say).
+/// Writes and sends the recipient's SMS for an outbox message, from the data as it is when sent: a tracking link when
+/// booked, the rider and the cash to keep ready when the parcel is out for delivery, a thank-you when it is delivered.
+/// A message for a status the parcel has since left is dropped (sent with nothing to say).
 /// </summary>
 public class RecipientTexts(IAppDbContext db, ITenantContext tenantContext, ISmsSender sms, ITrackingLinks links)
 {
@@ -43,6 +43,9 @@ public class RecipientTexts(IAppDbContext db, ITenantContext tenantContext, ISms
 
         var text = payload.Status switch
         {
+            ParcelStatus.Pending when parcel.Status == ParcelStatus.Pending =>
+                $"Your parcel {parcel.TrackingCode} from {parcel.Merchant} has been booked with {tenant.Name}." +
+                $" Track: {links.Track(parcel.TrackingCode)}",
             ParcelStatus.OutForDelivery when parcel.Status == ParcelStatus.OutForDelivery =>
                 $"Your parcel {parcel.TrackingCode} from {parcel.Merchant} is out for delivery today" +
                 (parcel.Rider is null ? "." : $" with {parcel.Rider.Name}, {PhoneNumber.Parse(parcel.Rider.Phone).Value.Local}.") +

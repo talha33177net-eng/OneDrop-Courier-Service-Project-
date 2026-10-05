@@ -2,7 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
 using Application.Merchants.Admin;
 using Domain.Common;
+using Domain.Delivery;
 using Domain.Merchants;
+using Domain.Parcels;
 
 namespace Application.Merchants.Account;
 
@@ -92,6 +94,20 @@ public class MerchantAccountHandler(IAppDbContext db, ICurrentUser currentUser)
             return PointNotFound;
         }
 
+        // Parcels waiting here were priced, and their pickups sent to a hub, by the point's zone
+        var zones = await db.Areas
+            .Where(a => a.Id == areaId || a.Id == point.AreaId)
+            .Select(a => a.ZoneId)
+            .Distinct()
+            .CountAsync(cancellationToken);
+        if (zones > 1 && await HasOpenWorkAsync(point.Id, cancellationToken))
+        {
+            return Error.Conflict(
+                "pickupPoint.busy",
+                "Parcels or a pickup are waiting at this point. Move it to another zone once they have been picked up, " +
+                "or add a new pickup point for the new place.");
+        }
+
         return await SaveAsync(point.Change(areaId, name, address, phone), cancellationToken);
     }
 
@@ -117,6 +133,14 @@ public class MerchantAccountHandler(IAppDbContext db, ICurrentUser currentUser)
         await transaction.CommitAsync(cancellationToken);
 
         return Result.Success();
+    }
+
+    private async Task<bool> HasOpenWorkAsync(long pointId, CancellationToken cancellationToken)
+    {
+        return await db.Parcels.AnyAsync(p => p.PickupPointId == pointId && p.Status == ParcelStatus.Pending, cancellationToken) ||
+            await db.PickupRequests.AnyAsync(
+                r => r.PickupPointId == pointId && (r.Status == PickupStatus.Requested || r.Status == PickupStatus.Assigned),
+                cancellationToken);
     }
 
     private Task<Merchant> MerchantAsync(CancellationToken cancellationToken)

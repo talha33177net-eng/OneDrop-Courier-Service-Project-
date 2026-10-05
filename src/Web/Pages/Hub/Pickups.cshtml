@@ -10,7 +10,7 @@
         <h1>Pickup requests</h1>
         <p>Merchants waiting for a rider to collect their parcels. Assign a rider to each.</p>
     </div>
-    <div class="page-actions">@await Html.PartialAsync("_HubSwitch", (Model.Hubs, Model.Hub))</div>
+    <div class="page-actions">@await Html.PartialAsync("_HubSwitch", (Model.Work, Model.Hub))</div>
 </div>
 
 <partial name="_Alerts" />

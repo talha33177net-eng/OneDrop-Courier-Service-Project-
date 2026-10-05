@@ -91,10 +91,10 @@ three test suites pass; the app was checked live on the dev database. The plan's
 | Domain | `src/Domain` | `Common` (Entity with domain events, TenantEntity, Result/Error, PhoneNumber), `Platform/Tenant`, `Network` (Hub, Zone with `City` and `IsSuburb`, Area), `Pricing` (ServiceArea, DeliveryRate, ParcelCharges), `Merchants` (Merchant with status, payout account, webhook; MerchantApiKey; PickupPoint; WebhookSignature), `Parcels` (Parcel and its state machine, ParcelEvent, ParcelStatusChanged), `Delivery` (Rider, DeliveryRun, DeliveryAttempt, PickupRequest), `Payments` (LedgerEntry, Payout), `Notifications` (OutboxMessage) |
 | Application | `src/Application` | Use cases as vertical slices: `Parcels` (CreateParcel, Browse, ParcelActions, Labels, Track, Quote, FraudCheck, BulkImport), `Hubs` (HubDirectory, HubScan, HubBoard, AssignParcels, Runs), `Delivery` (Pickups, RiderDay, Riders), `Merchants` (Onboarding, Admin, Account, ApiKeys, Webhook), `Payments` (RunPayouts/PayoutsJob, MerchantPayments, AdminPayouts), `Pricing/Rates`, `Network` (ListAreas, Coverage), `Dashboards`, `Notifications` (outbox contracts, RecipientTexts + SendOutboxJob, SendWebhooksJob, FailedMessages). Interfaces: `IAppDbContext`, `ITenantContext`, `ITenantCatalog`, `ICurrentUser`, `ISmsSender`, `IWebhookSender`, `IPayoutGateway`, `ITrackingLinks`, `IUserAccounts`, `IOperationsFeed`, `ITenantJob` |
 | Infrastructure | `src/Infrastructure` | `Persistence/AppDbContext` (query filters, outbox writer, `AcrossTenantsAsync`), `Configurations/*`, `TenantSaveInterceptor`, `TenantSessionInterceptor`, `MultiTenancy`, `Identity` (AppUser, UserAccounts), `Sms/FakeSmsSender`, `Payments/FakePayoutGateway`, `Webhooks/HttpWebhookSender`, `Seeding` (DemoDataSeeder, DemoActivity), `Jobs` (Hangfire, TenantJobRunner, TenantJobRegistry, OutboxDispatcher) |
-| Web | `src/Web` | Razor Pages: public site (`/`, `/Track`, `/Coverage`, `/Account/*`), `Merchant/*`, `Hub/*`, `Rider/*`, `Admin/*`, `Platform/Tenants`, `Dev/*`; `Api/V1` (parcels, charge, areas); `Live` (SignalR); `Display` (`Icons`, `Statuses`, `Money`); `wwwroot/css/site.css` (the design system) |
+| Web | `src/Web` | Razor Pages: public site (`/`, `/Track`, `/Coverage`, `/Account/*`), `Merchant/*`, `Hub/*`, `Rider/*`, `Admin/*`, `Platform/Tenants`, `Dev/*`; `Api/V1` (parcels, charge, areas); `Live` (SignalR); `Display` (`Icons`, `Statuses`, `Money`); `wwwroot/css/site.css` (the design system, with its motion), `wwwroot/css/landing.css` (the front page's drawings) and `wwwroot/js/site.js` (shared behaviours: count-up, busy buttons, confirm dialog, toasts, tips, "/" search, drawings resting off screen, sections rising in); `Pages/Shared/Art/*` (the front page's line drawings), `Pages/Shared/_BrandMark.cshtml` (the logo); `wwwroot/images/logo.svg` and `logo-on-dark.svg` (the logo with its name, outlined), `wwwroot/icons` (app icons) |
 | Database | `src/Database` | SQL project (Microsoft.Build.Sql 2.1.0) → `Database.dacpac`. Owns the schema |
 | Database Update | `src/Database Update` | DbUp: `Scripts/2026/001_SeedCourier.sql` (the courier, 16 hubs, 21 zones, 87 areas, the rate card); `Scripts/Pre` empty |
-| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 109 + 6 + 50 = **165 tests, all passing** |
+| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 111 + 6 + 57 = **174 tests, all passing** |
 | Tools | `tools/db/publish.ps1`, `tools/Simulator` | Deploy a database; book made-up shops' parcels through the running app's API (`--parcels 40 --pace 2`) |
 | Docker and CI | `Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml` | Compose = SQL Server 2025 + deploy + app on `onedrop.localhost:5080`; CI deploys a throwaway SQL Server from nothing and runs every suite |
 
@@ -112,7 +112,8 @@ three test suites pass; the app was checked live on the dev database. The plan's
 - **Sign-up and approval.** `/Account/Register` makes a `Pending` merchant with its login and default pickup point and
   signs it in; the admin approves (`Active`), suspends or reactivates on `/Admin/Merchant/{id}`, or adds a merchant
   directly (`/Admin/NewMerchant`, active at once).
-- **Hub.** Board (live counts: pickups open, coming from other hubs, waiting for a rider, to send on, out with riders,
+- **Hub.** "Choose your hub" first (`/Hub/Choose`: every hub with its waiting work, busiest first; the choice is
+  remembered until the next sign-in, and the hub menu on each page shows each hub's waiting count). Board (live counts: pickups open, coming from other hubs, waiting for a rider, to send on, out with riders,
   to hand back, cash with riders), scan page with three modes (Receive, Dispatch, Hand back; the answer says what to do
   next), pickups (assign a rider of this hub), assign parcels to a rider (opens the rider's `DeliveryRun` for the day and
   a `DeliveryAttempt` per parcel), rider closing (cash received against expected; held and refused parcels go back on
@@ -122,12 +123,16 @@ three test suites pass; the app was checked live on the dev database. The plan's
 - **Admin.** Live dashboard (today's counts, stages, last 7 days, hubs, top merchants, cash with riders, owed to
   merchants), merchants, riders (add with a login, edit, stop), payouts (owed per merchant, run now, payouts and
   invoices), rates (change for new bookings only), coverage, failed messages (send again).
-- **Public.** Landing page with services, the rate card and a tracking box; tracking page (status per step, the hub, a
-  hold's reason; never the address, phone or amounts; rate limited per address); coverage list.
-- **Texts and webhooks.** `Parcel` raises `ParcelStatusChanged` on every move; the save writes a
-  `ParcelStatusChangedMessage` (webhook) and, for out for delivery / delivered / partly delivered, a
-  `RecipientTextMessage` to the outbox. Texts are written at send time and skipped when out of date; webhooks follow
-  Standard Webhooks (`parcel.status_changed`). Retries after 1, 2, 4, 8 minutes, then given up.
+- **Public.** Landing page: the promise, a tracking box and the courier's real counts (cities, hubs, areas) beside an
+  animated line drawing (a rider driving round a little planet of shops, a hub and homes, parcels on parachutes, cards
+  following one parcel), a ribbon of services, the four steps drawn and animated, services, the rate card and a closing
+  call to action; tracking page (status per step, the hub, a hold's reason; never the address, phone or amounts; rate
+  limited per address); coverage list.
+- **Texts and webhooks.** `Parcel` raises `ParcelBooked` once, at booking, and `ParcelStatusChanged` on every move after
+  that; the save writes a `RecipientTextMessage` for the booking (a tracking link), for out for delivery, delivered and
+  partly delivered, and a `ParcelStatusChangedMessage` (webhook) for every move — booking itself never posts to the
+  webhook, since the merchant made that change itself. Texts are written at send time and skipped when out of date;
+  webhooks follow Standard Webhooks (`parcel.status_changed`). Retries after 1, 2, 4, 8 minutes, then given up.
 - **Fraud check.** Counts a phone's parcels at every merchant of the courier (delivered, partly, returned, in
   progress) with the merchant filter lifted, and returns counts and a verdict only.
 - **Live dashboards.** After a committed save touching parcels, runs, attempts, pickups or riders, the courier's SignalR
@@ -157,6 +162,7 @@ three test suites pass; the app was checked live on the dev database. The plan's
 | **2026-10-04: pivot to a traditional courier** (owner): no grouping, one parcel = one delivery; charges by service area and weight; COD charge; next-day payouts | The owner wants the product to work like Bangladesh's couriers (Steadfast) |
 | Start the rebuild from the last commit (`3b48bc9`); the uncommitted Week 5 rewrite stashed (owner) | Clean base; nothing lost |
 | Keep the multi-tenant base and all three isolation layers, seed one courier (owner) | The isolation work is sound and lets a partner courier be added later without a rewrite |
+| Hub pages ask which hub first; the admin's dashboard stays courier-wide (owner's review, 2026-10-04) | Staff work at one hub, but an admin locked to one hub would miss work waiting at the others |
 | Reset both databases and replace the DbUp history with one new seed (owner) | The old schema and data were the grouping product's; a fresh start is simpler than migrating |
 | Recipients have no accounts: public tracking by code and SMS only; the phone sign-in is gone (owner) | That is how couriers work; the tracking code is the key |
 | Service area from the pickup and destination zones (`Zone.City`, `Zone.IsSuburb`) | Couriers price inside city, suburb and outside city; the zone already belongs to a city |
@@ -181,6 +187,12 @@ three test suites pass; the app was checked live on the dev database. The plan's
 | Outbox in the change's transaction; texts written at send time; webhooks in their own loop | A change never saves without its message; a slow merchant server never delays an SMS |
 | Integration tests use `OneDrop-Test`; each test makes its own merchants and riders | Test data never touches dev; parallel tests never count each other's parcels |
 | Secrets only in git-ignored `*.Local.json` | The repository never holds the password |
+| 2026-10-05: a rider with parcels, an open run or an assigned pickup cannot be stopped or moved to another hub | A stopped rider's app shows no work and a moved one hands cash in at the wrong hub, so that work would be stuck |
+| 2026-10-05: a pickup point cannot move to another zone while parcels or a pickup wait there | Those parcels were priced, and the pickup sent to a hub, by the old zone |
+| 2026-10-05: a hold's "deliver on" day must be after today | A past day would put the parcel straight back in the queue as if the customer had asked for it |
+| 2026-10-05 UI: success is a toast that goes by itself, a problem stays on the page; anything hard to undo asks first (`data-confirm`, a styled dialog); motion only on first paint (`html.js-enter`) and never for reduced-motion users | People read problems, not confirmations; live dashboards must not jump on every update |
+| 2026-10-05 brand (owner): a new logo, a drop-shaped map pin holding a taped parcel and landing on a ripple, on a sky blue tile; colour kept to ink on cool light grey paper with one accent, sky blue `#7cc6f2` (`--accent`; `--accent-text` `#0b6a9e` for text), flat fills, no gradients or glows; display headings in Bricolage Grotesque | The green made the product look like a copy of Steadfast; ultraviolet was rejected as looking AI-generated and marigold as too yellow; the owner asked for something light like sky blue. One exact door for each parcel is the name's promise |
+| 2026-10-05 front page: drawn, looping animations (line art, ink and sky blue) only on the public front page; they rest while off screen and stay still for reduced-motion users | The owner asked for a cartoon animation like Steadfast's, but not a copy: a little planet instead of their road strip |
 
 ---
 
@@ -254,13 +266,16 @@ dotnet run --project src/Web
 | EF cannot filter after a constructor projection, nor translate `group by` then `join` | Project with member initialisers; aggregate first, then look up names in a second query |
 | `~/` links are fingerprinted by `MapStaticAssets` | Use a plain path for the web manifest and service worker |
 | Razor HTML-encodes `৳` written inside a C# string | Use `Money.Taka(x)` (an `HtmlString`) or keep the symbol in markup |
-| Inter has no ৳ glyph; Windows falls back to an odd one | The layouts load Noto Sans Bengali for that one character (`text=%E0%A7%B3`) |
+| Plus Jakarta Sans (the UI font) has no ৳ glyph; Windows falls back to an odd one | `_Fonts.cshtml` loads Noto Sans Bengali for that one character (`text=%E0%A7%B3`) |
 | `.mono` sets `font-size: .92em`, which shrinks an `h1` | `h1.mono` sets its own size |
 | A grid container counts every child: a stray `<label>` or `<input>` takes a cell | Hidden helpers (`#nav-open`, `.nav-scrim`) are `display: none` outside the phone layout |
 | Razor's encoder turns `+` and `=` into entities | Tests `WebUtility.HtmlDecode` pages before searching them |
 | Public pages are rate limited per address, and all test requests share one | Each test `Visitor` sends `X-Test-Client` with an address of its own |
 | Headless Chrome's `--window-size` is never narrower than its minimum | Use DevTools emulation (`Emulation.setDeviceMetricsOverride`, width 390, `mobile: true`) and compare `scrollWidth` with `clientWidth` |
 | The VPN link to the SQL Server can be slow | Check `sys.dm_exec_sessions`; stop and rerun a stalled publish |
+| A CSS rule beats an SVG presentation attribute (`stroke-width="5"` loses to `.o { stroke-width: 2.4 }`) | In the drawings, a one-off stroke or fill goes in `style="…"` |
+| Headless screenshots do not move animations that run on the compositor (the planet's turn) | To see a frame, pause every animation at a time: `document.getAnimations().forEach(a => { a.pause(); a.currentTime = t; })` |
+| A short class name on a page can collide with a shared partial's (`.step` vs `.progress-steps .step`) | Front-page classes are prefixed (`how-step`, `hero-…`); search `Pages` before adding a bare one |
 
 ---
 

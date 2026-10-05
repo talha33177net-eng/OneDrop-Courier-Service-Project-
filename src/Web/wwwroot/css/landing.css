@@ -1,0 +1,136 @@
+/* The front page's drawings and their motion: the little planet the rider drives around, the four steps of a
+   parcel's day, and the pin at the end. Line art in ink on paper with sky blue where the eye should go. Loaded by the
+   front page only; site.js pauses a drawing while it is off screen, and nothing moves for reduced-motion users. */
+
+.art { overflow: visible; }
+.art text { font-family: var(--font); }
+.art .o { stroke: var(--ink); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+.art .o-thin { stroke: var(--ink); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; fill: none; }
+.art .w { fill: #ffffff; }
+.art .g { fill: #e6ecf2; }
+.art .k { fill: var(--ink); }
+.art .y { fill: var(--accent); }
+.art .y2 { fill: #c6e7fb; }
+.art .n { fill: none; }
+.art.paused, .art.paused * { animation-play-state: paused !important; }
+
+@keyframes art-spin { to { transform: rotate(360deg); } }
+@keyframes art-bob { to { transform: translateY(-2px); } }
+
+/* ---------- The little planet ---------- */
+
+.scene { position: relative; width: 100%; aspect-ratio: 640 / 600; }
+.scene > svg, .scene .planet { position: absolute; inset: 0; width: 100%; height: 100%; }
+.scene svg { overflow: visible; }
+
+/* The planet turns as one layer, so the browser only rotates a picture it has already drawn */
+.scene .planet { transform-origin: 50% 55%; animation: planet-turn 70s linear infinite; will-change: transform; }
+@keyframes planet-turn { to { transform: rotate(-360deg); } }
+
+.scene .sun-rays { transform-box: fill-box; transform-origin: center; animation: art-spin 40s linear infinite; }
+.scene .cloud { animation: drift 14s ease-in-out infinite alternate; }
+.scene .cloud.slow { animation-duration: 19s; animation-delay: -6s; }
+@keyframes drift { from { transform: translateX(-18px); } to { transform: translateX(18px); } }
+.scene .birds { animation: fly-by 26s linear infinite; }
+.scene .bird { transform-box: fill-box; transform-origin: center; animation: flap .5s ease-in-out infinite alternate; }
+.scene .bird + .bird { animation-delay: -.25s; }
+@keyframes fly-by { 0% { transform: translate(90px, 30px); opacity: 0; } 8%, 88% { opacity: 1; } 100% { transform: translate(600px, -30px); opacity: 0; } }
+@keyframes flap { to { transform: scaleY(.45); } }
+.scene .spark { transform-box: fill-box; transform-origin: center; animation: twinkle 2.6s ease-in-out infinite; }
+.scene .spark:nth-of-type(2) { animation-delay: -.9s; }
+.scene .spark:nth-of-type(3) { animation-delay: -1.7s; }
+@keyframes twinkle { 0%, 100% { transform: scale(.4); opacity: .3; } 50% { transform: scale(1); opacity: 1; } }
+
+/* The rider: a light bob, wheels turning, the pennant flapping, wind streaming back */
+.scene .rider { animation: art-bob .55s ease-in-out infinite alternate; }
+.art .spokes { transform-box: fill-box; transform-origin: center; animation: art-spin .45s linear infinite; }
+.scene .pennant { transform-box: fill-box; transform-origin: 100% 50%; animation: flutter .35s ease-in-out infinite alternate; }
+@keyframes flutter { from { transform: skewY(-8deg) scaleX(.92); } to { transform: skewY(6deg); } }
+.scene .wind { stroke-dasharray: 18 14; animation: wind .6s linear infinite; }
+.scene .wind:nth-of-type(2) { animation-duration: .8s; }
+@keyframes wind { to { stroke-dashoffset: 64; } }
+.scene .puff { transform-box: fill-box; transform-origin: center; animation: puff 1.2s ease-out infinite; }
+.scene .puff + .puff { animation-delay: -.6s; }
+@keyframes puff { from { transform: translateX(0) scale(.5); opacity: .9; } to { transform: translateX(-30px) scale(1.3); opacity: 0; } }
+
+/* Parcels drifting down on parachutes */
+.scene .chute { animation: chute 9s linear infinite; opacity: 0; }
+.scene .chute.late { animation-delay: -4.5s; animation-duration: 10s; }
+.scene .sway { transform-box: fill-box; transform-origin: 50% 0; animation: sway 2.2s ease-in-out infinite alternate; }
+@keyframes chute { 0% { transform: translateY(-90px); opacity: 0; } 10%, 75% { opacity: 1; } 100% { transform: translateY(250px); opacity: 0; } }
+@keyframes sway { from { transform: rotate(-9deg); } to { transform: rotate(9deg); } }
+
+/* Status cards following one parcel along its way */
+.scene .chip { opacity: 0; animation: chip 12s var(--ease) infinite; }
+.scene .chip:nth-of-type(2) { animation-delay: 3s; }
+.scene .chip:nth-of-type(3) { animation-delay: 6s; }
+.scene .chip:nth-of-type(4) { animation-delay: 9s; }
+@keyframes chip { 0% { opacity: 0; transform: translateY(10px); } 3%, 22% { opacity: 1; transform: none; } 25%, 100% { opacity: 0; transform: translateY(-10px); } }
+.scene .chip .t { font-size: 14px; font-weight: 750; fill: var(--ink); }
+.scene .chip .s { font-size: 11.5px; font-weight: 550; fill: var(--muted); }
+
+/* ---------- The four steps ---------- */
+
+.step-art { display: block; width: 100%; height: auto; }
+
+/* Book: a tap, a tick, and the label comes out from behind the phone */
+.art-book .book-tap { transform-box: fill-box; transform-origin: center; animation: book-tap 4s var(--ease) infinite; }
+@keyframes book-tap { 0%, 6% { transform: scale(.3); opacity: 0; } 10% { opacity: 1; } 26%, 100% { transform: scale(1.9); opacity: 0; } }
+.art-book .book-button { animation: book-press 4s infinite; }
+@keyframes book-press { 0%, 8%, 18%, 100% { fill: var(--ink); } 10%, 16% { fill: var(--accent); } }
+.art-book .book-check { transform-box: fill-box; transform-origin: center; animation: book-check 4s var(--spring) infinite; }
+@keyframes book-check { 0%, 16% { transform: scale(0); } 26%, 86% { transform: scale(1); } 94%, 100% { transform: scale(0); } }
+.art-book .book-label { transform-box: fill-box; transform-origin: 0 50%; animation: book-label 4s var(--ease) infinite; }
+@keyframes book-label { 0%, 20% { transform: translateX(-62px); } 36%, 88% { transform: rotate(5deg); } 100% { transform: translateX(-62px); } }
+
+/* Pick up: a parcel hops from the shop into the rider's box */
+.art-pickup .pickup-bike { animation: art-bob .5s ease-in-out infinite alternate; }
+.art-pickup .pickup-hop { animation: hop-x 2.8s linear infinite; }
+.art-pickup .pickup-hop-y { animation: hop-y 2.8s infinite; }
+@keyframes hop-x { 0%, 20% { transform: translateX(0); } 70%, 100% { transform: translateX(56px); } }
+@keyframes hop-y {
+    0%, 20% { transform: translateY(0); opacity: 1; animation-timing-function: cubic-bezier(.2, .7, .4, 1); }
+    45% { transform: translateY(-84px); animation-timing-function: cubic-bezier(.6, 0, .8, .3); }
+    70% { transform: translateY(-50px); opacity: 1; }
+    78%, 100% { transform: translateY(-38px); opacity: 0; }
+}
+
+/* Sort at the hub: parcels ride the belt under the scanner, which lights as each one passes */
+.art-hub .hub-box { animation: belt 6s linear infinite; }
+.art-hub .hub-box:nth-child(2) { animation-delay: -2s; }
+.art-hub .hub-box:nth-child(3) { animation-delay: -4s; }
+@keyframes belt { 0% { transform: translateX(14px); opacity: 0; } 6%, 90% { opacity: 1; } 100% { transform: translateX(206px); opacity: 0; } }
+.art-hub .hub-beam { animation: beam 2s infinite; }
+@keyframes beam { 0%, 22%, 56%, 100% { opacity: .12; } 36%, 42% { opacity: .7; } }
+.art-hub .hub-marks { animation: marks .7s linear infinite; }
+@keyframes marks { to { stroke-dashoffset: -14; } }
+
+/* Get paid: the cash leaves the door and lands in the shop's wallet */
+.art-paid .paid-coin-x { animation: coin-x 3.6s linear infinite; }
+.art-paid .paid-coin-y { animation: coin-y 3.6s infinite; }
+.art-paid .paid-coin { transform-box: fill-box; transform-origin: center; animation: coin-flip .45s linear infinite alternate; }
+@keyframes coin-x { 0%, 15% { transform: translateX(0); } 64%, 100% { transform: translateX(140px); } }
+@keyframes coin-y {
+    0%, 12% { transform: translateY(0) scale(0); opacity: 1; }
+    20% { transform: translateY(-24px) scale(1); animation-timing-function: cubic-bezier(.2, .7, .4, 1); }
+    40% { transform: translateY(-78px); animation-timing-function: cubic-bezier(.6, 0, .8, .3); }
+    64% { transform: translateY(-4px) scale(.9); opacity: 1; }
+    70%, 100% { transform: translateY(2px) scale(.4); opacity: 0; }
+}
+@keyframes coin-flip { from { transform: scaleX(1); } to { transform: scaleX(.25); } }
+.art-paid .paid-wallet { transform-box: fill-box; transform-origin: 50% 100%; animation: wallet 3.6s var(--ease) infinite; }
+@keyframes wallet { 0%, 63%, 82%, 100% { transform: none; } 68% { transform: translateY(3px) scale(1.05, .95); } }
+.art-paid .paid-plus { animation: plus 3.6s var(--ease) infinite; }
+@keyframes plus { 0%, 64% { transform: translateY(10px); opacity: 0; } 72%, 88% { transform: none; opacity: 1; } 100% { transform: translateY(-8px); opacity: 0; } }
+
+/* ---------- The pin at the end: dropped on the page, a ripple where it lands ---------- */
+
+.cta-art { width: 210px; height: auto; flex: none; }
+.cta-art .cta-ripple { transform-box: fill-box; transform-origin: center; animation: cta-ripple 3s ease-out infinite; }
+.cta-art .cta-ripple + .cta-ripple { animation-delay: -1.5s; }
+@keyframes cta-ripple { from { transform: scale(.25); opacity: 1; } to { transform: scale(1.5); opacity: 0; } }
+.cta-art .cta-pin { animation: art-float 3s ease-in-out infinite alternate; }
+@keyframes art-float { from { transform: translateY(-4px); } to { transform: translateY(4px); } }
+.cta-art.revealed .cta-drop { animation: cta-drop .9s cubic-bezier(.5, 0, .75, 0) both, cta-land .5s var(--spring) .9s forwards; transform-box: fill-box; transform-origin: 50% 100%; }
+@keyframes cta-drop { from { transform: translateY(-70px); opacity: 0; } 40% { opacity: 1; } to { transform: none; } }
+@keyframes cta-land { 0% { transform: scale(1.12, .86); } 100% { transform: none; } }

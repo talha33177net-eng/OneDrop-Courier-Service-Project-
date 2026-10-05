@@ -1,12 +1,14 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace Web.Pages.Hub;
 
 /// <summary>
-/// Remembers the hub staff last worked at, so every hub page opens on it without asking again. Only a preference: every
-/// hub page still checks the hub is this courier's, and the cookie is only written after a page with that hub has
-/// rendered. Host-only, like the sign-in cookie, so it stays with its courier.
+/// Remembers the hub staff chose, so every hub page opens on it without asking again; before a hub is chosen, a hub
+/// page sends them to choose one (<see cref="ChooseModel"/>). Only a preference: every hub page still checks the hub
+/// is this courier's, and the cookie is only written after a page with that hub has rendered. Host-only, like the
+/// sign-in cookie, so it stays with its courier; signing in or out forgets it.
 /// </summary>
 public sealed class RememberHub : IAsyncPageFilter
 {
@@ -31,6 +33,13 @@ public sealed class RememberHub : IAsyncPageFilter
 
     public async Task OnPageHandlerExecutionAsync(PageHandlerExecutingContext context, PageHandlerExecutionDelegate next)
     {
+        if (HttpMethods.IsGet(context.HttpContext.Request.Method) && context.HandlerInstance is HubPage && Of(context.HttpContext) is null)
+        {
+            context.Result = new RedirectToPageResult("/Hub/Choose", new { next = context.ActionDescriptor.ViewEnginePath.Split('/')[^1] });
+
+            return;
+        }
+
         var executed = await next();
         var hub = context.HttpContext.Request.Query["hub"].ToString();
         if (executed.Result is PageResult && hub.Length is > 0 and <= 10 && hub.All(char.IsLetterOrDigit))

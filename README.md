@@ -1,5 +1,10 @@
 # Project
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="src/Web/wwwroot/images/logo-on-dark.svg" />
+  <img src="src/Web/wwwroot/images/logo.svg" alt="OneDrop courier" width="260" />
+</picture>
+
 **OneDrop Courier: doorstep delivery and cash on delivery across Bangladesh.** A courier service for online shops, in
 the way Steadfast, Pathao or RedX work: a merchant books parcels, a rider picks them up, the hubs sort them, a rider
 delivers each one and collects the cash on delivery, and the merchant is paid that cash, less the courier's charges,

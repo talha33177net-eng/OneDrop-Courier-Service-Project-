@@ -2,20 +2,19 @@
 @{
     var tenant = TenantContext.Tenant;
     var signedIn = Context.User.Identity?.IsAuthenticated == true;
+    var name = tenant?.Name ?? "OneDrop";
 }
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0b8f6a" />
-    <title>@ViewData["Title"] · @(tenant?.Name ?? "OneDrop")</title>
+    <meta name="theme-color" content="#f5f7fa" />
+    <title>@ViewData["Title"] · @name</title>
     <link rel="icon" href="~/icons/icon.svg" type="image/svg+xml" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
-    @* Only the taka sign, which Inter lacks *@
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@500;700&text=%E0%A7%B3&display=swap" />
+    <partial name="_Fonts" />
+    @* The public pages' headings *@
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&display=swap" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     @await RenderSectionAsync("Head", required: false)
 </head>
@@ -23,13 +22,13 @@
     <header class="site-header">
         <div class="site-header-inner">
             <a class="site-brand" href="/">
-                <span class="brand-mark">@Icons.Get("package")</span>
-                @(tenant?.Name ?? "OneDrop")
+                <partial name="_BrandMark" />
+                @name
             </a>
             @if (tenant is not null)
             {
                 <nav class="site-nav" aria-label="Main">
-                    <a href="/#services">Services</a>
+                    <a href="/#how">How it works</a>
                     <a href="/#pricing">Pricing</a>
                     <a asp-page="/Coverage">Coverage</a>
                     <a asp-page="/Track">Track a parcel</a>
@@ -56,13 +55,42 @@
     </main>
     <footer class="site-footer">
         <div class="site-footer-inner">
-            <span>© @DateTime.UtcNow.Year @(tenant?.Name ?? "OneDrop"). Doorstep delivery and cash on delivery across Bangladesh.</span>
             @if (tenant is not null)
             {
-                <span>Hotline @tenant.SupportPhone · <a asp-page="/Track">Track a parcel</a> · <a asp-page="/Coverage">Coverage</a></span>
+                <div class="footer-grid">
+                    <div>
+                        <a class="site-brand" href="/">
+                            <partial name="_BrandMark" />
+                            @name
+                        </a>
+                        <p>Doorstep delivery and cash on delivery across Bangladesh, with the cash paid to the shop the next day.</p>
+                    </div>
+                    <div>
+                        <h4>Send</h4>
+                        <a asp-page="/Account/Register">Become a merchant</a>
+                        <a href="/#pricing">Pricing</a>
+                        <a asp-page="/Coverage">Coverage</a>
+                        <a asp-page="/Account/Login">Merchant sign in</a>
+                    </div>
+                    <div>
+                        <h4>Receive</h4>
+                        <a asp-page="/Track">Track a parcel</a>
+                        <a href="/#how">How delivery works</a>
+                    </div>
+                    <div>
+                        <h4>Talk to us</h4>
+                        <a href="tel:@tenant.SupportPhone">Hotline @tenant.SupportPhone</a>
+                    </div>
+                </div>
             }
+            <div class="footer-bottom">
+                <span>© @DateTime.UtcNow.Year @name</span>
+                <span>Doorstep delivery and cash on delivery across Bangladesh</span>
+                <span>Developed and designed by <a class="credit-link" href="https://talha.portfolio.bdcorex.com/" target="_blank" rel="noopener">Talha</a></span>
+            </div>
         </div>
     </footer>
+    <script src="~/js/site.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

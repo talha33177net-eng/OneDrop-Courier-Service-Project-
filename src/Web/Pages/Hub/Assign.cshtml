@@ -1,9 +1,11 @@
 @page
 @model Web.Pages.Hub.AssignModel
+@inject ITenantContext TenantContext
 @{
     ViewData["Title"] = "Assign to riders";
     var areas = Model.Waiting.Select(p => p.Area).Distinct().Order().ToList();
     var shown = Model.Area is null ? Model.Waiting : Model.Waiting.Where(p => p.Area == Model.Area).ToList();
+    var today = TenantContext.Require().Today(DateTime.UtcNow);
 }
 
 <div class="page-head">
@@ -11,24 +13,36 @@
         <h1>Assign to riders</h1>
         <p>Tick the parcels a rider takes out now and choose the rider. They go on the rider's run sheet for today.</p>
     </div>
-    <div class="page-actions">@await Html.PartialAsync("_HubSwitch", (Model.Hubs, Model.Hub))</div>
+    <div class="page-actions">@await Html.PartialAsync("_HubSwitch", (Model.Work, Model.Hub))</div>
 </div>
 
 <partial name="_Alerts" />
 
+<div class="tip" data-tip="hub-assign">
+    @Icons.Get("bulb")
+    <div>
+        <div class="tip-title">Three steps</div>
+        <ol>
+            <li>Filter by area to keep a rider's route together</li>
+            <li>Tick the parcels</li>
+            <li>Choose the rider and hand them over</li>
+        </ol>
+    </div>
+</div>
+
 <div class="grid grid-side">
     <div class="card">
         <div class="card-head">
-            <div><h2>Waiting for a rider</h2><p>@Model.Waiting.Count parcels at this hub for its areas</p></div>
+            <div><h2>Waiting for a rider</h2><p>@Model.Waiting.Count parcel@(Model.Waiting.Count == 1 ? "" : "s") at this hub for its areas</p></div>
         </div>
         @if (areas.Count > 1)
         {
             <div class="filters">
                 <div class="pill-row">
-                    <a class="pill" style="@(Model.Area is null ? "background:var(--brand-soft);color:var(--brand-strong)" : "")" asp-route-hub="@Model.Hub?.Code">All areas</a>
+                    <a class="pill @(Model.Area is null ? "active" : "")" asp-route-hub="@Model.Hub?.Code">All areas · @Model.Waiting.Count</a>
                     @foreach (var area in areas)
                     {
-                        <a class="pill" style="@(Model.Area == area ? "background:var(--brand-soft);color:var(--brand-strong)" : "")" asp-route-hub="@Model.Hub?.Code" asp-route-area="@area">@area (@Model.Waiting.Count(p => p.Area == area))</a>
+                        <a class="pill @(Model.Area == area ? "active" : "")" asp-route-hub="@Model.Hub?.Code" asp-route-area="@area">@area · @Model.Waiting.Count(p => p.Area == area)</a>
                     }
                 </div>
             </div>
@@ -36,22 +50,33 @@
         <form method="post" asp-route-hub="@Model.Hub?.Code" id="assign">
             @if (shown.Count == 0)
             {
-                <div class="empty">@Icons.Get("check-circle")<h3>Nothing waiting</h3><p>Scan parcels in first; those delivered from this hub show up here.</p></div>
+                <div class="empty">@Icons.Get("check-circle")<h3>Nothing waiting</h3><p>Scan parcels in first; those delivered from this hub show up here.</p><a class="btn btn-outline" asp-page="/Hub/Scan" asp-route-hub="@Model.Hub?.Code">@Icons.Get("scan") Scan parcels in</a></div>
             }
             else
             {
                 <div class="table-wrap">
                     <table class="table compact">
-                        <thead><tr><th class="check-col"><input type="checkbox" data-select-all aria-label="Select all" /></th><th>Parcel</th><th>Recipient</th><th>Area</th><th>Status</th><th class="num">COD</th></tr></thead>
+                        <thead><tr><th class="check-col"><input type="checkbox" data-select-all aria-label="Select all" title="Select every parcel due today" /></th><th>Parcel</th><th>Recipient</th><th>Area</th><th>Status</th><th class="num">COD</th></tr></thead>
                         <tbody>
                             @foreach (var p in shown)
                             {
-                                <tr>
-                                    <td class="check-col"><input type="checkbox" name="codes" value="@p.TrackingCode" aria-label="Select @p.TrackingCode" /></td>
+                                var later = p.HoldUntil is { } day && day > today;
+                                <tr class="@(later ? "later" : "")">
+                                    <td class="check-col"><input type="checkbox" name="codes" value="@p.TrackingCode" aria-label="Select @p.TrackingCode" data-later="@(later ? "true" : null)" /></td>
                                     <td><a class="code-link" asp-page="/Hub/Parcel" asp-route-code="@p.TrackingCode">@p.TrackingCode</a><div class="cell-sub">@p.Merchant</div></td>
                                     <td>@p.RecipientName</td>
                                     <td>@p.Area</td>
-                                    <td>@Statuses.Badge(p.Status)@if (p.Attempts > 0) { <div class="cell-sub">@p.Attempts attempt@(p.Attempts == 1 ? "" : "s")@(p.Reason is null ? "" : $": {p.Reason}")</div> }</td>
+                                    <td>
+                                        @Statuses.Badge(p.Status)
+                                        @if (p.Attempts > 0)
+                                        {
+                                            <div class="cell-sub">@p.Attempts attempt@(p.Attempts == 1 ? "" : "s")@(p.Reason is null ? "" : $": {p.Reason}")</div>
+                                        }
+                                        @if (later)
+                                        {
+                                            <div class="row-note">@Icons.Get("calendar") Customer asked for @p.HoldUntil!.Value.ToString("ddd d MMM")</div>
+                                        }
+                                    </td>
                                     <td class="num">@Money.Taka(p.CodAmount)</td>
                                 </tr>
                             }
@@ -62,25 +87,33 @@
         </form>
     </div>
 
-    <div class="card" style="align-self:start;position:sticky;top:76px">
-        <div class="card-head"><h2>@Icons.Get("bike") Hand to</h2></div>
+    <div class="card sticky-card">
+        <div class="card-head">
+            <h2>@Icons.Get("bike") Hand to</h2>
+            <span class="selection-count" data-selected title="Parcels ticked">0</span>
+        </div>
         <div class="card-body">
             @if (Model.Riders.Count == 0)
             {
-                <p class="muted">This hub has no active riders.</p>
+                <div class="empty" style="padding:20px 0">@Icons.Get("users")<h3>No active riders</h3><p>An admin adds riders for this hub under Riders.</p></div>
             }
             else
             {
                 <div class="stack">
                     @foreach (var rider in Model.Riders)
                     {
-                        <label class="radio-card" style="display:flex;justify-content:space-between;align-items:center">
-                            <span><input type="radio" name="riderId" value="@rider.Id" form="assign" required /> @rider.Name<small>@Money.Phone(rider.Phone)</small></span>
+                        <label class="radio-card" style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+                            <span style="display:flex;gap:10px;align-items:center">
+                                <input type="radio" name="riderId" value="@rider.Id" form="assign" required />
+                                <span class="avatar" style="width:32px;height:32px;font-size:12px">@string.Concat(rider.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(part => char.ToUpperInvariant(part[0])))</span>
+                                <span>@rider.Name<small>@Money.Phone(rider.Phone)</small></span>
+                            </span>
                             <span class="muted" style="font-weight:500;font-size:12px;text-align:right">@rider.WithThem with them<br />@rider.DeliveredToday delivered today</span>
                         </label>
                     }
                 </div>
-                <button class="btn btn-primary btn-block mt" type="submit" form="assign">@Icons.Get("send") Hand over the ticked parcels</button>
+                <button class="btn btn-primary btn-lg btn-block mt" type="submit" form="assign" data-hand-over>@Icons.Get("send") <span>Hand over the ticked parcels</span></button>
+                <p class="hint">The rider sees them on their phone at once, and each recipient gets a text that the parcel is on its way.</p>
             }
         </div>
     </div>
@@ -88,8 +121,38 @@
 
 @section Scripts {
     <script>
-        document.querySelector("[data-select-all]")?.addEventListener("change", event => {
-            document.querySelectorAll("#assign input[name=codes]").forEach(box => box.checked = event.target.checked);
+    (() => {
+        const boxes = [...document.querySelectorAll("#assign input[name=codes]")];
+        const all = document.querySelector("[data-select-all]");
+        const count = document.querySelector("[data-selected]");
+        const button = document.querySelector("[data-hand-over]");
+        const update = () => {
+            const ticked = boxes.filter(box => box.checked).length;
+            count.textContent = ticked;
+            count.classList.remove("bump");
+            void count.offsetWidth;
+            count.classList.add("bump");
+            setTimeout(() => count.classList.remove("bump"), 250);
+            if (button) {
+                button.disabled = ticked === 0;
+                button.querySelector("span").textContent = ticked === 0
+                    ? "Tick parcels to hand over"
+                    : `Hand over ${ticked} parcel${ticked === 1 ? "" : "s"}`;
+            }
+
+            if (all) {
+                const due = boxes.filter(box => !box.dataset.later);
+                all.checked = due.length > 0 && due.every(box => box.checked);
+                all.indeterminate = ticked > 0 && !all.checked;
+            }
+        };
+        // Every parcel due today; one the customer asked to have later stays for its day unless ticked by hand
+        all?.addEventListener("change", () => {
+            boxes.forEach(box => box.checked = all.checked && !box.dataset.later);
+            update();
         });
+        boxes.forEach(box => box.addEventListener("change", update));
+        update();
+    })();
     </script>
 }

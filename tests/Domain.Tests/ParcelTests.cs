@@ -8,6 +8,8 @@ public class ParcelTests
 {
     private static readonly DateTime Now = new(2026, 10, 4, 12, 0, 0, DateTimeKind.Utc);
 
+    private static readonly DateOnly Today = new(2026, 10, 4);
+
     [Fact]
     public void A_booked_parcel_is_pending_with_the_charges_it_was_priced_at_and_a_first_tracking_line()
     {
@@ -152,7 +154,7 @@ public class ParcelTests
         var parcel = Build.OutForDelivery();
         var until = new DateOnly(2026, 10, 6);
 
-        Assert.True(parcel.Hold("Customer not reachable", until, maxAttempts: 3).IsSuccess);
+        Assert.True(parcel.Hold("Customer not reachable", until, Today, maxAttempts: 3).IsSuccess);
         Assert.Equal(ParcelStatus.OnHold, parcel.Status);
         Assert.Equal(until, parcel.HoldUntil);
         Assert.Equal(5, parcel.RiderId);
@@ -163,12 +165,23 @@ public class ParcelTests
         Assert.Equal(ParcelStatus.OnHold, parcel.Status);
 
         parcel.AssignTo(5, Build.Mirpur);
-        Assert.True(parcel.Hold("Asked for another day", null, 3).IsSuccess);
+        Assert.True(parcel.Hold("Asked for another day", null, Today, 3).IsSuccess);
         parcel.ReceiveAt(Build.Mirpur);
         parcel.AssignTo(5, Build.Mirpur);
 
-        Assert.Equal("parcel.hold.attempts", parcel.Hold("Again", null, 3).Error?.Code);
+        Assert.Equal("parcel.hold.attempts", parcel.Hold("Again", null, Today, 3).Error?.Code);
         Assert.Equal(2, parcel.Attempts);
+    }
+
+    [Fact]
+    public void A_hold_for_a_day_already_come_is_refused()
+    {
+        var parcel = Build.OutForDelivery();
+
+        Assert.Equal("parcel.hold.until", parcel.Hold("Asked for another day", Today, Today, 3).Error?.Code);
+        Assert.Equal("parcel.hold.until", parcel.Hold("Asked for another day", Today.AddDays(-1), Today, 3).Error?.Code);
+        Assert.Equal(ParcelStatus.OutForDelivery, parcel.Status);
+        Assert.Equal(0, parcel.Attempts);
     }
 
     [Fact]

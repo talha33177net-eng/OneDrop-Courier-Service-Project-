@@ -109,6 +109,11 @@ public class AdminRidersHandler(IAppDbContext db, ITenantContext tenantContext, 
             return Error.Validation("rider.hub", "Choose the hub the rider works from.");
         }
 
+        if (hubId != rider.HubId && await BusyAsync(rider, "moved to another hub", cancellationToken) is { } busy)
+        {
+            return busy;
+        }
+
         var changed = rider.Change(hubId, name, phone);
         if (changed.IsSuccess)
         {
@@ -132,11 +137,52 @@ public class AdminRidersHandler(IAppDbContext db, ITenantContext tenantContext, 
         }
         else
         {
+            if (await BusyAsync(rider, "stopped", cancellationToken) is { } busy)
+            {
+                return busy;
+            }
+
             rider.Deactivate();
         }
 
         await db.SaveChangesAsync(cancellationToken);
 
         return Result.Success();
+    }
+
+    /// <summary>
+    /// Why the rider cannot leave their hub yet: a stopped rider cannot sign in and a moved one hands their cash in at the
+    /// wrong hub, so parcels with them, an open run or a pickup they were sent on would be stuck.
+    /// </summary>
+    private async Task<Error?> BusyAsync(Rider rider, string what, CancellationToken cancellationToken)
+    {
+        var parcels = await db.Parcels.CountAsync(p => p.RiderId == rider.Id, cancellationToken);
+        var runs = await db.DeliveryRuns.CountAsync(r => r.RiderId == rider.Id && r.Status == RunStatus.Open, cancellationToken);
+        var pickups = await db.PickupRequests.CountAsync(r => r.RiderId == rider.Id && r.Status == PickupStatus.Assigned, cancellationToken);
+        if (parcels + runs + pickups == 0)
+        {
+            return null;
+        }
+
+        List<string> open = [];
+        if (parcels > 0)
+        {
+            open.Add($"{parcels} parcel{(parcels == 1 ? "" : "s")} with them");
+        }
+
+        if (runs > 0)
+        {
+            open.Add($"{runs} run{(runs == 1 ? "" : "s")} not closed");
+        }
+
+        if (pickups > 0)
+        {
+            open.Add($"{pickups} pickup{(pickups == 1 ? "" : "s")} to make");
+        }
+
+        return Error.Conflict(
+            "rider.busy",
+            $"{rider.Name} cannot be {what} yet: {string.Join(", ", open)}. Close their run at the hub and give their " +
+            "pickups to another rider first.");
     }
 }

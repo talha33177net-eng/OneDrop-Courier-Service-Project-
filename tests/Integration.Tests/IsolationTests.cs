@@ -120,10 +120,17 @@ public partial class IsolationTests(WebAppFactory factory) : AppTests(factory)
 
             // Hub pages: the courier's own staff; another courier's staff and admin get a 404 for this courier's hub
             ("/Hub/Index", async () => await HubOnlyAsync("/Hub?hub=MIR")),
+            ("/Hub/Choose", async () =>
+            {
+                Assert.Contains("Mirpur hub", await hub.PageAsync("/Hub/Choose"));
+                var rival = await rivalHub.GetAsync("/Hub/Choose");
+                Assert.DoesNotContain("Mirpur hub", await rival.Content.ReadAsStringAsync(Cancel));
+                Assert.DoesNotContain("hub=MIR", rival.Headers.Location?.OriginalString ?? "");
+            }),
             ("/Hub/Scan", async () =>
             {
                 await HubOnlyAsync("/Hub/Scan?hub=MIR");
-                var scanned = await rivalHub.SubmitAsync("/Hub/Scan", "/Hub/Scan", ("Code", waiting), ("Mode", "Receive"));
+                var scanned = await rivalHub.SubmitAsync("/Hub/Scan?hub=RVL", "/Hub/Scan?hub=RVL", ("Code", waiting), ("Mode", "Receive"));
                 Assert.DoesNotContain("Received", scanned);
             }),
             ("/Hub/Pickups", async () => await HubOnlyAsync("/Hub/Pickups?hub=MIR")),

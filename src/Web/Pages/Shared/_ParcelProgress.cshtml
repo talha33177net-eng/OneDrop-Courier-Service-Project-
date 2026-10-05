@@ -20,6 +20,6 @@
 <div class="progress-steps @(problem ? "problem" : "")">
     @for (var i = 0; i < steps.Length; i++)
     {
-        <span class="step @(i < reached ? "done" : "")">@steps[i]</span>
+        <span class="step @(i < reached ? "done" : "") @(i == reached - 1 ? "current" : "")">@steps[i]</span>
     }
 </div>

@@ -22,30 +22,52 @@ namespace Integration.Tests;
 public class OutboxTests(WebAppFactory factory) : AppTests(factory)
 {
     [Fact]
+    public async Task Booking_texts_the_recipient_a_tracking_link()
+    {
+        WebAppFactory.RequireDatabase();
+        var shop = await NewMerchantAsync();
+        var phone = NewPhone();
+        var code = await BookAsync(shop.ApiKey, area: "Pallabi", phone: phone);
+
+        var sms = new RecordingSms();
+        await SendUntilAsync(Assert.Single(await TextsAsync(code)).Id, m => m.Status == OutboxStatus.Sent, sms, TimeProvider.System);
+
+        var text = Assert.Single(sms.To(phone));
+        Assert.Equal("OneDrop", text.Sender);
+        Assert.StartsWith($"Your parcel {code} from {shop.Name} has been booked with OneDrop Courier.", text.Text);
+        Assert.Contains($"/Track?code={code}", text.Text);
+    }
+
+    [Fact]
     public async Task Going_out_and_being_delivered_text_the_recipient_from_the_couriers_sender_name()
     {
         WebAppFactory.RequireDatabase();
         var shop = await NewMerchantAsync();
         var phone = NewPhone();
         var code = await BookAsync(shop.ApiKey, area: "Pallabi", cod: 1500, phone: phone);
-        await ChangeAsync(code, (parcel, rider) => parcel.ReceiveAt(parcel.DeliveryHubId));
-        Assert.Empty(await TextsAsync(code));
 
+        // Send the booking text while the parcel is still pending; this test is about the two that follow it
         var sms = new RecordingSms();
-        await ChangeAsync(code, (parcel, rider) => parcel.AssignTo(rider, parcel.DeliveryHubId));
         await SendUntilAsync(Assert.Single(await TextsAsync(code)).Id, m => m.Status == OutboxStatus.Sent, sms, TimeProvider.System);
+
+        await ChangeAsync(code, (parcel, rider) => parcel.ReceiveAt(parcel.DeliveryHubId));
+        await ChangeAsync(code, (parcel, rider) => parcel.AssignTo(rider, parcel.DeliveryHubId));
+        var afterAssign = await TextsAsync(code);
+        Assert.Equal(2, afterAssign.Count);
+        await SendUntilAsync(afterAssign[^1].Id, m => m.Status == OutboxStatus.Sent, sms, TimeProvider.System);
         await ChangeAsync(code, (parcel, _) => parcel.Deliver(1500, null, DateTime.UtcNow));
         var messages = await TextsAsync(code);
-        Assert.Equal(2, messages.Count);
+        Assert.Equal(3, messages.Count);
         await SendUntilAsync(messages[^1].Id, m => m.Status == OutboxStatus.Sent, sms, TimeProvider.System);
 
         var texts = sms.To(phone);
-        Assert.Equal(2, texts.Count);
+        Assert.Equal(3, texts.Count);
         Assert.All(texts, text => Assert.Equal("OneDrop", text.Sender));
-        Assert.StartsWith($"Your parcel {code} from {shop.Name} is out for delivery today with ", texts[0].Text);
-        Assert.Contains("Please keep ৳1,500 ready.", texts[0].Text);
-        Assert.Contains($"/Track?code={code}", texts[0].Text);
-        Assert.StartsWith($"Your parcel {code} from {shop.Name} has been delivered, ৳1,500 paid.", texts[1].Text);
+        Assert.StartsWith($"Your parcel {code} from {shop.Name} has been booked with OneDrop Courier.", texts[0].Text);
+        Assert.StartsWith($"Your parcel {code} from {shop.Name} is out for delivery today with ", texts[1].Text);
+        Assert.Contains("Please keep ৳1,500 ready.", texts[1].Text);
+        Assert.Contains($"/Track?code={code}", texts[1].Text);
+        Assert.StartsWith($"Your parcel {code} from {shop.Name} has been delivered, ৳1,500 paid.", texts[2].Text);
     }
 
     [Fact]
@@ -56,7 +78,7 @@ public class OutboxTests(WebAppFactory factory) : AppTests(factory)
         var code = await BookAsync(shop.ApiKey, area: "Pallabi");
         await ChangeAsync(code, (parcel, _) => parcel.ReceiveAt(parcel.DeliveryHubId));
         await ChangeAsync(code, (parcel, rider) => parcel.AssignTo(rider, parcel.DeliveryHubId));
-        var id = Assert.Single(await TextsAsync(code)).Id;
+        var id = (await TextsAsync(code))[^1].Id; // the out-for-delivery text; the booking text precedes it
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
         var down = new RecordingSms { Down = true };
 

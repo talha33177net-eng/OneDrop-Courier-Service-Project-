@@ -81,6 +81,16 @@ dotnet test --project tests/Integration.Tests
 - Currency is ৳ with no decimals in the UI (`৳110`).
 - Never show a raw id; show a name or the order number.
 
+## Look
+
+- Colour is ink on cool light grey paper with one accent, sky blue (`--accent`), for the logo, the main call to action
+  and what is selected or live; text in the accent uses the deeper `--accent-text`. Status colours are for statuses
+  only. Flat fills: no gradients, glows or violet. Pages use the tokens in `site.css`, never a colour of their own.
+- The logo is `<partial name="_BrandMark" />` in pages; `wwwroot/images/logo.svg` (and `logo-on-dark.svg`) for
+  documents. Its text is outlined, so it needs no font.
+- Drawings are line art (ink outlines, paper and sky blue fills) in `Pages/Shared/Art`, animated from `landing.css`.
+  They carry `data-motion` so they rest while off screen, and stay still for reduced-motion users.
+
 ## Working in this repo
 
 - The repo is CRLF (`.gitattributes`). Scope bulk `sed` edits to the files you mean.

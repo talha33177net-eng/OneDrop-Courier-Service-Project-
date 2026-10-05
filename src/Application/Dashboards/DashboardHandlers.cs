@@ -32,7 +32,14 @@ public sealed record MerchantDashboard(
     decimal Unpaid,
     decimal PaidThisMonth,
     IReadOnlyList<DayCount> Week,
-    IReadOnlyList<ParcelRow> Recent);
+    IReadOnlyList<ParcelRow> Recent)
+{
+    /// <summary>A pickup is requested or a rider is on the way.</summary>
+    public bool PickupOpen { get; init; }
+
+    /// <summary>The merchant has asked for a pickup or handed a parcel over at least once.</summary>
+    public bool HandedOver { get; init; }
+}
 
 public sealed record HubRow(string Code, string Name, int AtHub, int ToAssign, int Incoming, int WithRiders);
 
@@ -82,6 +89,12 @@ public class DashboardHandler(
             .Where(p => p.Status == PayoutStatus.Paid && p.PaidOn >= monthStart)
             .SumAsync(p => (decimal?)p.Amount, cancellationToken) ?? 0;
         var recent = await parcels.ListAsync(new ParcelQuery { PageSize = 8 }, cancellationToken);
+        var pickupOpen = await db.PickupRequests.AnyAsync(
+            r => r.Status == PickupStatus.Requested || r.Status == PickupStatus.Assigned,
+            cancellationToken);
+        var handedOver = pickupOpen ||
+            await db.PickupRequests.AnyAsync(cancellationToken) ||
+            await db.Parcels.AnyAsync(p => p.Status != ParcelStatus.Pending && p.Status != ParcelStatus.Cancelled, cancellationToken);
 
         return new MerchantDashboard(
             merchant.Name,
@@ -92,7 +105,11 @@ public class DashboardHandler(
             unpaid,
             paid,
             await WeekAsync(tenant, today, cancellationToken),
-            recent.Page.Items);
+            recent.Page.Items)
+        {
+            PickupOpen = pickupOpen,
+            HandedOver = handedOver
+        };
     }
 
     public async Task<AdminDashboard> AdminAsync(CancellationToken cancellationToken = default)
