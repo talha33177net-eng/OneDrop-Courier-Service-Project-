@@ -38,7 +38,7 @@ public class MoneyTests
     public void A_returned_parcel_costs_its_delivery_and_return_charges()
     {
         var parcel = Build.Parcel(area: Pricing.ServiceArea.OutsideCity);
-        parcel.ReceiveAt(Build.Mirpur);
+        parcel.ReceiveAt(Build.Mirpur, Today);
         parcel.RequestReturn("Merchant wants it back");
         parcel.ReturnToMerchant(Build.Mirpur, Now);
 
@@ -76,7 +76,7 @@ public class MoneyTests
     {
         var merchant = Build.Merchant();
         var returned = Build.Parcel();
-        returned.ReceiveAt(Build.Mirpur);
+        returned.ReceiveAt(Build.Mirpur, Today);
         returned.RequestReturn(null);
         returned.ReturnToMerchant(Build.Mirpur, Now);
         var owes = LedgerEntry.For(returned, Today);
@@ -116,7 +116,7 @@ public class MoneyTests
     private static IReadOnlyList<LedgerEntry> Delivered(decimal cod, long id = 100)
     {
         var parcel = Build.Parcel(cod: cod, id: id);
-        parcel.ReceiveAt(Build.Mirpur);
+        parcel.ReceiveAt(Build.Mirpur, Today);
         parcel.AssignTo(5, Build.Mirpur);
         parcel.Deliver(cod, null, Now);
 

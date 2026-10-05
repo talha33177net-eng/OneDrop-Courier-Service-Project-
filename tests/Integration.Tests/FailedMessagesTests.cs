@@ -65,7 +65,7 @@ public class FailedMessagesTests(WebAppFactory factory) : AppTests(factory)
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var parcel = await db.Parcels.SingleAsync(p => p.TrackingCode == code, Cancel);
         var rider = await db.Riders.Where(r => r.HubId == parcel.DeliveryHubId).Select(r => r.Id).FirstAsync(Cancel);
-        Assert.True(parcel.ReceiveAt(parcel.DeliveryHubId).IsSuccess);
+        Assert.True(parcel.ReceiveAt(parcel.DeliveryHubId, Today).IsSuccess);
         Assert.True(parcel.AssignTo(rider, parcel.DeliveryHubId).IsSuccess);
         await db.SaveChangesAsync(Cancel);
 

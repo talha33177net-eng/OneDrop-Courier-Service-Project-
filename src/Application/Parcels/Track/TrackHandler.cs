@@ -9,8 +9,9 @@ namespace Application.Parcels.Track;
 public sealed record TrackingStep(DateTime When, ParcelStatus Status, string Note, string? Hub);
 
 /// <summary>
-/// What anyone with a tracking code sees: the status, who sent it, the destination area and the history. Never the
-/// recipient's phone or address, the cash on delivery or the charges.
+/// What anyone with a tracking code sees: the status, who sent it, the destination area, the day it should arrive by
+/// (while it is on its way and a time was promised) and the history. Never the recipient's phone or address, the cash
+/// on delivery or the charges.
 /// </summary>
 public sealed record TrackingView(
     string TrackingCode,
@@ -19,6 +20,7 @@ public sealed record TrackingView(
     string Area,
     string City,
     DateTime Booked,
+    DateOnly? ExpectedBy,
     IReadOnlyList<TrackingStep> Steps);
 
 /// <summary>The public tracking page, open to everyone on the courier's site.</summary>
@@ -43,7 +45,7 @@ public class TrackHandler(IAppDbContext db, ITenantContext tenantContext)
             join area in db.Areas on parcel.AreaId equals area.Id
             join zone in db.Zones on area.ZoneId equals zone.Id
             where parcel.TrackingCode == code
-            select new { parcel.Id, parcel.TrackingCode, parcel.Status, Merchant = merchant.Name, Area = area.Name, zone.City, parcel.Created })
+            select new { parcel.Id, parcel.TrackingCode, parcel.Status, Merchant = merchant.Name, Area = area.Name, zone.City, parcel.Created, parcel.DueOn })
             .AsNoTracking()
             .FirstOrDefaultAsync(cancellationToken);
         if (found is null)
@@ -66,6 +68,7 @@ public class TrackHandler(IAppDbContext db, ITenantContext tenantContext)
             found.Area,
             found.City,
             tenant.Local(found.Created),
+            ParcelStatuses.ToDeliver.Contains(found.Status) ? found.DueOn : null,
             // The public sees each step by its status; staff notes can name amounts or reasons meant for the merchant. A hold
             // keeps its note, which tells the recipient what the rider needs from them
             [.. steps.Select(step => step with

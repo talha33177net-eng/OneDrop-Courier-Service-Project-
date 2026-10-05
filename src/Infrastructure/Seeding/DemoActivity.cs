@@ -125,16 +125,18 @@ internal sealed class DemoActivity(
 
         await db.SaveChangesAsync(cancellationToken);
 
-        // 2. Collect and move them through the hubs
+        // 2. Collect and move them through the hubs. All but the one just collected were picked up two days ago, so the
+        // inside-city parcels still out with a rider are late and show it
         foreach (var (parcel, stage) in parcels.Where(p => p.Stage != Stage.Pending))
         {
-            parcel.PickUp();
+            var pickedUpOn = stage == Stage.PickedUp ? today : today.AddDays(-2);
+            parcel.PickUp(pickedUpOn);
             if (stage == Stage.PickedUp)
             {
                 continue;
             }
 
-            parcel.ReceiveAt(parcel.PickupHubId);
+            parcel.ReceiveAt(parcel.PickupHubId, pickedUpOn);
             if (stage == Stage.AtPickupHub || parcel.PickupHubId == parcel.DeliveryHubId)
             {
                 continue;
@@ -143,7 +145,7 @@ internal sealed class DemoActivity(
             parcel.DispatchTo(parcel.PickupHubId, parcel.DeliveryHubId);
             if (stage != Stage.InTransit)
             {
-                parcel.ReceiveAt(parcel.DeliveryHubId);
+                parcel.ReceiveAt(parcel.DeliveryHubId, today);
             }
         }
 
@@ -210,11 +212,11 @@ internal sealed class DemoActivity(
         // 5. One refused parcel comes all the way back to its merchant
         foreach (var (parcel, _) in parcels.Where(p => p.Stage == Stage.Returned))
         {
-            parcel.ReceiveAt(parcel.DeliveryHubId);
+            parcel.ReceiveAt(parcel.DeliveryHubId, today);
             if (parcel.PickupHubId != parcel.DeliveryHubId)
             {
                 parcel.DispatchTo(parcel.DeliveryHubId, parcel.PickupHubId);
-                parcel.ReceiveAt(parcel.PickupHubId);
+                parcel.ReceiveAt(parcel.PickupHubId, today);
             }
 
             parcel.ReturnToMerchant(parcel.PickupHubId, now);
@@ -229,7 +231,8 @@ internal sealed class DemoActivity(
         var collector = riders.FirstOrDefault(r => r.HubId == collect.HubId);
         if (collector is not null)
         {
-            collect.Assign(collector);
+            var fleet = new Fleet(await db.VehicleCapacities.ToListAsync(cancellationToken));
+            collect.Assign(collector, fleet, PickupRequest.ToCollect(collect.ExpectedParcels, []));
         }
 
         db.PickupRequests.Add(collect);

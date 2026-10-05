@@ -119,7 +119,7 @@ public class PayoutTests(WebAppFactory factory) : AppTests(factory)
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var parcel = await db.Parcels.SingleAsync(p => p.TrackingCode == code, Cancel);
         var rider = await db.Riders.Where(r => r.HubId == parcel.PickupHubId).Select(r => r.Id).FirstAsync(Cancel);
-        parcel.ReceiveAt(parcel.PickupHubId);
+        parcel.ReceiveAt(parcel.PickupHubId, Today);
         Assert.True(finish(parcel, rider).IsSuccess);
 
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Dhaka")));

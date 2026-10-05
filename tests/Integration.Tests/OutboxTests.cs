@@ -50,7 +50,7 @@ public class OutboxTests(WebAppFactory factory) : AppTests(factory)
         var sms = new RecordingSms();
         await SendUntilAsync(Assert.Single(await TextsAsync(code)).Id, m => m.Status == OutboxStatus.Sent, sms, TimeProvider.System);
 
-        await ChangeAsync(code, (parcel, rider) => parcel.ReceiveAt(parcel.DeliveryHubId));
+        await ChangeAsync(code, (parcel, rider) => parcel.ReceiveAt(parcel.DeliveryHubId, Today));
         await ChangeAsync(code, (parcel, rider) => parcel.AssignTo(rider, parcel.DeliveryHubId));
         var afterAssign = await TextsAsync(code);
         Assert.Equal(2, afterAssign.Count);
@@ -76,7 +76,7 @@ public class OutboxTests(WebAppFactory factory) : AppTests(factory)
         WebAppFactory.RequireDatabase();
         var shop = await NewMerchantAsync();
         var code = await BookAsync(shop.ApiKey, area: "Pallabi");
-        await ChangeAsync(code, (parcel, _) => parcel.ReceiveAt(parcel.DeliveryHubId));
+        await ChangeAsync(code, (parcel, _) => parcel.ReceiveAt(parcel.DeliveryHubId, Today));
         await ChangeAsync(code, (parcel, rider) => parcel.AssignTo(rider, parcel.DeliveryHubId));
         var id = (await TextsAsync(code))[^1].Id; // the out-for-delivery text; the booking text precedes it
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);

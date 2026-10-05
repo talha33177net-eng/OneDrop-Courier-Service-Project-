@@ -40,7 +40,7 @@ public class SaveInterceptorTests(WebAppFactory factory)
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var hubId = await db.Hubs.Select(h => h.Id).FirstAsync(TestContext.Current.CancellationToken);
 
-        var rider = Rider.Create(hubId, "Interceptor test", "01900000000", null).Value;
+        var rider = Rider.Create(hubId, "Interceptor test", "01900000000", Vehicle.Motorbike, null).Value;
         db.Riders.Add(rider);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
@@ -55,7 +55,7 @@ public class SaveInterceptorTests(WebAppFactory factory)
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        db.Riders.Add(Rider.Create(1, "No tenant", "01900000000", null).Value);
+        db.Riders.Add(Rider.Create(1, "No tenant", "01900000000", Vehicle.Motorbike, null).Value);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync(TestContext.Current.CancellationToken));
     }

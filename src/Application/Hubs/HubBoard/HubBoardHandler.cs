@@ -16,7 +16,9 @@ public sealed record BoardParcel(
     ParcelStatus Status,
     int Attempts,
     DateOnly? HoldUntil,
-    string? Reason);
+    string? Reason,
+    DateOnly? DueOn,
+    int WeightGrams);
 
 /// <summary>Parcels at the hub that leave for one other hub: forward ones, or returns going back.</summary>
 public sealed record DispatchGroup(string HubCode, string HubName, bool Returns, IReadOnlyList<BoardParcel> Parcels);
@@ -25,8 +27,9 @@ public sealed record DispatchGroup(string HubCode, string HubName, bool Returns,
 public sealed record HandBackGroup(string Merchant, string MerchantPhone, IReadOnlyList<BoardParcel> Parcels);
 
 /// <summary>
-/// The hub's day at a glance: what is coming in, what waits for a rider, what to send to other hubs, what to hand back to
-/// merchants, and what the riders have out.
+/// The hub's day at a glance: what is coming in, what waits for a rider (the most urgent first) and how much of it is
+/// late, what to send to other hubs, what to hand back to merchants, what the riders have out and how many of them are
+/// late back.
 /// </summary>
 public sealed record HubBoard(
     HubItem Hub,
@@ -37,15 +40,19 @@ public sealed record HubBoard(
     IReadOnlyList<HandBackGroup> ToHandBack,
     int WithRiders,
     int OpenRuns,
-    decimal CashWithRiders)
+    int LateRuns,
+    decimal CashWithRiders,
+    DateOnly Today)
 {
+    public int LateToAssign => ToAssign.Count(p => p.DueOn < Today);
+
     public int ToDispatchCount => ToDispatch.Sum(group => group.Parcels.Count);
 
     public int ToHandBackCount => ToHandBack.Sum(group => group.Parcels.Count);
 }
 
 /// <summary>Works out a hub's board from the parcels, pickups and runs when asked: nothing is stored.</summary>
-public class HubBoardHandler(IAppDbContext db, HubDirectory hubs)
+public class HubBoardHandler(IAppDbContext db, ITenantContext tenantContext, HubDirectory hubs, TimeProvider time)
 {
     public async Task<HubBoard?> GetAsync(string hubCode, CancellationToken cancellationToken = default)
     {
@@ -60,7 +67,7 @@ public class HubBoardHandler(IAppDbContext db, HubDirectory hubs)
             join merchant in db.Merchants on parcel.MerchantId equals merchant.Id
             join area in db.Areas on parcel.AreaId equals area.Id
             where parcel.CurrentHubId == hub.Id
-            orderby parcel.Id
+            orderby parcel.DueOn == null, parcel.DueOn, parcel.Id
             select new
             {
                 parcel.Status,
@@ -76,7 +83,9 @@ public class HubBoardHandler(IAppDbContext db, HubDirectory hubs)
                     parcel.Status,
                     parcel.Attempts,
                     parcel.HoldUntil,
-                    parcel.Status == ParcelStatus.Returning ? parcel.ReturnReason : parcel.HoldReason)
+                    parcel.Status == ParcelStatus.Returning ? parcel.ReturnReason : parcel.HoldReason,
+                    parcel.DueOn,
+                    parcel.WeightGrams)
             })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
@@ -117,6 +126,9 @@ public class HubBoardHandler(IAppDbContext db, HubDirectory hubs)
             join run in openRuns on attempt.RunId equals run.Id
             select (decimal?)attempt.CollectedAmount)
             .SumAsync(cancellationToken) ?? 0;
+        var tenant = tenantContext.Require();
+        var now = time.GetUtcNow().UtcDateTime;
+        var runDates = await openRuns.Select(r => r.RunDate).ToListAsync(cancellationToken);
 
         return new HubBoard(
             new HubItem(hub.Id, hub.Code, hub.Name, hub.Address, hub.Phone),
@@ -126,7 +138,9 @@ public class HubBoardHandler(IAppDbContext db, HubDirectory hubs)
             toDispatch,
             toHandBack,
             withRiders,
-            await openRuns.CountAsync(cancellationToken),
-            cash);
+            runDates.Count,
+            runDates.Count(day => tenant.RunIsLate(day, now)),
+            cash,
+            tenant.Today(now));
     }
 }

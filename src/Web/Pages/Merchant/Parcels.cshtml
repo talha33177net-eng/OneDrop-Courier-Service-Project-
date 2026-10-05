@@ -34,8 +34,9 @@
             <label for="to">to</label>
             <input type="date" id="to" name="to" value="@Model.To?.ToString("yyyy-MM-dd")" />
         </div>
+        <label class="check" style="height:40px"><input type="checkbox" name="late" value="true" checked="@Model.Late" /> Late only</label>
         <button class="btn btn-outline" type="submit">@Icons.Get("search") Filter</button>
-        @if (Model.Search is not null || Model.From is not null || Model.To is not null)
+        @if (Model.Search is not null || Model.From is not null || Model.To is not null || Model.Late)
         {
             <a class="btn btn-ghost" asp-page="/Merchant/Parcels" asp-route-tab="@Model.Tab">Clear</a>
         }

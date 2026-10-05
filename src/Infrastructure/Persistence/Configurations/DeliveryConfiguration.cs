@@ -24,6 +24,15 @@ public class RiderConfiguration : IEntityTypeConfiguration<Rider>
     }
 }
 
+public class VehicleCapacityConfiguration : IEntityTypeConfiguration<VehicleCapacity>
+{
+    public void Configure(EntityTypeBuilder<VehicleCapacity> builder)
+    {
+        builder.MapTenantOwned(Schemas.Delivery);
+        builder.HasIndex(c => new { c.TenantId, c.Vehicle }).IsUnique().HasDatabaseName("UX_VehicleCapacity_Tenant_Vehicle");
+    }
+}
+
 public class DeliveryRunConfiguration : IEntityTypeConfiguration<DeliveryRun>
 {
     public void Configure(EntityTypeBuilder<DeliveryRun> builder)

@@ -38,12 +38,12 @@ public class DemoDataSeeder(
                 new("organic", "Organic Bazar", "Farzana Islam", "Mohammadpur", "Ring Road, Mohammadpur", "01711000005", null, MerchantStatus.Pending, null)
             ],
             [
-                new("rider", "Rafiq Hasan", "MIR", "01722000001"),
-                new("rider2", "Sumon Ali", "MIR", "01722000002"),
-                new("rider3", "Kamal Uddin", "GUL", "01722000003"),
-                new("rider4", "Jamal Chowdhury", "CTG", "01722000004"),
-                new("rider5", "Nasir Uddin", "DHN", "01722000005"),
-                new("rider6", "Habib Rahman", "UTT", "01722000006")
+                new("rider", "Rafiq Hasan", "MIR", "01722000001", Vehicle.Motorbike),
+                new("rider2", "Sumon Ali", "MIR", "01722000002", Vehicle.Bicycle),
+                new("rider3", "Kamal Uddin", "GUL", "01722000003", Vehicle.Motorbike),
+                new("rider4", "Jamal Chowdhury", "CTG", "01722000004", Vehicle.Motorbike),
+                new("rider5", "Nasir Uddin", "DHN", "01722000005", Vehicle.Van),
+                new("rider6", "Habib Rahman", "UTT", "01722000006", Vehicle.Bicycle)
             ]),
         new(
             "rival",
@@ -51,7 +51,7 @@ public class DemoDataSeeder(
                 new("shop", "Rival Shop", "Rival Owner", "Rival Town", "Main Road, Rival Town", "01799000001", PayoutMethod.Bkash, MerchantStatus.Active, "od_rivalshop001_DevOnlyKeyDoNotUseInProduction09")
             ],
             [
-                new("rider", "Rival Rider", "RVL", "01799000002")
+                new("rider", "Rival Rider", "RVL", "01799000002", Vehicle.Motorbike)
             ])
     ];
 
@@ -197,7 +197,7 @@ public class DemoDataSeeder(
             return;
         }
 
-        db.Riders.Add(Rider.Create(hub.Id, demo.Name, demo.Phone, userId).Value);
+        db.Riders.Add(Rider.Create(hub.Id, demo.Name, demo.Phone, demo.Vehicle, userId).Value);
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -214,5 +214,5 @@ public class DemoDataSeeder(
         MerchantStatus Status,
         string? ApiKey);
 
-    private sealed record DemoRider(string Key, string Name, string Hub, string Phone);
+    private sealed record DemoRider(string Key, string Name, string Hub, string Phone, Vehicle Vehicle);
 }

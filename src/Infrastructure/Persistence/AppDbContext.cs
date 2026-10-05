@@ -70,6 +70,8 @@ public class AppDbContext(
 
     public DbSet<DeliveryAttempt> DeliveryAttempts => Set<DeliveryAttempt>();
 
+    public DbSet<VehicleCapacity> VehicleCapacities => Set<VehicleCapacity>();
+
     public DbSet<LedgerEntry> LedgerEntries => Set<LedgerEntry>();
 
     public DbSet<Payout> Payouts => Set<Payout>();

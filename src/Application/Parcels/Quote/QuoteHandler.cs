@@ -4,7 +4,10 @@ using Domain.Pricing;
 
 namespace Application.Parcels.Quote;
 
-/// <summary>What a parcel to <see cref="Area"/> would cost the merchant, before booking it.</summary>
+/// <summary>
+/// What a parcel to <see cref="Area"/> would cost the merchant, before booking it, and how many days after pickup it
+/// would be delivered in (null when the courier promises no time).
+/// </summary>
 public sealed record QuoteView(
     string Area,
     string DeliveryHub,
@@ -12,7 +15,8 @@ public sealed record QuoteView(
     decimal DeliveryCharge,
     decimal CodCharge,
     decimal Total,
-    decimal ReturnCharge);
+    decimal ReturnCharge,
+    int? DeliveryDays);
 
 /// <summary>The merchant's price calculator: the same route and rate a booking would get now.</summary>
 public class QuoteHandler(ICurrentUser currentUser, ParcelBooking booking)
@@ -53,6 +57,7 @@ public class QuoteHandler(ICurrentUser currentUser, ParcelBooking booking)
             charges.DeliveryCharge,
             cod,
             charges.DeliveryCharge + cod,
-            charges.ReturnCharge);
+            charges.ReturnCharge,
+            charges.DeliveryDays);
     }
 }

@@ -72,6 +72,7 @@
 
     <div class="stats mt-lg">
         <a class="stat @(d.OpenPickups > 0 ? "attention" : "")" asp-page="/Hub/Choose" asp-route-next="Pickups"><div class="stat-icon amber">@Icons.Get("truck")</div><div><div class="stat-label">Pickups open</div><div class="stat-value">@d.OpenPickups</div></div></a>
+        <a class="stat @(d.Late > 0 ? "attention" : "")" asp-page="/Hub/Parcels" asp-route-late="true"><div class="stat-icon red">@Icons.Get("clock")</div><div><div class="stat-label">Late parcels</div><div class="stat-value">@d.Late</div><div class="stat-sub">Past the day they were due</div></div></a>
         <a class="stat" asp-page="/Hub/Choose" asp-route-next="Runs"><div class="stat-icon dark">@Icons.Get("cash")</div><div><div class="stat-label">Cash with riders</div><div class="stat-value">@Money.Taka(d.CashWithRiders)</div></div></a>
         <a class="stat" asp-page="/Admin/Payouts"><div class="stat-icon">@Icons.Get("wallet")</div><div><div class="stat-label">Owed to merchants</div><div class="stat-value">@Money.Taka(d.OwedToMerchants)</div></div></a>
     </div>

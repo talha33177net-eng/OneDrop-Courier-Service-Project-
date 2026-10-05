@@ -85,6 +85,15 @@ public sealed record ParcelView
 
     public DateOnly? HoldUntil { get; init; }
 
+    /// <summary>Days after pickup the parcel was promised in; null for no promise.</summary>
+    public int? DeliveryDays { get; init; }
+
+    /// <summary>The day it should be delivered by, once picked up.</summary>
+    public DateOnly? DueOn { get; init; }
+
+    /// <summary>Still on its way after <see cref="DueOn"/>.</summary>
+    public bool Late { get; init; }
+
     public string? ReturnReason { get; init; }
 
     public DateTime Booked { get; init; }
@@ -110,7 +119,7 @@ public sealed record ParcelView
 /// One parcel by its tracking code, with its tracking history and delivery attempts. A merchant finds only its own
 /// parcels (the merchant filter): another merchant's is not found, as an unknown code is.
 /// </summary>
-public class ParcelDetailsHandler(IAppDbContext db, ITenantContext tenantContext)
+public class ParcelDetailsHandler(IAppDbContext db, ITenantContext tenantContext, TimeProvider time)
 {
     public static readonly Error NotFound = Error.NotFound("parcel.notFound", "No parcel with that tracking code was found.");
 
@@ -212,6 +221,9 @@ public class ParcelDetailsHandler(IAppDbContext db, ITenantContext tenantContext
             MaxAttempts = tenant.MaxDeliveryAttempts,
             HoldReason = p.HoldReason,
             HoldUntil = p.HoldUntil,
+            DeliveryDays = p.DeliveryDays,
+            DueOn = p.DueOn,
+            Late = p.IsLate(tenant.Today(time.GetUtcNow().UtcDateTime)),
             ReturnReason = p.ReturnReason,
             Booked = tenant.Local(p.Created),
             Closed = p.ClosedOn is { } closed ? tenant.Local(closed) : null,

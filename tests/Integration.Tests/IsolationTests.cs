@@ -38,7 +38,7 @@ public partial class IsolationTests(WebAppFactory factory) : AppTests(factory)
         await QueryAsync("onedrop", async db =>
         {
             var parcel = await db.Parcels.SingleAsync(p => p.TrackingCode == outCode, Cancel);
-            parcel.ReceiveAt(parcel.DeliveryHubId);
+            parcel.ReceiveAt(parcel.DeliveryHubId, Today);
 
             return await db.SaveChangesAsync(Cancel);
         });
@@ -357,7 +357,7 @@ public partial class IsolationTests(WebAppFactory factory) : AppTests(factory)
         {
             var parcel = await db.Parcels.SingleAsync(p => p.TrackingCode == code, Cancel);
             var rider = await db.Riders.Where(r => r.HubId == parcel.DeliveryHubId).Select(r => r.Id).FirstAsync(Cancel);
-            parcel.ReceiveAt(parcel.DeliveryHubId);
+            parcel.ReceiveAt(parcel.DeliveryHubId, Today);
             parcel.AssignTo(rider, parcel.DeliveryHubId);
             Assert.True(parcel.Deliver(500, null, DateTime.UtcNow).IsSuccess);
             var day = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);

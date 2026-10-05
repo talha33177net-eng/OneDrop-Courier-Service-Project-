@@ -12,13 +12,14 @@ public sealed record RiderRow(
     string Phone,
     long HubId,
     string Hub,
+    Vehicle Vehicle,
     string? Email,
     bool Active,
     int WithThem,
     int DeliveredToday,
     decimal CashInHand);
 
-public sealed record NewRider(string? Name, string? Phone, long HubId, string? Email, string? Password);
+public sealed record NewRider(string? Name, string? Phone, long HubId, Vehicle Vehicle, string? Email, string? Password);
 
 /// <summary>
 /// The courier's riders: list them by hub with today's work, add one with a login, change their hub or details, or stop
@@ -51,6 +52,7 @@ public class AdminRidersHandler(IAppDbContext db, ITenantContext tenantContext, 
                     rider.Phone,
                     hub.Id,
                     hub.Name,
+                    rider.Vehicle,
                     null,
                     !rider.Archived,
                     db.DeliveryAttempts.Count(a => a.RiderId == rider.Id && a.Outcome == null),
@@ -75,7 +77,7 @@ public class AdminRidersHandler(IAppDbContext db, ITenantContext tenantContext, 
             return Error.Validation("rider.hub", "Choose the hub the rider works from.");
         }
 
-        var rider = Rider.Create(spec.HubId, spec.Name, spec.Phone, null);
+        var rider = Rider.Create(spec.HubId, spec.Name, spec.Phone, spec.Vehicle, null);
         if (rider.IsFailure)
         {
             return rider.Error!;
@@ -96,7 +98,13 @@ public class AdminRidersHandler(IAppDbContext db, ITenantContext tenantContext, 
         return Result.Success();
     }
 
-    public async Task<Result> EditAsync(long id, string? name, string? phone, long hubId, CancellationToken cancellationToken = default)
+    public async Task<Result> EditAsync(
+        long id,
+        string? name,
+        string? phone,
+        long hubId,
+        Vehicle vehicle,
+        CancellationToken cancellationToken = default)
     {
         var rider = await db.Riders.SingleOrDefaultAsync(r => r.Id == id, cancellationToken);
         if (rider is null)
@@ -114,7 +122,7 @@ public class AdminRidersHandler(IAppDbContext db, ITenantContext tenantContext, 
             return busy;
         }
 
-        var changed = rider.Change(hubId, name, phone);
+        var changed = rider.Change(hubId, name, phone, vehicle);
         if (changed.IsSuccess)
         {
             await db.SaveChangesAsync(cancellationToken);

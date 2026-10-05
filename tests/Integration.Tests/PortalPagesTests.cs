@@ -138,11 +138,13 @@ public partial class PortalPagesTests(WebAppFactory factory) : AppTests(factory)
         var gul = await QueryAsync("onedrop", db => db.Hubs.Where(h => h.Code == "GUL").Select(h => h.Id).SingleAsync(Cancel));
         var rivalHub = await QueryAsync("rival", db => db.Hubs.Select(h => h.Id).FirstAsync(Cancel));
 
-        var refused = await admin.SubmitAsync("/Admin/Riders", "/Admin/Riders?handler=Add", ("name", name), ("phone", NewPhone()), ("hubId", $"{rivalHub}"), ("email", email), ("password", WebAppFactory.Password));
+        var refused = await admin.SubmitAsync("/Admin/Riders", "/Admin/Riders?handler=Add", ("name", name), ("phone", NewPhone()), ("hubId", $"{rivalHub}"), ("vehicle", "Bicycle"), ("email", email), ("password", WebAppFactory.Password));
         Assert.DoesNotContain($"{name} is added", refused);
+        Assert.Contains("Choose what the rider rides", await admin.SubmitAsync("/Admin/Riders", "/Admin/Riders?handler=Add", ("name", name), ("phone", NewPhone()), ("hubId", $"{gul}"), ("vehicle", ""), ("email", email), ("password", WebAppFactory.Password)));
         Assert.False(await QueryAsync("onedrop", db => db.Riders.AnyAsync(r => r.Name == name, Cancel)));
 
-        Assert.Contains($"{name} is added", await admin.SubmitAsync("/Admin/Riders", "/Admin/Riders?handler=Add", ("name", name), ("phone", NewPhone()), ("hubId", $"{gul}"), ("email", email), ("password", WebAppFactory.Password)));
+        Assert.Contains($"{name} is added", await admin.SubmitAsync("/Admin/Riders", "/Admin/Riders?handler=Add", ("name", name), ("phone", NewPhone()), ("hubId", $"{gul}"), ("vehicle", "Bicycle"), ("email", email), ("password", WebAppFactory.Password)));
+        Assert.Equal(Vehicle.Bicycle, await QueryAsync("onedrop", db => db.Riders.Where(r => r.Name == name).Select(r => r.Vehicle).SingleAsync(Cancel)));
         var rider = await SignInAsync("onedrop", email);
         Assert.Equal(HttpStatusCode.OK, (await rider.GetAsync("/Rider")).StatusCode);
         Assert.NotEqual(HttpStatusCode.OK, (await rider.GetAsync("/Admin")).StatusCode);

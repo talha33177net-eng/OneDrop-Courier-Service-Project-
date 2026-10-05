@@ -149,7 +149,7 @@
         show("cod", taka(q.codCharge));
         show("total", taka(q.total));
         out("return").textContent = taka(q.returnCharge);
-        out("hub").textContent = "Delivered from " + q.deliveryHub + ".";
+        out("hub").textContent = "Delivered from " + q.deliveryHub + (q.when ? ", " + q.when : "") + ".";
     };
     // A full mobile number gets a link to its delivery record, before cash on delivery is sent to it
     const phone = form.querySelector("[name='Input.RecipientPhone']");

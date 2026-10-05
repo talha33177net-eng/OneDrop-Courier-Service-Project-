@@ -43,8 +43,8 @@
             ("Pickups to send", b.PickupsOpen, "Give each one a rider", "/Hub/Pickups", null),
             ("Coming in", b.Incoming, "Scan them in as they arrive", "/Hub/Scan", "Receive"),
             ("Send to other hubs", b.ToDispatchCount, "Scan out in Send mode", "/Hub/Scan", "Dispatch"),
-            ("Waiting for a rider", b.ToAssign.Count, "Hand them to riders", "/Hub/Assign", null),
-            ("Out with riders", b.WithRiders, $"{b.OpenRuns} run{(b.OpenRuns == 1 ? "" : "s")} to close", "/Hub/Runs", null),
+            ("Waiting for a rider", b.ToAssign.Count, b.LateToAssign > 0 ? $"{b.LateToAssign} late: hand them out first" : "Hand them to riders", "/Hub/Assign", null),
+            ("Out with riders", b.WithRiders, b.LateRuns > 0 ? $"{b.LateRuns} rider{(b.LateRuns == 1 ? " is" : "s are")} late back" : $"{b.OpenRuns} run{(b.OpenRuns == 1 ? "" : "s")} to close", "/Hub/Runs", null),
             ("Hand back", b.ToHandBackCount, "Returns for their merchants", "/Hub/Scan", "HandBack")
         ];
     }
@@ -90,6 +90,10 @@
                                         @if (p.HoldUntil is { } until)
                                         {
                                             <div class="@(later ? "row-note" : "cell-sub")">@if (later) { @Icons.Get("calendar") }Customer asked for @until.ToString("ddd d MMM")</div>
+                                        }
+                                        @if (!later)
+                                        {
+                                            <div>@Statuses.Due(p.DueOn, p.Status, today)</div>
                                         }
                                     </td>
                                     <td class="num">@Money.Taka(p.CodAmount)</td>

@@ -31,8 +31,9 @@ public sealed record NewParcel(long MerchantId, long PickupPointId, long PickupH
 /// One consignment from a merchant to a recipient. It is booked <see cref="ParcelStatus.Pending"/>, collected from the
 /// merchant, sorted at hubs, taken out by a rider and delivered, held for another day, or returned. Where it is lives
 /// in three fields: <see cref="CurrentHubId"/> while at a hub, <see cref="TransferToHubId"/> while travelling between
-/// hubs and <see cref="RiderId"/> while a rider has it; at most one is set. Its charges are worked out from the rate
-/// card when it is booked and never change after it is picked up.
+/// hubs and <see cref="RiderId"/> while a rider has it; at most one is set. Its charges and delivery time are worked
+/// out from the rate card when it is booked and never change after it is picked up; the day it is due
+/// (<see cref="DueOn"/>) is counted from the day the courier takes it.
 /// </summary>
 public class Parcel : TenantEntity, IMerchantOwned
 {
@@ -98,6 +99,15 @@ public class Parcel : TenantEntity, IMerchantOwned
 
     public decimal ReturnCharge { get; private set; }
 
+    /// <summary>Days after pickup the courier promised to deliver in, from the rate card. Null: no promise.</summary>
+    public int? DeliveryDays { get; private set; }
+
+    /// <summary>
+    /// The day the parcel should be delivered by: the day the courier took it plus <see cref="DeliveryDays"/>, or the
+    /// later day the recipient asked for. Null before pickup and when no time was promised.
+    /// </summary>
+    public DateOnly? DueOn { get; private set; }
+
     public ParcelStatus Status { get; private set; }
 
     public long? CurrentHubId { get; private set; }
@@ -130,9 +140,15 @@ public class Parcel : TenantEntity, IMerchantOwned
 
     public IReadOnlyList<ParcelEvent> Events => events;
 
-    public ParcelCharges Charges => new(ServiceArea, DeliveryCharge, CodChargePercent, ReturnCharge);
+    public ParcelCharges Charges => new(ServiceArea, DeliveryCharge, CodChargePercent, ReturnCharge, DeliveryDays);
 
     public bool IsFinal => Status.IsFinal();
+
+    /// <summary>Still to be delivered after the day it was due. A parcel going back to the merchant is not late.</summary>
+    public bool IsLate(DateOnly today)
+    {
+        return DueOn < today && ParcelStatuses.ToDeliver.Contains(Status);
+    }
 
     /// <summary>What the merchant pays for the parcel so far; final once the parcel is.</summary>
     public decimal TotalCharge => Status switch
@@ -205,8 +221,11 @@ public class Parcel : TenantEntity, IMerchantOwned
         return Result.Success();
     }
 
-    /// <summary>A rider collected the parcel from the merchant. Collecting it again changes nothing.</summary>
-    public Result<ScanOutcome> PickUp()
+    /// <summary>
+    /// A rider collected the parcel from the merchant on <paramref name="today"/> (the courier's date), which starts the
+    /// days it has to be delivered in. Collecting it again changes nothing.
+    /// </summary>
+    public Result<ScanOutcome> PickUp(DateOnly today)
     {
         if (Status == ParcelStatus.PickedUp)
         {
@@ -218,17 +237,18 @@ public class Parcel : TenantEntity, IMerchantOwned
             return Error.Conflict("parcel.pickup", $"{TrackingCode} is {Status.DisplayName().ToLowerInvariant()}, so there is nothing to collect.");
         }
 
+        DueOn = DeliveryDays is { } days ? today.AddDays(days) : null;
         MoveTo(ParcelStatus.PickedUp, "Picked up from the merchant");
 
         return ScanOutcome.Recorded;
     }
 
     /// <summary>
-    /// Hub staff scanned the parcel in at <paramref name="hubId"/>: from the pickup rider (or the merchant's own
-    /// drop-off), off the transfer from another hub, or back from a rider who could not deliver it. Scanning it again at
-    /// the same hub changes nothing.
+    /// Hub staff scanned the parcel in at <paramref name="hubId"/> on <paramref name="today"/>: from the pickup rider (or
+    /// the merchant's own drop-off, which starts its days to be delivered in), off the transfer from another hub, or back
+    /// from a rider who could not deliver it. Scanning it again at the same hub changes nothing.
     /// </summary>
-    public Result<ScanOutcome> ReceiveAt(long hubId)
+    public Result<ScanOutcome> ReceiveAt(long hubId, DateOnly today)
     {
         if (CurrentHubId == hubId)
         {
@@ -239,6 +259,11 @@ public class Parcel : TenantEntity, IMerchantOwned
         {
             case ParcelStatus.Pending or ParcelStatus.PickedUp:
                 var dropped = Status == ParcelStatus.Pending;
+                if (dropped)
+                {
+                    DueOn = DeliveryDays is { } days ? today.AddDays(days) : null;
+                }
+
                 Place(hubId);
                 MoveTo(ParcelStatus.AtHub, dropped ? "Dropped off at the hub by the merchant" : "Received at the hub", hubId);
                 return ScanOutcome.Recorded;
@@ -394,7 +419,8 @@ public class Parcel : TenantEntity, IMerchantOwned
     /// <summary>
     /// The recipient could not take the parcel today (not reachable, asked for another day). The rider brings it back to
     /// the hub for another attempt; after <paramref name="maxAttempts"/> attempts it must be delivered or returned. The
-    /// day the recipient asked for, when given, is after <paramref name="today"/> (the courier's date).
+    /// day the recipient asked for, when given, is after <paramref name="today"/> (the courier's date), and the parcel is
+    /// not late until then.
     /// </summary>
     public Result Hold(string? reason, DateOnly? until, DateOnly today, int maxAttempts)
     {
@@ -424,6 +450,11 @@ public class Parcel : TenantEntity, IMerchantOwned
         Attempts++;
         HoldReason = why;
         HoldUntil = until;
+        if (until > DueOn)
+        {
+            DueOn = until;
+        }
+
         MoveTo(ParcelStatus.OnHold, until is null ? $"On hold: {why}" : $"On hold until {until:ddd d MMM}: {why}");
 
         return Result.Success();
@@ -552,6 +583,7 @@ public class Parcel : TenantEntity, IMerchantOwned
         DeliveryCharge = details.Charges.DeliveryCharge;
         CodChargePercent = details.Charges.CodChargePercent;
         ReturnCharge = details.Charges.ReturnCharge;
+        DeliveryDays = details.Charges.DeliveryDays;
 
         return Result.Success();
     }

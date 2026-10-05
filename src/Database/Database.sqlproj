@@ -63,6 +63,7 @@
     <Build Include="Delivery/Tables/PickupRequest.sql" />
     <Build Include="Delivery/Tables/DeliveryRun.sql" />
     <Build Include="Delivery/Tables/DeliveryAttempt.sql" />
+    <Build Include="Delivery/Tables/VehicleCapacity.sql" />
     <Build Include="Payments/Sequences/PayoutNumber.sql" />
     <Build Include="Payments/Tables/LedgerEntry.sql" />
     <Build Include="Payments/Tables/Payout.sql" />

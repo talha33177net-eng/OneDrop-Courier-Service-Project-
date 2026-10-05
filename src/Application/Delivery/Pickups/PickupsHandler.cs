@@ -11,9 +11,13 @@ namespace Application.Delivery.Pickups;
 /// <summary>A merchant's pickup point and how many of its parcels wait there.</summary>
 public sealed record PickupPointRow(long Id, string Name, string Address, string Area, bool IsDefault, int Waiting);
 
-/// <summary>A pickup request as the merchant's and the hub's pages show it.</summary>
+/// <summary>
+/// A pickup request as the merchant's and the hub's pages show it. For the hub, an open request also says what the
+/// parcels booked there weigh and the vehicle to send (<see cref="Fleet.For"/>).
+/// </summary>
 public sealed record PickupRow(
     long Id,
+    long PickupPointId,
     string Merchant,
     string MerchantPhone,
     string PickupPoint,
@@ -28,7 +32,12 @@ public sealed record PickupRow(
     long? RiderId,
     string? Rider,
     string? RiderPhone,
-    int? Picked);
+    int? Picked)
+{
+    public int BookedGrams { get; init; }
+
+    public Vehicle? Send { get; init; }
+}
 
 public sealed record MerchantPickups(IReadOnlyList<PickupPointRow> Points, IReadOnlyList<PickupRow> Requests);
 
@@ -137,7 +146,10 @@ public class PickupsHandler(
         return cancelled;
     }
 
-    /// <summary>The hub's open pickups (requested or assigned, any day) and the ones completed today.</summary>
+    /// <summary>
+    /// The hub's open pickups (requested or assigned, any day), each with the vehicle to send, and the ones completed
+    /// today.
+    /// </summary>
     public async Task<IReadOnlyList<PickupRow>?> ForHubAsync(string hubCode, CancellationToken cancellationToken = default)
     {
         var tenant = tenantContext.Require();
@@ -155,8 +167,26 @@ public class PickupsHandler(
             .OrderBy(r => r.Status)
             .ThenBy(r => r.PickupDate)
             .ThenBy(r => r.Id);
+        var rows = await RowsAsync(requests, cancellationToken);
+        var points = rows.Where(r => r.Picked is null).Select(r => r.PickupPointId).Distinct().ToList();
+        var booked = (await db.Parcels
+                .Where(p => points.Contains(p.PickupPointId) && p.Status == ParcelStatus.Pending)
+                .Select(p => new { p.PickupPointId, p.WeightGrams })
+                .AsNoTracking()
+                .ToListAsync(cancellationToken))
+            .ToLookup(p => p.PickupPointId, p => p.WeightGrams);
+        var fleet = new Fleet(await db.VehicleCapacities.AsNoTracking().ToListAsync(cancellationToken));
 
-        return await RowsAsync(requests, cancellationToken);
+        return
+        [
+            .. rows.Select(row => row.Status is PickupStatus.Requested or PickupStatus.Assigned
+                ? row with
+                {
+                    BookedGrams = booked[row.PickupPointId].Sum(),
+                    Send = fleet.For(PickupRequest.ToCollect(row.Expected, [.. booked[row.PickupPointId]]))
+                }
+                : row)
+        ];
     }
 
     public async Task<Result> AssignAsync(string hubCode, long requestId, long riderId, CancellationToken cancellationToken = default)
@@ -176,7 +206,12 @@ public class PickupsHandler(
             return Hubs.AssignParcels.AssignParcelsHandler.UnknownRider;
         }
 
-        var assigned = request.Assign(rider);
+        var booked = await db.Parcels
+            .Where(p => p.PickupPointId == request.PickupPointId && p.Status == ParcelStatus.Pending)
+            .Select(p => p.WeightGrams)
+            .ToListAsync(cancellationToken);
+        var fleet = new Fleet(await db.VehicleCapacities.AsNoTracking().ToListAsync(cancellationToken));
+        var assigned = request.Assign(rider, fleet, PickupRequest.ToCollect(request.ExpectedParcels, booked));
         if (assigned.IsSuccess)
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -194,6 +229,7 @@ public class PickupsHandler(
             join area in db.Areas on point.AreaId equals area.Id
             select new PickupRow(
                 request.Id,
+                point.Id,
                 merchant.Name,
                 merchant.ContactPhone,
                 point.Name,

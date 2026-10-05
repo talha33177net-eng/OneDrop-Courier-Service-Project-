@@ -1,4 +1,5 @@
 @page
+@using Domain.Delivery
 @model Web.Pages.Admin.RidersModel
 @{
     ViewData["Title"] = "Riders";
@@ -7,9 +8,10 @@
 <div class="page-head">
     <div>
         <h1>Riders</h1>
-        <p>Who picks up and delivers, from which hub.</p>
+        <p>Who picks up and delivers, from which hub, and on what. A rider is never handed more than their vehicle carries.</p>
     </div>
     <div class="page-actions">
+        <a class="btn btn-outline" asp-page="/Admin/Vehicles">@Icons.Get("truck") What each vehicle carries</a>
         <form method="get" class="hub-switch">
             @Icons.Get("warehouse")
             <select name="hubId" onchange="this.form.submit()" aria-label="Hub">
@@ -39,13 +41,14 @@
         {
             <div class="table-wrap">
                 <table class="table">
-                    <thead><tr><th>Rider</th><th>Hub</th><th class="num">With them</th><th class="num">Delivered today</th><th class="num">Cash in hand</th><th></th></tr></thead>
+                    <thead><tr><th>Rider</th><th>Hub</th><th>Vehicle</th><th class="num">With them</th><th class="num">Delivered today</th><th class="num">Cash in hand</th><th></th></tr></thead>
                     <tbody>
                         @foreach (var r in Model.Rows)
                         {
                             <tr style="@(r.Active ? "" : "opacity:.55")">
                                 <td><div class="cell-main">@r.Name @if (!r.Active) { <span class="badge badge-cancel">Stopped</span> }</div><div class="cell-sub">@Money.Phone(r.Phone)@(r.Email is null ? "" : $" · {r.Email}")</div></td>
                                 <td>@r.Hub</td>
+                                <td><span class="vehicle">@Icons.Get(Statuses.Icon(r.Vehicle)) @r.Vehicle.DisplayName()</span></td>
                                 <td class="num">@r.WithThem</td>
                                 <td class="num">@r.DeliveredToday</td>
                                 <td class="num">@Money.Taka(r.CashInHand)</td>
@@ -59,7 +62,7 @@
                             @if (Model.Edit == r.Id)
                             {
                                 <tr>
-                                    <td colspan="6" style="background:var(--brand-tint)">
+                                    <td colspan="7" style="background:var(--brand-tint)">
                                         <form method="post" asp-page-handler="Edit" asp-route-id="@r.Id" asp-route-hubId="@Model.HubId" class="gap">
                                             <input type="text" name="name" value="@r.Name" required style="max-width:200px" aria-label="Name" />
                                             <input type="tel" name="phone" value="@Money.Phone(r.Phone)" required style="max-width:160px" aria-label="Phone" />
@@ -67,6 +70,12 @@
                                                 @foreach (var hub in Model.Hubs)
                                                 {
                                                     <option value="@hub.Id" selected="@(hub.Id == r.HubId)">@hub.Name</option>
+                                                }
+                                            </select>
+                                            <select name="vehicle" style="max-width:160px" aria-label="Vehicle">
+                                                @foreach (var vehicle in Vehicles.All)
+                                                {
+                                                    <option value="@vehicle" selected="@(vehicle == r.Vehicle)">@vehicle.DisplayName()</option>
                                                 }
                                             </select>
                                             <button class="btn btn-primary btn-sm" type="submit">Save</button>
@@ -96,6 +105,17 @@
                             <option value="@hub.Id" selected="@(hub.Id == Model.HubId)">@hub.Name</option>
                         }
                     </select>
+                </div>
+                <div class="field">
+                    <label for="vehicle">Rides</label>
+                    <select id="vehicle" name="vehicle" required>
+                        <option value="">Choose</option>
+                        @foreach (var vehicle in Vehicles.All)
+                        {
+                            <option value="@vehicle">@vehicle.DisplayName()</option>
+                        }
+                    </select>
+                    <span class="hint">Decides how many parcels the hub can hand them at once.</span>
                 </div>
                 <div class="field"><label for="email">Email to sign in with</label><input type="email" id="email" name="email" required /></div>
                 <div class="field"><label for="password">First password</label><input type="text" id="password" name="password" autocomplete="off" required /></div>

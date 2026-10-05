@@ -166,7 +166,10 @@
                     <li>@Icons.Get("check") <span>@Money.Taka(rate.ExtraKgCharge) for each extra kg</span></li>
                     <li>@Icons.Get("check") <span>@rate.CodChargePercent.ToString("0.##")% COD charge</span></li>
                     <li>@Icons.Get("check") <span>@if (rate.ReturnCharge == 0) { <text>No extra charge for a return</text> } else { <text>@Money.Taka(rate.ReturnCharge) extra for a return</text> }</span></li>
-                    <li>@Icons.Get("check") @(rate.ServiceArea switch { ServiceArea.InsideCity => "Delivered within 24 to 48 hours", ServiceArea.Suburb => "Delivered within 48 to 72 hours", _ => "Delivered within 3 to 5 days" })</li>
+                    @if (rate.DeliveryDays is { } days)
+                    {
+                        <li>@Icons.Get("check") <span>Delivered @Statuses.AfterPickup(days)</span></li>
+                    }
                 </ul>
             </div>
         }

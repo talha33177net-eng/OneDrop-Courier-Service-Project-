@@ -39,6 +39,9 @@ public sealed record MerchantDashboard(
 
     /// <summary>The merchant has asked for a pickup or handed a parcel over at least once.</summary>
     public bool HandedOver { get; init; }
+
+    /// <summary>Parcels still on their way after the day they were due.</summary>
+    public int Late { get; init; }
 }
 
 public sealed record HubRow(string Code, string Name, int AtHub, int ToAssign, int Incoming, int WithRiders);
@@ -57,7 +60,11 @@ public sealed record AdminDashboard(
     decimal OwedToMerchants,
     IReadOnlyList<DayCount> Week,
     IReadOnlyList<HubRow> Hubs,
-    IReadOnlyList<TopMerchant> TopMerchants);
+    IReadOnlyList<TopMerchant> TopMerchants)
+{
+    /// <summary>Parcels still on their way after the day they were due.</summary>
+    public int Late { get; init; }
+}
 
 /// <summary>
 /// The numbers on the merchant's and the admin's dashboards, worked out from the data when asked. A merchant's are its
@@ -108,7 +115,8 @@ public class DashboardHandler(
             recent.Page.Items)
         {
             PickupOpen = pickupOpen,
-            HandedOver = handedOver
+            HandedOver = handedOver,
+            Late = await LateAsync(today, cancellationToken)
         };
     }
 
@@ -188,7 +196,15 @@ public class DashboardHandler(
             owed,
             await WeekAsync(tenant, today, cancellationToken),
             hubs.Where(h => h.AtHub + h.Incoming + h.WithRiders > 0).ToList() is { Count: > 0 } busy ? busy : hubs.Take(6).ToList(),
-            top);
+            top)
+        {
+            Late = await LateAsync(today, cancellationToken)
+        };
+    }
+
+    private async Task<int> LateAsync(DateOnly today, CancellationToken cancellationToken)
+    {
+        return await db.Parcels.CountAsync(p => p.DueOn < today && ParcelStatuses.ToDeliver.Contains(p.Status), cancellationToken);
     }
 
     private async Task<StageCounts> StagesAsync(CancellationToken cancellationToken)

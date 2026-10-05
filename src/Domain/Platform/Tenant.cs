@@ -35,5 +35,11 @@ public class Tenant : AuditedEntity, IArchivable
     /// </summary>
     public int MaxDeliveryAttempts { get; private set; }
 
+    /// <summary>
+    /// The time of day (the tenant's clock) riders are due back at their hub with the day's cash and the parcels they
+    /// could not deliver. A run still open after it is late. Null when the courier sets no time.
+    /// </summary>
+    public TimeOnly? RiderReturnTime { get; private set; }
+
     public bool Archived { get; private set; }
 }

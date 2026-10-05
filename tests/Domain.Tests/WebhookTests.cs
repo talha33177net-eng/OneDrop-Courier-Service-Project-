@@ -117,11 +117,11 @@ public class WebhookTests
         var parcel = Build.Parcel(pickupHub: Build.Mirpur, deliveryHub: Build.Gulshan);
         Assert.Empty(Changes(parcel));
 
-        parcel.PickUp();
-        parcel.ReceiveAt(Build.Mirpur);
-        parcel.ReceiveAt(Build.Mirpur);
+        parcel.PickUp(Build.Today);
+        parcel.ReceiveAt(Build.Mirpur, Build.Today);
+        parcel.ReceiveAt(Build.Mirpur, Build.Today);
         parcel.DispatchTo(Build.Mirpur, Build.Gulshan);
-        parcel.ReceiveAt(Build.Gulshan);
+        parcel.ReceiveAt(Build.Gulshan, Build.Today);
         parcel.AssignTo(riderId: 5, Build.Gulshan);
         parcel.Deliver(parcel.CodAmount, null, Now);
 

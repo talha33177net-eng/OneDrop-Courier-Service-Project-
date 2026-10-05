@@ -23,6 +23,12 @@ public sealed record RunRow(
     DateTime? ClosedOn)
 {
     public decimal? Short => CashReceived is null ? null : CashCollected - CashReceived;
+
+    /// <summary>When the rider is due back with the cash, on the courier's clock; null when it sets no time.</summary>
+    public DateTime? DueBack { get; init; }
+
+    /// <summary>Still open after the rider was due back.</summary>
+    public bool Late { get; init; }
 }
 
 /// <summary>
@@ -43,7 +49,8 @@ public class RunsHandler(IAppDbContext db, ITenantContext tenantContext, HubDire
             return null;
         }
 
-        var today = tenant.Today(time.GetUtcNow().UtcDateTime);
+        var now = time.GetUtcNow().UtcDateTime;
+        var today = tenant.Today(now);
         var rows = await (
             from run in db.DeliveryRuns
             join rider in db.Riders on run.RiderId equals rider.Id
@@ -67,7 +74,15 @@ public class RunsHandler(IAppDbContext db, ITenantContext tenantContext, HubDire
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        return [.. rows.Select(row => row with { ClosedOn = row.ClosedOn is { } closed ? tenant.Local(closed) : null })];
+        return
+        [
+            .. rows.Select(row => row with
+            {
+                ClosedOn = row.ClosedOn is { } closed ? tenant.Local(closed) : null,
+                DueBack = tenant.DueBack(row.Date),
+                Late = row.Status == RunStatus.Open && tenant.RunIsLate(row.Date, now)
+            })
+        ];
     }
 
     /// <summary>
@@ -110,7 +125,7 @@ public class RunsHandler(IAppDbContext db, ITenantContext tenantContext, HubDire
             .ToListAsync(cancellationToken);
         foreach (var parcel in back)
         {
-            parcel.ReceiveAt(run.HubId);
+            parcel.ReceiveAt(run.HubId, run.RunDate);
         }
 
         try

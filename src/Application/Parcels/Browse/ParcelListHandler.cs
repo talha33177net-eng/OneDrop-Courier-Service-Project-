@@ -38,12 +38,15 @@ public sealed record ParcelQuery
     /// <summary>Booked on or before this day.</summary>
     public DateOnly? To { get; init; }
 
+    /// <summary>Only parcels still on their way after the day they were due.</summary>
+    public bool Late { get; init; }
+
     public int Page { get; init; } = 1;
 
     public int PageSize { get; init; } = 25;
 }
 
-/// <summary>A parcel as a list shows it. Times are the tenant's.</summary>
+/// <summary>A parcel as a list shows it. Times are the tenant's; <see cref="Late"/> is as of today.</summary>
 public sealed record ParcelRow(
     string TrackingCode,
     string? MerchantReference,
@@ -57,15 +60,19 @@ public sealed record ParcelRow(
     decimal? CollectedAmount,
     decimal DeliveryCharge,
     int Attempts,
-    DateTime Booked);
+    DateTime Booked,
+    DateOnly? DueOn)
+{
+    public bool Late { get; init; }
+}
 
 public sealed record ParcelList(Page<ParcelRow> Page, IReadOnlyDictionary<ParcelTab, int> Counts);
 
 /// <summary>
-/// Lists parcels with tabs, search, date range and paging. A merchant sees only its own (the merchant filter); courier
-/// staff see every merchant's and can narrow to one merchant or hub.
+/// Lists parcels with tabs, search, date range, late ones only and paging. A merchant sees only its own (the merchant
+/// filter); courier staff see every merchant's and can narrow to one merchant or hub.
 /// </summary>
-public class ParcelListHandler(IAppDbContext db, ITenantContext tenantContext)
+public class ParcelListHandler(IAppDbContext db, ITenantContext tenantContext, TimeProvider time)
 {
     public const int MaxPageSize = 100;
 
@@ -87,7 +94,8 @@ public class ParcelListHandler(IAppDbContext db, ITenantContext tenantContext)
     public async Task<ParcelList> ListAsync(ParcelQuery query, CancellationToken cancellationToken = default)
     {
         var tenant = tenantContext.Require();
-        var parcels = Filter(db.Parcels.AsNoTracking(), query, tenant);
+        var today = tenant.Today(time.GetUtcNow().UtcDateTime);
+        var parcels = Filter(db.Parcels.AsNoTracking(), query, tenant, today);
 
         var byStatus = await parcels
             .GroupBy(p => p.Status)
@@ -119,18 +127,34 @@ public class ParcelListHandler(IAppDbContext db, ITenantContext tenantContext)
                 parcel.CollectedAmount,
                 parcel.DeliveryCharge,
                 parcel.Attempts,
-                parcel.Created))
+                parcel.Created,
+                parcel.DueOn))
             .Skip((number - 1) * size)
             .Take(size)
             .ToListAsync(cancellationToken);
 
         return new ParcelList(
-            new Page<ParcelRow>([.. rows.Select(row => row with { Booked = tenant.Local(row.Booked) })], counts[query.Tab], number, size),
+            new Page<ParcelRow>(
+                [
+                    .. rows.Select(row => row with
+                    {
+                        Booked = tenant.Local(row.Booked),
+                        Late = row.DueOn < today && ParcelStatuses.ToDeliver.Contains(row.Status)
+                    })
+                ],
+                counts[query.Tab],
+                number,
+                size),
             counts);
     }
 
-    private static IQueryable<Parcel> Filter(IQueryable<Parcel> parcels, ParcelQuery query, TenantInfo tenant)
+    private static IQueryable<Parcel> Filter(IQueryable<Parcel> parcels, ParcelQuery query, TenantInfo tenant, DateOnly today)
     {
+        if (query.Late)
+        {
+            parcels = parcels.Where(p => p.DueOn < today && ParcelStatuses.ToDeliver.Contains(p.Status));
+        }
+
         if (query.MerchantId is { } merchantId)
         {
             parcels = parcels.Where(p => p.MerchantId == merchantId);

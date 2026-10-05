@@ -37,7 +37,7 @@ public class PickupRequest : TenantEntity, IMerchantOwned
     /// <summary>The day the merchant wants the rider to come (the tenant's date).</summary>
     public DateOnly PickupDate { get; private set; }
 
-    /// <summary>How many parcels the merchant expects to hand over, so the hub sends a big enough vehicle.</summary>
+    /// <summary>How many parcels the merchant expects to hand over, so the hub sends a big enough vehicle (<see cref="ToCollect"/>).</summary>
     public int ExpectedParcels { get; private set; }
 
     public string? Note { get; private set; }
@@ -92,8 +92,21 @@ public class PickupRequest : TenantEntity, IMerchantOwned
         };
     }
 
-    /// <summary>The hub sends <paramref name="rider"/>, or another rider instead of the one it sent.</summary>
-    public Result Assign(Rider rider)
+    /// <summary>
+    /// What the rider collects: the parcels booked at the point (<paramref name="bookedGrams"/>, one weight each), or as
+    /// many as the merchant said to expect when that is more.
+    /// </summary>
+    public static Load ToCollect(int expectedParcels, IReadOnlyCollection<int> bookedGrams)
+    {
+        return Load.Of(bookedGrams) with { Parcels = Math.Max(expectedParcels, bookedGrams.Count) };
+    }
+
+    /// <summary>
+    /// The hub sends <paramref name="rider"/>, or another rider instead of the one it sent. Their vehicle must carry
+    /// <paramref name="load"/> in one trip, unless nothing in the courier's <paramref name="fleet"/> does and theirs is
+    /// the biggest.
+    /// </summary>
+    public Result Assign(Rider rider, Fleet fleet, Load load)
     {
         if (!IsOpen)
         {
@@ -103,6 +116,12 @@ public class PickupRequest : TenantEntity, IMerchantOwned
         if (rider.HubId != HubId || rider.Archived)
         {
             return Error.Validation("pickup.rider", "Choose an active rider of the hub that collects from this point.");
+        }
+
+        var fits = fleet.Collect(rider.Vehicle, load);
+        if (fits.IsFailure)
+        {
+            return fits;
         }
 
         RiderId = rider.Id;

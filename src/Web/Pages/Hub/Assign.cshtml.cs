@@ -45,8 +45,16 @@ public class AssignModel(HubOverviewHandler hubs, HubBoardHandler board, AssignP
         }
         else
         {
-            TempData["Done"] = $"{assigned.Value.Assigned} parcel{(assigned.Value.Assigned == 1 ? "" : "s")} handed over." +
-                (assigned.Value.Problems.Count > 0 ? " Not handed over: " + string.Join(" ", assigned.Value.Problems) : "");
+            // What went is a toast; what stayed behind, and why, stays on the page
+            if (assigned.Value.Assigned > 0)
+            {
+                TempData["Done"] = $"{assigned.Value.Assigned} parcel{(assigned.Value.Assigned == 1 ? "" : "s")} handed over.";
+            }
+
+            if (assigned.Value.Problems.Count > 0)
+            {
+                TempData["Problem"] = "Not handed over: " + string.Join(" ", assigned.Value.Problems);
+            }
         }
 
         return RedirectToPage(new { hub = Hub.Code });

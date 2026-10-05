@@ -22,6 +22,10 @@ public class ParcelsModel(ParcelListHandler parcels) : PageModel
     [BindProperty(SupportsGet = true)]
     public DateOnly? To { get; set; }
 
+    /// <summary>Only parcels still on their way after the day they were due.</summary>
+    [BindProperty(SupportsGet = true)]
+    public bool Late { get; set; }
+
     [BindProperty(SupportsGet = true, Name = "page")]
     public int PageNumber { get; set; } = 1;
 
@@ -36,7 +40,7 @@ public class ParcelsModel(ParcelListHandler parcels) : PageModel
     public async Task<IActionResult> OnGetExportAsync(CancellationToken cancellationToken)
     {
         var list = await parcels.ListAsync(Query(1, ParcelListHandler.MaxPageSize), cancellationToken);
-        var csv = new StringBuilder("tracking_code,invoice,recipient,phone,area,status,cod_amount,collected,delivery_charge,booked\r\n");
+        var csv = new StringBuilder("tracking_code,invoice,recipient,phone,area,status,cod_amount,collected,delivery_charge,booked,due_by\r\n");
         foreach (var row in list.Page.Items)
         {
             csv.AppendLine(string.Join(",", new[]
@@ -44,7 +48,8 @@ public class ParcelsModel(ParcelListHandler parcels) : PageModel
                 row.TrackingCode, row.MerchantReference ?? "", row.RecipientName, row.RecipientPhone, row.Area,
                 row.Status.DisplayName(), row.CodAmount.ToString(CultureInfo.InvariantCulture),
                 row.CollectedAmount?.ToString(CultureInfo.InvariantCulture) ?? "",
-                row.DeliveryCharge.ToString(CultureInfo.InvariantCulture), row.Booked.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)
+                row.DeliveryCharge.ToString(CultureInfo.InvariantCulture), row.Booked.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
+                row.DueOn?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? ""
             }.Select(Quote)));
         }
 
@@ -58,6 +63,6 @@ public class ParcelsModel(ParcelListHandler parcels) : PageModel
 
     private ParcelQuery Query(int page, int size)
     {
-        return new ParcelQuery { Tab = Tab, Search = Search, From = From, To = To, Page = page, PageSize = size };
+        return new ParcelQuery { Tab = Tab, Search = Search, From = From, To = To, Late = Late, Page = page, PageSize = size };
     }
 }

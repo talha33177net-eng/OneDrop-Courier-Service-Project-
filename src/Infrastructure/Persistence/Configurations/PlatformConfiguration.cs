@@ -15,6 +15,7 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.CurrencyCode).HasMaxLength(3).IsFixedLength();
         builder.Property(t => t.SmsSenderName).HasMaxLength(20);
         builder.Property(t => t.SupportPhone).HasMaxLength(20);
+        builder.Property(t => t.RiderReturnTime).HasColumnType("time(0)");
         builder.HasIndex(t => t.Slug).IsUnique().HasDatabaseName("UX_Tenant_Slug");
     }
 }

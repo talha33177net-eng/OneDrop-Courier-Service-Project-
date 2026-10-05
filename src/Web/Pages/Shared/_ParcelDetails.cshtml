@@ -17,6 +17,18 @@
             </div>
             <div class="card-body">
                 <partial name="_ParcelProgress" model="Model.Status" />
+                @if (Model.Late)
+                {
+                    <div class="alert alert-error mt">@Icons.Get("clock")<div><strong>Late:</strong> it should have been delivered by @Model.DueOn!.Value.ToString("dddd d MMM").</div></div>
+                }
+                else if (Model.DueOn is { } due && ParcelStatuses.ToDeliver.Contains(Model.Status))
+                {
+                    <p class="hint mt">@Icons.Get("clock") To be delivered by <strong>@due.ToString("dddd d MMM")</strong>@(Model.HoldUntil is null ? "" : ", the day the customer asked for").</p>
+                }
+                else if (Model.Status == ParcelStatus.Pending && Model.DeliveryDays is { } days)
+                {
+                    <p class="hint mt">@Icons.Get("clock") Delivered @Statuses.AfterPickup(days).</p>
+                }
                 @if (Model.HoldReason is not null && Model.Status == ParcelStatus.OnHold)
                 {
                     <div class="alert alert-warning mt">@Icons.Get("pause")<div><strong>On hold:</strong> @Model.HoldReason@(Model.HoldUntil is { } until ? $" · deliver on {until:ddd d MMM}" : "")</div></div>

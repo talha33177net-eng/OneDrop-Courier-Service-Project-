@@ -3,10 +3,14 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Application.Delivery.Riders;
 using Application.Hubs;
 using Domain.Common;
+using Domain.Delivery;
 
 namespace Web.Pages.Admin;
 
-/// <summary>The courier's riders by hub with today's work; add a rider with a login, edit one, stop or restart one.</summary>
+/// <summary>
+/// The courier's riders by hub with what they ride and today's work; add a rider with a login, edit one, stop or restart
+/// one.
+/// </summary>
 public class RidersModel(AdminRidersHandler riders, HubDirectory hubs) : PageModel
 {
     [BindProperty(SupportsGet = true)]
@@ -30,11 +34,12 @@ public class RidersModel(AdminRidersHandler riders, HubDirectory hubs) : PageMod
         string? name,
         string? phone,
         long hubId,
+        Vehicle vehicle,
         string? email,
         string? password,
         CancellationToken cancellationToken)
     {
-        var added = await riders.AddAsync(new NewRider(name, phone, hubId, email, password), cancellationToken);
+        var added = await riders.AddAsync(new NewRider(name, phone, hubId, vehicle, email, password), cancellationToken);
         if (added.IsSuccess)
         {
             TempData["Done"] = $"{name} is added. They sign in with {email}.";
@@ -48,9 +53,15 @@ public class RidersModel(AdminRidersHandler riders, HubDirectory hubs) : PageMod
         return Page();
     }
 
-    public async Task<IActionResult> OnPostEditAsync(long id, string? name, string? phone, long hubId, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostEditAsync(
+        long id,
+        string? name,
+        string? phone,
+        long hubId,
+        Vehicle vehicle,
+        CancellationToken cancellationToken)
     {
-        return Answer(await riders.EditAsync(id, name, phone, hubId, cancellationToken), "Rider saved.");
+        return Answer(await riders.EditAsync(id, name, phone, hubId, vehicle, cancellationToken), "Rider saved.");
     }
 
     public async Task<IActionResult> OnPostActiveAsync(long id, bool active, CancellationToken cancellationToken)

@@ -4,8 +4,9 @@ namespace Domain.Delivery;
 
 /// <summary>
 /// A rider working from one hub, collecting parcels from merchants and delivering them. A rider signs in with their
-/// own login (<see cref="UserId"/>) to see the day's pickups and deliveries. A rider who leaves is archived, never
-/// deleted: their attempts and runs stay on record.
+/// own login (<see cref="UserId"/>) to see the day's pickups and deliveries. What they ride (<see cref="Vehicle"/>)
+/// decides how much the hub can hand them at once. A rider who leaves is archived, never deleted: their attempts and
+/// runs stay on record.
 /// </summary>
 public class Rider : TenantEntity, IArchivable
 {
@@ -24,17 +25,19 @@ public class Rider : TenantEntity, IArchivable
     /// <summary>E.164, given to recipients when the rider is on the way.</summary>
     public string Phone { get; private set; } = "";
 
+    public Vehicle Vehicle { get; private set; }
+
     public bool Archived { get; private set; }
 
-    public static Result<Rider> Create(long hubId, string? name, string? phone, long? userId)
+    public static Result<Rider> Create(long hubId, string? name, string? phone, Vehicle vehicle, long? userId)
     {
         var rider = new Rider { UserId = userId };
-        var changed = rider.Change(hubId, name, phone);
+        var changed = rider.Change(hubId, name, phone, vehicle);
 
         return changed.IsSuccess ? rider : changed.Error!;
     }
 
-    public Result Change(long hubId, string? name, string? phone)
+    public Result Change(long hubId, string? name, string? phone, Vehicle vehicle)
     {
         var trimmed = name.NullIfBlank();
         if (trimmed is null || trimmed.Length > 200)
@@ -48,9 +51,15 @@ public class Rider : TenantEntity, IArchivable
             return parsed.Error!;
         }
 
+        if (!Enum.IsDefined(vehicle))
+        {
+            return Error.Validation("rider.vehicle", "Choose what the rider rides.");
+        }
+
         HubId = hubId;
         Name = trimmed;
         Phone = parsed.Value.Value;
+        Vehicle = vehicle;
 
         return Result.Success();
     }

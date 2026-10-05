@@ -8,7 +8,7 @@
 <div class="page-head">
     <div>
         <h1>Rider closing</h1>
-        <p>At the end of the day count each rider's cash and take back the parcels they could not deliver.</p>
+        <p>At the end of the day count each rider's cash and take back the parcels they could not deliver. A run still open after its rider was due back is marked late: call the rider.</p>
     </div>
     <div class="page-actions">@await Html.PartialAsync("_HubSwitch", (Model.Work, Model.Hub))</div>
 </div>
@@ -42,7 +42,13 @@
                     {
                         <tr>
                             <td><div class="cell-main">@run.Rider</div><div class="cell-sub">@Money.Phone(run.RiderPhone)</div></td>
-                            <td class="nowrap">@run.Date.ToString("ddd d MMM")</td>
+                            <td class="nowrap">
+                                @run.Date.ToString("ddd d MMM")
+                                @if (run.Status == RunStatus.Open && run.DueBack is { } due)
+                                {
+                                    <div><span class="due @(run.Late ? "late" : "")">@(run.Late ? "Late, due back" : "Back by") @due.ToString(run.Late ? "ddd h:mm tt" : "h:mm tt")</span></div>
+                                }
+                            </td>
                             <td class="num">@run.Assigned</td>
                             <td class="num positive">@run.Delivered</td>
                             <td class="num">@(run.Held + run.Refused)<div class="cell-sub">@run.Held held, @run.Refused refused</div></td>

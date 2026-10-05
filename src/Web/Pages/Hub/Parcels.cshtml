@@ -47,6 +47,7 @@
             <label for="to">to</label>
             <input type="date" id="to" name="to" value="@Model.To?.ToString("yyyy-MM-dd")" />
         </div>
+        <label class="check" style="height:40px"><input type="checkbox" name="late" value="true" checked="@Model.Late" /> Late only</label>
         <button class="btn btn-outline" type="submit">@Icons.Get("search") Filter</button>
     </form>
     @await Html.PartialAsync("_ParcelTable", (Model.List.Page.Items, "/Hub/Parcel/", true, false))

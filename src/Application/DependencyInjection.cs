@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Application.Dashboards;
+using Application.Delivery.Capacities;
 using Application.Delivery.Pickups;
 using Application.Delivery.RiderDay;
 using Application.Delivery.Riders;
@@ -64,6 +65,7 @@ public static class DependencyInjection
         services.AddScoped<PickupsHandler>();
         services.AddScoped<RiderDayHandler>();
         services.AddScoped<AdminRidersHandler>();
+        services.AddScoped<VehicleCapacitiesHandler>();
 
         services.AddScoped<MerchantOnboarding>();
         services.AddScoped<AdminMerchantsHandler>();

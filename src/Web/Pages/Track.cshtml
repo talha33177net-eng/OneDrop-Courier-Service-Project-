@@ -1,5 +1,6 @@
 @page
 @model TrackModel
+@inject ITenantContext TenantContext
 @{
     ViewData["Title"] = Model.Parcel is null ? "Track a parcel" : $"Parcel {Model.Parcel.TrackingCode}";
 }
@@ -47,7 +48,16 @@
             </div>
             <div class="card-body">
                 <partial name="_ParcelProgress" model="parcel.Status" />
-                <div class="alert alert-info mt" style="margin-bottom:0">@Icons.Get(next.Item1)<div>@next.Item2</div></div>
+                <div class="alert alert-info mt" style="margin-bottom:0">
+                    @Icons.Get(next.Item1)
+                    <div>
+                        @next.Item2
+                        @if (parcel.ExpectedBy is { } expected)
+                        {
+                            <div style="margin-top:6px"><strong>Expected by @expected.ToString("dddd d MMMM").</strong>@(expected < TenantContext.Require().Today(DateTime.UtcNow) ? " It is running late; the hub sends late parcels out first." : "")</div>
+                        }
+                    </div>
+                </div>
                 <hr />
                 <ol class="timeline">
                     @foreach (var step in parcel.Steps)

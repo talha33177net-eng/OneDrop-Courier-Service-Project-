@@ -46,6 +46,8 @@ public interface IAppDbContext
 
     DbSet<DeliveryAttempt> DeliveryAttempts { get; }
 
+    DbSet<VehicleCapacity> VehicleCapacities { get; }
+
     DbSet<LedgerEntry> LedgerEntries { get; }
 
     DbSet<Payout> Payouts { get; }

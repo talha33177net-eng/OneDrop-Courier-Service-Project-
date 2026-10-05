@@ -6,6 +6,7 @@ using Application.Network.ListAreas;
 using Application.Parcels.CreateParcel;
 using Application.Parcels.Quote;
 using Domain.Pricing;
+using Web.Display;
 
 namespace Web.Pages.Merchant;
 
@@ -77,7 +78,8 @@ public class NewParcelModel(
             q.DeliveryCharge,
             q.CodCharge,
             q.Total,
-            q.ReturnCharge
+            q.ReturnCharge,
+            when = q.DeliveryDays is { } days ? Statuses.AfterPickup(days) : null
         });
     }
 

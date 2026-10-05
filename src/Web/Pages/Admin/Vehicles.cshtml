@@ -1,0 +1,51 @@
+@page
+@using Domain.Delivery
+@model Web.Pages.Admin.VehiclesModel
+@{
+    ViewData["Title"] = "Vehicles";
+}
+
+<div class="page-head">
+    <div>
+        <h1>What each vehicle carries</h1>
+        <p>The most a rider takes out at once. The hub cannot hand a rider more than their vehicle carries, and each pickup goes to a vehicle big enough for it.</p>
+    </div>
+    <div class="page-actions"><a class="btn btn-outline" asp-page="/Admin/Riders">@Icons.Get("users") Riders</a></div>
+</div>
+
+<partial name="_Alerts" />
+
+<div class="tip" data-tip="admin-vehicles">
+    @Icons.Get("bulb")
+    <div>
+        <div class="tip-title">How the limits are used</div>
+        <ul>
+            <li>Handing parcels to a rider stops when the next parcel would go over any of the three numbers; the parcels due soonest go first.</li>
+            <li>A pickup is sized from the parcels booked at the point, or the merchant's own count if larger. Too big for a motorbike? The hub is told to send a pickup van.</li>
+            <li>When nothing carries a pickup in one trip, the biggest vehicle goes and makes more than one.</li>
+        </ul>
+    </div>
+</div>
+
+<div class="grid grid-3">
+    @foreach (var row in Model.Rows)
+    {
+        <form method="post" class="card">
+            <input type="hidden" name="vehicle" value="@row.Vehicle" />
+            <div class="card-head">
+                <div>
+                    <h2><span class="vehicle" style="font-size:inherit">@Icons.Get(Statuses.Icon(row.Vehicle)) @row.Vehicle.DisplayName()</span></h2>
+                    <p>@row.Riders active rider@(row.Riders == 1 ? "" : "s")@(row.MaxParcels is null ? " · no limit set yet" : "")</p>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="form-grid">
+                    <div class="field field-full"><label>Parcels at once</label><div class="input-group"><input type="number" name="maxParcels" value="@row.MaxParcels" min="1" max="@VehicleCapacity.MaxParcelsLimit" step="1" required /><span class="suffix">parcels</span></div></div>
+                    <div class="field"><label>Load in all</label><div class="input-group"><input type="number" name="maxLoadKg" value="@(row.MaxLoadGrams is { } load ? (load / 1000m).ToString("0.##") : null)" min="1" max="@(VehicleCapacity.MaxLoadGramsLimit / 1000)" step="0.5" required /><span class="suffix">kg</span></div></div>
+                    <div class="field"><label>Heaviest parcel</label><div class="input-group"><input type="number" name="maxParcelKg" value="@(row.MaxParcelGrams is { } heaviest ? (heaviest / 1000m).ToString("0.##") : null)" min="0.1" step="0.1" required /><span class="suffix">kg</span></div></div>
+                </div>
+            </div>
+            <div class="card-foot"><button class="btn btn-primary" type="submit">Save</button></div>
+        </form>
+    }
+</div>

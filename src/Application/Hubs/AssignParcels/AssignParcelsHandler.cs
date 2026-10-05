@@ -7,16 +7,30 @@ using Domain.Network;
 
 namespace Application.Hubs.AssignParcels;
 
-/// <summary>A rider of the hub and what they carry today.</summary>
-public sealed record RiderLoad(long Id, string Name, string Phone, int WithThem, int DeliveredToday);
+/// <summary>
+/// A rider of the hub, what they ride and what they carry now: the parcels with them and their weight, against the
+/// most their vehicle takes at once (null when the courier has set no limit for it).
+/// </summary>
+public sealed record RiderLoad(
+    long Id,
+    string Name,
+    string Phone,
+    Vehicle Vehicle,
+    int WithThem,
+    int CarriedGrams,
+    int DeliveredToday,
+    int? MaxParcels,
+    int? MaxLoadGrams);
 
 /// <summary>What an assignment did: the parcels handed over, and the ones that could not be with why.</summary>
 public sealed record AssignResult(int Assigned, IReadOnlyList<string> Problems);
 
 /// <summary>
 /// Hub staff hand parcels waiting at their hub to a rider for delivery. The parcels go on the rider's run sheet for the
-/// day, opened with the first parcel; each becomes out for delivery. A parcel that cannot go (not here, delivered from
-/// another hub) is listed with the reason and the others still go.
+/// day, opened with the first parcel; each becomes out for delivery. A rider is never handed more than their vehicle
+/// carries at once: the parcels due soonest go first, and the ones that do not fit stay at the hub. A parcel that
+/// cannot go (not here, delivered from another hub, too heavy for the vehicle) is listed with the reason and the others
+/// still go.
 /// </summary>
 public class AssignParcelsHandler(IAppDbContext db, ITenantContext tenantContext, HubDirectory hubs, TimeProvider time)
 {
@@ -31,21 +45,38 @@ public class AssignParcelsHandler(IAppDbContext db, ITenantContext tenantContext
             return [];
         }
 
-        var today = tenant.Today(time.GetUtcNow().UtcDateTime);
-        var todayStart = tenant.StartUtc(today);
-
-        return await db.Riders
+        var todayStart = tenant.StartUtc(tenant.Today(time.GetUtcNow().UtcDateTime));
+        var riders = await db.Riders
             .Where(r => r.HubId == hub.Id && !r.Archived)
             .OrderBy(r => r.Name)
-            .Select(r => new RiderLoad(
+            .Select(r => new
+            {
                 r.Id,
                 r.Name,
                 r.Phone,
-                db.DeliveryAttempts.Count(a => a.RiderId == r.Id && a.Outcome == null),
-                db.DeliveryAttempts.Count(a => a.RiderId == r.Id && a.CompletedOn >= todayStart &&
-                    (a.Outcome == AttemptOutcome.Delivered || a.Outcome == AttemptOutcome.PartlyDelivered))))
+                r.Vehicle,
+                WithThem = db.Parcels.Count(p => p.RiderId == r.Id),
+                Grams = db.Parcels.Where(p => p.RiderId == r.Id).Sum(p => (int?)p.WeightGrams) ?? 0,
+                Delivered = db.DeliveryAttempts.Count(a => a.RiderId == r.Id && a.CompletedOn >= todayStart &&
+                    (a.Outcome == AttemptOutcome.Delivered || a.Outcome == AttemptOutcome.PartlyDelivered))
+            })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
+        var fleet = new Fleet(await db.VehicleCapacities.AsNoTracking().ToListAsync(cancellationToken));
+
+        return
+        [
+            .. riders.Select(r => new RiderLoad(
+                r.Id,
+                r.Name,
+                r.Phone,
+                r.Vehicle,
+                r.WithThem,
+                r.Grams,
+                r.Delivered,
+                fleet[r.Vehicle]?.MaxParcels,
+                fleet[r.Vehicle]?.MaxLoadGrams))
+        ];
     }
 
     public async Task<Result<AssignResult>> AssignAsync(
@@ -80,12 +111,29 @@ public class AssignParcelsHandler(IAppDbContext db, ITenantContext tenantContext
             return Error.Conflict("assign.runClosed", $"{rider.Name}'s run for today is already closed.");
         }
 
-        var parcels = await db.Parcels.Where(p => codes.Contains(p.TrackingCode)).ToListAsync(cancellationToken);
+        var fleet = new Fleet(await db.VehicleCapacities.AsNoTracking().ToListAsync(cancellationToken));
+        var load = Load.Of(await db.Parcels.Where(p => p.RiderId == rider.Id).Select(p => p.WeightGrams).ToListAsync(cancellationToken));
+
+        // The parcels due soonest go first, so the ones left behind when the vehicle is full are the least urgent
+        var parcels = await db.Parcels
+            .Where(p => codes.Contains(p.TrackingCode))
+            .OrderBy(p => p.DueOn == null)
+            .ThenBy(p => p.DueOn)
+            .ThenBy(p => p.Id)
+            .ToListAsync(cancellationToken);
         var problems = codes.Except(parcels.Select(p => p.TrackingCode)).Select(code => $"{code} was not found.").ToList();
+        List<string> full = [];
         var assigned = 0;
         foreach (var parcel in parcels)
         {
-            var handed = parcel.AssignTo(rider.Id, hub.Id);
+            var fits = fleet.Take(rider.Vehicle, load, parcel.TrackingCode, parcel.WeightGrams);
+            if (fits.Error?.Code is "capacity.parcels" or "capacity.load")
+            {
+                full.Add(parcel.TrackingCode);
+                continue;
+            }
+
+            var handed = fits.IsSuccess ? parcel.AssignTo(rider.Id, hub.Id) : fits;
             if (handed.IsFailure)
             {
                 problems.Add(handed.Error!.Message);
@@ -93,7 +141,17 @@ public class AssignParcelsHandler(IAppDbContext db, ITenantContext tenantContext
             }
 
             db.DeliveryAttempts.Add(run.Add(parcel, now).Value);
+            load = load.With(parcel.WeightGrams);
             assigned++;
+        }
+
+        if (full.Count > 0)
+        {
+            var capacity = fleet[rider.Vehicle]!;
+            problems.Add(
+                $"{string.Join(", ", full.Take(3))}{(full.Count > 3 ? $" and {full.Count - 3} more" : "")} did not fit: " +
+                $"{rider.Name}'s {rider.Vehicle.DisplayName().ToLowerInvariant()} takes {capacity.MaxParcels} parcels or " +
+                $"{Weight.Kg(capacity.MaxLoadGrams)} at once. Give {(full.Count == 1 ? "it" : "them")} to another rider.");
         }
 
         try

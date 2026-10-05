@@ -28,7 +28,7 @@ public class GuardTests(WebAppFactory factory) : AppTests(factory)
             await db.Hubs.Where(h => h.Code == "MIR").Select(h => h.Id).SingleAsync(Cancel)));
         Assert.Contains(
             "cannot be moved to another hub yet",
-            await admin.SubmitAsync("/Admin/Riders", "/Admin/Riders?handler=Edit", ("id", $"{deliverer.Id}"), ("name", "Test rider"), ("phone", phone), ("hubId", $"{mirpur}")));
+            await admin.SubmitAsync("/Admin/Riders", "/Admin/Riders?handler=Edit", ("id", $"{deliverer.Id}"), ("name", "Test rider"), ("phone", phone), ("hubId", $"{mirpur}"), ("vehicle", "Motorbike")));
         Assert.False(await QueryAsync("onedrop", db => db.Riders.Where(r => r.Id == deliverer.Id).Select(r => r.Archived).SingleAsync(Cancel)));
 
         var yesterday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Dhaka"))).AddDays(-1);

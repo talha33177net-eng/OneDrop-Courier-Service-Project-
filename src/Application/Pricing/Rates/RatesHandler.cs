@@ -11,11 +11,12 @@ public sealed record RateRow(
     decimal BaseCharge,
     decimal ExtraKgCharge,
     decimal CodChargePercent,
-    decimal ReturnCharge);
+    decimal ReturnCharge,
+    int? DeliveryDays);
 
 /// <summary>
-/// The courier's rate card: shown on the public pricing section and the merchant's calculator, changed by the courier's
-/// admin. A change prices parcels booked from then on.
+/// The courier's rate card and delivery times: shown on the public pricing section and the merchant's calculator,
+/// changed by the courier's admin. A change prices, and promises a time for, parcels booked from then on.
 /// </summary>
 public class RatesHandler(IAppDbContext db)
 {
@@ -23,7 +24,7 @@ public class RatesHandler(IAppDbContext db)
     {
         return await db.DeliveryRates
             .OrderBy(r => r.ServiceArea)
-            .Select(r => new RateRow(r.ServiceArea, r.IncludedWeightGrams, r.BaseCharge, r.ExtraKgCharge, r.CodChargePercent, r.ReturnCharge))
+            .Select(r => new RateRow(r.ServiceArea, r.IncludedWeightGrams, r.BaseCharge, r.ExtraKgCharge, r.CodChargePercent, r.ReturnCharge, r.DeliveryDays))
             .AsNoTracking()
             .ToListAsync(cancellationToken);
     }

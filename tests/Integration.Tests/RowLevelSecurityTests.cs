@@ -102,7 +102,7 @@ public class RowLevelSecurityTests(WebAppFactory factory)
         await using var scope = ScopeFor(rival);
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var hubId = await db.Hubs.Select(h => h.Id).FirstAsync(Cancel);
-        var rider = Rider.Create(hubId, "RLS test", "019" + Random.Shared.Next(0, 100_000_000).ToString("D8"), null).Value;
+        var rider = Rider.Create(hubId, "RLS test", "019" + Random.Shared.Next(0, 100_000_000).ToString("D8"), Vehicle.Motorbike, null).Value;
         db.Riders.Add(rider);
         await db.SaveChangesAsync(Cancel);
 

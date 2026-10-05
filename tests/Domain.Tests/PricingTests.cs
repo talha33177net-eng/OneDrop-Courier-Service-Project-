@@ -57,15 +57,30 @@ public class PricingTests
     }
 
     [Theory]
-    [InlineData(0, 60, 15, 1, 0, "rate.weight")]
-    [InlineData(1000, -1, 15, 1, 0, "rate.amount")]
-    [InlineData(1000, 60, 15, 11, 0, "rate.cod")]
-    [InlineData(1000, 60, 15, 1, -5, "rate.amount")]
-    public void A_rate_outside_its_limits_is_refused_and_nothing_changes(int grams, decimal baseCharge, decimal extra, decimal cod, decimal ret, string code)
+    [InlineData(0, 60, 15, 1, 0, 1, "rate.weight")]
+    [InlineData(1000, -1, 15, 1, 0, 1, "rate.amount")]
+    [InlineData(1000, 60, 15, 11, 0, 1, "rate.cod")]
+    [InlineData(1000, 60, 15, 1, -5, 1, "rate.amount")]
+    [InlineData(1000, 60, 15, 1, 0, -1, "rate.days")]
+    [InlineData(1000, 60, 15, 1, 0, 31, "rate.days")]
+    public void A_rate_outside_its_limits_is_refused_and_nothing_changes(int grams, decimal baseCharge, decimal extra, decimal cod, decimal ret, int days, string code)
     {
         var rate = Build.Rate(ServiceArea.InsideCity);
 
-        Assert.Equal(code, rate.Change(new RateValues(grams, baseCharge, extra, cod, ret)).Error?.Code);
+        Assert.Equal(code, rate.Change(new RateValues(grams, baseCharge, extra, cod, ret, days)).Error?.Code);
         Assert.Equal(60, rate.BaseCharge);
+        Assert.Equal(1, rate.DeliveryDays);
+    }
+
+    [Fact]
+    public void The_delivery_time_is_promised_with_the_charges_and_may_be_left_out()
+    {
+        Assert.Equal(3, Build.Rate(ServiceArea.OutsideCity).ChargesFor(1500).DeliveryDays);
+
+        var rate = Build.Rate(ServiceArea.InsideCity);
+        Assert.True(rate.Change(Build.InsideCity with { DeliveryDays = null }).IsSuccess);
+        Assert.Null(rate.ChargesFor(500).DeliveryDays);
+        Assert.True(rate.Change(Build.InsideCity with { DeliveryDays = 0 }).IsSuccess);
+        Assert.Equal(0, rate.ChargesFor(500).DeliveryDays);
     }
 }

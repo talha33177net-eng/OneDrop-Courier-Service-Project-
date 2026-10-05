@@ -57,6 +57,13 @@ public static class ParcelStatuses
         ParcelStatus.OnHold, ParcelStatus.Returning
     ];
 
+    /// <summary>Picked up and still on its way to the recipient: the statuses a parcel can be late in.</summary>
+    public static readonly ParcelStatus[] ToDeliver =
+    [
+        ParcelStatus.PickedUp, ParcelStatus.AtHub, ParcelStatus.InTransit, ParcelStatus.OutForDelivery,
+        ParcelStatus.OnHold
+    ];
+
     public static bool IsFinal(this ParcelStatus status)
     {
         return Final.Contains(status);

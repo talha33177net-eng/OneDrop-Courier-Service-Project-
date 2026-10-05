@@ -135,7 +135,7 @@ public class MerchantPanelTests(WebAppFactory factory) : AppTests(factory)
         await QueryAsync("onedrop", async db =>
         {
             var parcel = await db.Parcels.SingleAsync(p => p.TrackingCode == code, Cancel);
-            parcel.ReceiveAt(parcel.PickupHubId);
+            parcel.ReceiveAt(parcel.PickupHubId, Today);
             parcel.RequestReturn("Refused on the phone");
             parcel.ReturnToMerchant(parcel.PickupHubId, DateTime.UtcNow);
 

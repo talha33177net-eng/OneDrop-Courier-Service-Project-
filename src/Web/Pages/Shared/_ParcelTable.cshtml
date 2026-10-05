@@ -65,6 +65,10 @@ else
                             {
                                 <div class="cell-sub">@row.Attempts attempt@(row.Attempts == 1 ? "" : "s")</div>
                             }
+                            @if (row.Late)
+                            {
+                                <div><span class="due late">Late, due @row.DueOn!.Value.ToString("ddd d MMM")</span></div>
+                            }
                         </td>
                         <td class="num">
                             @Money.Taka(row.CodAmount)

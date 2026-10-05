@@ -43,10 +43,10 @@ public class ParcelTests
     {
         var parcel = Build.Parcel();
 
-        Assert.Equal(ScanOutcome.Recorded, parcel.PickUp().Value);
-        Assert.Equal(ScanOutcome.AlreadyRecorded, parcel.PickUp().Value);
-        Assert.Equal(ScanOutcome.Recorded, parcel.ReceiveAt(Build.Mirpur).Value);
-        Assert.Equal(ScanOutcome.AlreadyRecorded, parcel.ReceiveAt(Build.Mirpur).Value);
+        Assert.Equal(ScanOutcome.Recorded, parcel.PickUp(Today).Value);
+        Assert.Equal(ScanOutcome.AlreadyRecorded, parcel.PickUp(Today).Value);
+        Assert.Equal(ScanOutcome.Recorded, parcel.ReceiveAt(Build.Mirpur, Today).Value);
+        Assert.Equal(ScanOutcome.AlreadyRecorded, parcel.ReceiveAt(Build.Mirpur, Today).Value);
 
         Assert.Equal(ParcelStatus.AtHub, parcel.Status);
         Assert.Equal(Build.Mirpur, parcel.CurrentHubId);
@@ -57,7 +57,7 @@ public class ParcelTests
     {
         var parcel = Build.Parcel();
 
-        parcel.ReceiveAt(Build.Mirpur);
+        parcel.ReceiveAt(Build.Mirpur, Today);
 
         Assert.Equal(ParcelStatus.AtHub, parcel.Status);
         Assert.Equal("Dropped off at the hub by the merchant", parcel.Events[^1].Note);
@@ -67,7 +67,7 @@ public class ParcelTests
     public void A_parcel_travels_to_the_hub_that_delivers_it_and_is_received_there()
     {
         var parcel = Build.Parcel(pickupHub: Build.Mirpur, deliveryHub: Build.Sylhet);
-        parcel.ReceiveAt(Build.Mirpur);
+        parcel.ReceiveAt(Build.Mirpur, Today);
 
         Assert.Equal("parcel.assign.otherHub", parcel.AssignTo(5, Build.Mirpur).Error?.Code);
         Assert.Equal(ScanOutcome.Recorded, parcel.DispatchTo(Build.Mirpur, Build.Sylhet).Value);
@@ -76,7 +76,7 @@ public class ParcelTests
         Assert.Null(parcel.CurrentHubId);
         Assert.Equal(Build.Sylhet, parcel.TransferToHubId);
 
-        parcel.ReceiveAt(Build.Sylhet);
+        parcel.ReceiveAt(Build.Sylhet, Today);
 
         Assert.Equal(ParcelStatus.AtHub, parcel.Status);
         Assert.Equal(Build.Sylhet, parcel.CurrentHubId);
@@ -89,26 +89,26 @@ public class ParcelTests
         var parcel = Build.Parcel();
 
         Assert.Equal("parcel.dispatch.notHere", parcel.DispatchTo(Build.Mirpur, Build.Gulshan).Error?.Code);
-        parcel.ReceiveAt(Build.Mirpur);
+        parcel.ReceiveAt(Build.Mirpur, Today);
         Assert.Equal("parcel.dispatch.deliverHere", parcel.DispatchTo(Build.Mirpur, Build.Gulshan).Error?.Code);
-        Assert.Equal("parcel.dispatch.sameHub", Build.Parcel(deliveryHub: Build.Gulshan).Let(p => p.ReceiveAt(Build.Mirpur)).DispatchTo(Build.Mirpur, Build.Mirpur).Error?.Code);
+        Assert.Equal("parcel.dispatch.sameHub", Build.Parcel(deliveryHub: Build.Gulshan).Let(p => p.ReceiveAt(Build.Mirpur, Today)).DispatchTo(Build.Mirpur, Build.Mirpur).Error?.Code);
     }
 
     [Fact]
     public void A_parcel_at_another_hub_or_with_a_rider_is_not_received_here()
     {
         var atGulshan = Build.Parcel(deliveryHub: Build.Gulshan);
-        atGulshan.ReceiveAt(Build.Gulshan);
-        Assert.Equal("parcel.scan.otherHub", atGulshan.ReceiveAt(Build.Mirpur).Error?.Code);
+        atGulshan.ReceiveAt(Build.Gulshan, Today);
+        Assert.Equal("parcel.scan.otherHub", atGulshan.ReceiveAt(Build.Mirpur, Today).Error?.Code);
 
-        Assert.Equal("parcel.scan.withRider", Build.OutForDelivery().ReceiveAt(Build.Mirpur).Error?.Code);
+        Assert.Equal("parcel.scan.withRider", Build.OutForDelivery().ReceiveAt(Build.Mirpur, Today).Error?.Code);
     }
 
     [Fact]
     public void A_rider_takes_a_parcel_waiting_at_its_delivering_hub_and_it_is_with_them_only()
     {
         var parcel = Build.Parcel();
-        parcel.ReceiveAt(Build.Mirpur);
+        parcel.ReceiveAt(Build.Mirpur, Today);
 
         Assert.True(parcel.AssignTo(5, Build.Mirpur).IsSuccess);
 
@@ -159,14 +159,14 @@ public class ParcelTests
         Assert.Equal(until, parcel.HoldUntil);
         Assert.Equal(5, parcel.RiderId);
 
-        parcel.ReceiveAt(Build.Mirpur);
+        parcel.ReceiveAt(Build.Mirpur, Today);
         Assert.Equal(Build.Mirpur, parcel.CurrentHubId);
         Assert.Null(parcel.RiderId);
         Assert.Equal(ParcelStatus.OnHold, parcel.Status);
 
         parcel.AssignTo(5, Build.Mirpur);
         Assert.True(parcel.Hold("Asked for another day", null, Today, 3).IsSuccess);
-        parcel.ReceiveAt(Build.Mirpur);
+        parcel.ReceiveAt(Build.Mirpur, Today);
         parcel.AssignTo(5, Build.Mirpur);
 
         Assert.Equal("parcel.hold.attempts", parcel.Hold("Again", null, Today, 3).Error?.Code);
@@ -188,21 +188,21 @@ public class ParcelTests
     public void A_refused_parcel_comes_back_through_the_hubs_and_is_handed_back_where_it_was_collected()
     {
         var parcel = Build.Parcel(pickupHub: Build.Mirpur, deliveryHub: Build.Gulshan);
-        parcel.PickUp();
-        parcel.ReceiveAt(Build.Mirpur);
+        parcel.PickUp(Today);
+        parcel.ReceiveAt(Build.Mirpur, Today);
         parcel.DispatchTo(Build.Mirpur, Build.Gulshan);
-        parcel.ReceiveAt(Build.Gulshan);
+        parcel.ReceiveAt(Build.Gulshan, Today);
         parcel.AssignTo(5, Build.Gulshan);
 
         Assert.Equal("parcel.refuse.reason", parcel.Refuse(null).Error?.Code);
         Assert.True(parcel.Refuse("Did not order it").IsSuccess);
         Assert.Equal(ParcelStatus.Returning, parcel.Status);
 
-        parcel.ReceiveAt(Build.Gulshan);
+        parcel.ReceiveAt(Build.Gulshan, Today);
         Assert.Equal("parcel.handBack.otherHub", parcel.ReturnToMerchant(Build.Gulshan, Now).Error?.Code);
         Assert.Equal(ScanOutcome.Recorded, parcel.DispatchTo(Build.Gulshan, Build.Mirpur).Value);
         Assert.Equal(ParcelStatus.Returning, parcel.Status);
-        parcel.ReceiveAt(Build.Mirpur);
+        parcel.ReceiveAt(Build.Mirpur, Today);
         Assert.Equal("parcel.dispatch.returnHere", parcel.DispatchTo(Build.Mirpur, Build.Gulshan).Error?.Code);
 
         Assert.Equal(ScanOutcome.Recorded, parcel.ReturnToMerchant(Build.Mirpur, Now).Value);
@@ -221,7 +221,7 @@ public class ParcelTests
         Assert.Equal(75, parcel.DeliveryCharge);
         Assert.Equal("Karim", parcel.RecipientName);
 
-        parcel.PickUp();
+        parcel.PickUp(Today);
 
         Assert.Equal("parcel.cancel", parcel.Cancel(null, Now).Error?.Code);
         Assert.Equal("parcel.edit", parcel.Edit(new ParcelDetails(1, 1, "X", PhoneNumber.Parse("01911000000").Value, "Y", 0, 500, null, null, parcel.Charges)).Error?.Code);
@@ -239,11 +239,78 @@ public class ParcelTests
         Assert.Equal("parcel.return", pending.RequestReturn("No").Error?.Code);
 
         var atHub = Build.Parcel(id: 102);
-        atHub.ReceiveAt(Build.Mirpur);
+        atHub.ReceiveAt(Build.Mirpur, Today);
         Assert.True(atHub.RequestReturn(null).IsSuccess);
         Assert.Equal(ParcelStatus.Returning, atHub.Status);
         Assert.Equal("Return requested", atHub.ReturnReason);
         Assert.Equal("parcel.notOut", atHub.Deliver(0, null, Now).Error?.Code);
+    }
+
+    [Theory]
+    [InlineData(Pricing.ServiceArea.InsideCity, 1)]
+    [InlineData(Pricing.ServiceArea.Suburb, 2)]
+    [InlineData(Pricing.ServiceArea.OutsideCity, 3)]
+    public void The_days_to_deliver_in_start_when_the_courier_takes_the_parcel(Pricing.ServiceArea area, int days)
+    {
+        var parcel = Build.Parcel(area: area);
+        Assert.Equal(days, parcel.DeliveryDays);
+        Assert.Null(parcel.DueOn);
+
+        parcel.PickUp(Today);
+        parcel.ReceiveAt(Build.Mirpur, Today.AddDays(1));
+
+        Assert.Equal(Today.AddDays(days), parcel.DueOn);
+    }
+
+    [Fact]
+    public void A_parcel_dropped_at_the_hub_is_due_from_the_drop_off_and_one_with_no_promise_is_never_due()
+    {
+        var dropped = Build.Parcel();
+        dropped.ReceiveAt(Build.Mirpur, Today);
+        Assert.Equal(Today.AddDays(1), dropped.DueOn);
+
+        var unpromised = Parcel.Create(new NewParcel(
+            7,
+            1,
+            Build.Mirpur,
+            new ParcelDetails(1, Build.Mirpur, "Rahim", PhoneNumber.Parse("01811000101").Value, "House 1", 0, 500, null, null, Build.Rate(Pricing.ServiceArea.InsideCity, Build.InsideCity with { DeliveryDays = null }).ChargesFor(500)))).Value;
+        unpromised.PickUp(Today);
+        Assert.Null(unpromised.DueOn);
+        Assert.False(unpromised.IsLate(Today.AddDays(30)));
+    }
+
+    [Fact]
+    public void A_parcel_still_on_its_way_after_its_day_is_late_until_it_is_delivered()
+    {
+        var parcel = Build.OutForDelivery();
+
+        Assert.False(parcel.IsLate(Today.AddDays(1)));
+        Assert.True(parcel.IsLate(Today.AddDays(2)));
+        Assert.True(parcel.Deliver(parcel.CodAmount, null, Now).IsSuccess);
+        Assert.False(parcel.IsLate(Today.AddDays(2)));
+    }
+
+    [Fact]
+    public void A_parcel_going_back_to_the_merchant_is_not_late()
+    {
+        var parcel = Build.OutForDelivery();
+        Assert.True(parcel.Refuse("Ordered by mistake").IsSuccess);
+
+        Assert.False(parcel.IsLate(Today.AddDays(5)));
+    }
+
+    [Fact]
+    public void A_later_day_the_customer_asks_for_moves_the_day_the_parcel_is_due()
+    {
+        var asked = Build.OutForDelivery();
+        Assert.True(asked.Hold("Customer travelling", Today.AddDays(4), Today, maxAttempts: 3).IsSuccess);
+        Assert.Equal(Today.AddDays(4), asked.DueOn);
+        Assert.False(asked.IsLate(Today.AddDays(3)));
+
+        var unreachable = Build.OutForDelivery();
+        Assert.True(unreachable.Hold("Not reachable", null, Today, maxAttempts: 3).IsSuccess);
+        Assert.Equal(Today.AddDays(1), unreachable.DueOn);
+        Assert.True(unreachable.IsLate(Today.AddDays(2)));
     }
 }
 

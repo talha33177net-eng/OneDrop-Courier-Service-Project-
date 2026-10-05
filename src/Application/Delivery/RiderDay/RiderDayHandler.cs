@@ -37,11 +37,15 @@ public sealed record RiderDelivery(
     string? ItemDescription,
     string? Note,
     int Attempts,
-    int MaxAttempts);
+    int MaxAttempts,
+    DateOnly? DueOn);
 
 public sealed record RiderDone(string TrackingCode, string RecipientName, string Area, AttemptOutcome Outcome, decimal Collected, string? Reason);
 
-/// <summary>The rider's day on their phone: pickups to make, parcels to deliver, what is done and the cash in hand.</summary>
+/// <summary>
+/// The rider's day on their phone: pickups to make, parcels to deliver, what is done, the cash in hand, what they ride
+/// and when they are due back at the hub with the cash (null when the courier sets no time).
+/// </summary>
 public sealed record RiderToday(
     string Rider,
     string Hub,
@@ -49,7 +53,9 @@ public sealed record RiderToday(
     IReadOnlyList<RiderPickup> Pickups,
     IReadOnlyList<RiderDelivery> Deliveries,
     IReadOnlyList<RiderDone> Done,
-    decimal CashInHand);
+    decimal CashInHand,
+    Vehicle Vehicle,
+    DateTime? DueBack);
 
 /// <summary>
 /// What the signed-in rider does: collect at pickup points and record what happened at each door: delivered (with the
@@ -113,7 +119,8 @@ public class RiderDayHandler(IAppDbContext db, ITenantContext tenantContext, ICu
                 parcel.ItemDescription,
                 parcel.Note,
                 parcel.Attempts,
-                tenant.MaxDeliveryAttempts))
+                tenant.MaxDeliveryAttempts,
+                parcel.DueOn))
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
@@ -154,7 +161,9 @@ public class RiderDayHandler(IAppDbContext db, ITenantContext tenantContext, ICu
             ],
             deliveries,
             done,
-            cash);
+            cash,
+            rider.Vehicle,
+            tenant.DueBack(today));
     }
 
     public Task<Result> DeliverAsync(string trackingCode, decimal collected, string? reason, CancellationToken cancellationToken = default)
@@ -206,12 +215,14 @@ public class RiderDayHandler(IAppDbContext db, ITenantContext tenantContext, ICu
             .Where(p => p.PickupPointId == request.PickupPointId && p.MerchantId == request.MerchantId &&
                 p.Status == ParcelStatus.Pending && codes.Contains(p.TrackingCode))
             .ToListAsync(cancellationToken);
+        var now = time.GetUtcNow().UtcDateTime;
+        var today = tenantContext.Require().Today(now);
         foreach (var parcel in picked)
         {
-            parcel.PickUp();
+            parcel.PickUp(today);
         }
 
-        var completed = request.Complete(picked.Count, time.GetUtcNow().UtcDateTime);
+        var completed = request.Complete(picked.Count, now);
         if (completed.IsFailure)
         {
             return completed.Error!;

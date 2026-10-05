@@ -8,7 +8,7 @@
 <div class="page-head">
     <div>
         <h1>Pickup requests</h1>
-        <p>Merchants waiting for a rider to collect their parcels. Assign a rider to each.</p>
+        <p>Merchants waiting for a rider to collect their parcels. Assign each to a rider whose vehicle carries it: a big pickup needs a pickup van.</p>
     </div>
     <div class="page-actions">@await Html.PartialAsync("_HubSwitch", (Model.Work, Model.Hub))</div>
 </div>
@@ -35,8 +35,14 @@
                                 <div>@request.Address</div>
                                 <div class="cell-sub">@request.Area · @Money.Phone(request.ContactPhone)@(request.Note is null ? "" : $" · {request.Note}")</div>
                             </td>
-                            <td class="num">@(request.Picked ?? request.Expected)<div class="cell-sub">@(request.Picked is null ? $"{request.Waiting} booked" : "picked")</div></td>
-                            <td>@Statuses.Badge(request.Status)</td>
+                            <td class="num">@(request.Picked ?? request.Expected)<div class="cell-sub nowrap">@(request.Picked is null ? $"{request.Waiting} booked{(request.BookedGrams > 0 ? $", {Money.Kg(request.BookedGrams)}" : "")}" : "picked")</div></td>
+                            <td>
+                                @Statuses.Badge(request.Status)
+                                @if (request.Send is { } send)
+                                {
+                                    <div class="cell-sub"><span class="vehicle" title="The smallest vehicle that carries this pickup">@Icons.Get(Statuses.Icon(send)) Send a @send.DisplayName().ToLowerInvariant()</span></div>
+                                }
+                            </td>
                             <td>
                                 @if (request.Status is PickupStatus.Requested or PickupStatus.Assigned)
                                 {
@@ -45,7 +51,7 @@
                                             <option value="">Choose a rider</option>
                                             @foreach (var rider in Model.Riders)
                                             {
-                                                <option value="@rider.Id" selected="@(rider.Id == request.RiderId)">@rider.Name</option>
+                                                <option value="@rider.Id" selected="@(rider.Id == request.RiderId)">@rider.Name · @rider.Vehicle.DisplayName().ToLowerInvariant()</option>
                                             }
                                         </select>
                                         <button class="btn btn-outline btn-sm" type="submit">@(request.RiderId is null ? "Assign" : "Change")</button>

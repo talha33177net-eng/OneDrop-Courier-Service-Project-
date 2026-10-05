@@ -32,6 +32,9 @@ public abstract partial class AppTests(WebAppFactory factory)
 
     protected static CancellationToken Cancel => TestContext.Current.CancellationToken;
 
+    /// <summary>Today on the launch courier's clock (Dhaka), the day a parcel moved by a test is picked up on.</summary>
+    protected static DateOnly Today => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTime.UtcNow, "Asia/Dhaka"));
+
     protected async Task<TenantInfo> TenantAsync(string slug)
     {
         return (await factory.Services.GetRequiredService<ITenantCatalog>().FindBySlugAsync(slug, Cancel))!;
@@ -90,8 +93,8 @@ public abstract partial class AppTests(WebAppFactory factory)
         return new TestMerchant(merchant.Id, name, email, plaintext, slug);
     }
 
-    /// <summary>A new rider of <paramref name="hubCode"/> with a login, made for one test.</summary>
-    protected async Task<TestRider> NewRiderAsync(string hubCode, string slug = "onedrop")
+    /// <summary>A new rider of <paramref name="hubCode"/> on <paramref name="vehicle"/> with a login, made for one test.</summary>
+    protected async Task<TestRider> NewRiderAsync(string hubCode, string slug = "onedrop", Vehicle vehicle = Vehicle.Motorbike)
     {
         var email = $"{Guid.NewGuid():N}@rider.test";
         await using var scope = await ScopeAsync(slug);
@@ -100,7 +103,7 @@ public abstract partial class AppTests(WebAppFactory factory)
         var login = await scope.ServiceProvider.GetRequiredService<IUserAccounts>().CreateAsync(
             new NewLogin(email, WebAppFactory.Password, "Test rider", Roles.Rider),
             Cancel);
-        var rider = Rider.Create(hubId, "Test rider " + email[..6], NewPhone(), login.Value).Value;
+        var rider = Rider.Create(hubId, "Test rider " + email[..6], NewPhone(), vehicle, login.Value).Value;
         db.Riders.Add(rider);
         await db.SaveChangesAsync(Cancel);
 

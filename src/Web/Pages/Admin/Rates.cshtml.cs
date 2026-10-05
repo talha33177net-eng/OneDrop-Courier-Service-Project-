@@ -22,11 +22,12 @@ public class RatesModel(RatesHandler rates) : PageModel
         decimal extraKgCharge,
         decimal codChargePercent,
         decimal returnCharge,
+        int? deliveryDays,
         CancellationToken cancellationToken)
     {
         var changed = await rates.ChangeAsync(
             area,
-            new RateValues((int)Math.Round(includedKg * 1000m), baseCharge, extraKgCharge, codChargePercent, returnCharge),
+            new RateValues((int)Math.Round(includedKg * 1000m), baseCharge, extraKgCharge, codChargePercent, returnCharge, deliveryDays),
             cancellationToken);
         TempData[changed.IsSuccess ? "Done" : "Problem"] = changed.IsSuccess
             ? $"{area.DisplayName()} rate saved. Parcels booked from now on use it."

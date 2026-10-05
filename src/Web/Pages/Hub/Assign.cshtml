@@ -1,17 +1,20 @@
 @page
+@using Domain.Delivery
 @model Web.Pages.Hub.AssignModel
 @inject ITenantContext TenantContext
 @{
     ViewData["Title"] = "Assign to riders";
     var areas = Model.Waiting.Select(p => p.Area).Distinct().Order().ToList();
     var shown = Model.Area is null ? Model.Waiting : Model.Waiting.Where(p => p.Area == Model.Area).ToList();
-    var today = TenantContext.Require().Today(DateTime.UtcNow);
+    var tenant = TenantContext.Require();
+    var today = tenant.Today(DateTime.UtcNow);
+    var late = shown.Count(p => p.DueOn < today);
 }
 
 <div class="page-head">
     <div>
         <h1>Assign to riders</h1>
-        <p>Tick the parcels a rider takes out now and choose the rider. They go on the rider's run sheet for today.</p>
+        <p>Tick the parcels a rider takes out now and choose the rider. They go on the rider's run sheet for today@(tenant.RiderReturnTime is { } back ? $", to be done and back at the hub by {back:h:mm tt}" : "").</p>
     </div>
     <div class="page-actions">@await Html.PartialAsync("_HubSwitch", (Model.Work, Model.Hub))</div>
 </div>
@@ -24,8 +27,8 @@
         <div class="tip-title">Three steps</div>
         <ol>
             <li>Filter by area to keep a rider's route together</li>
-            <li>Tick the parcels</li>
-            <li>Choose the rider and hand them over</li>
+            <li>Tick the parcels: the late ones are at the top, in red</li>
+            <li>Choose a rider with room on their vehicle and hand them over</li>
         </ol>
     </div>
 </div>
@@ -33,7 +36,7 @@
 <div class="grid grid-side">
     <div class="card">
         <div class="card-head">
-            <div><h2>Waiting for a rider</h2><p>@Model.Waiting.Count parcel@(Model.Waiting.Count == 1 ? "" : "s") at this hub for its areas</p></div>
+            <div><h2>Waiting for a rider</h2><p>@Model.Waiting.Count parcel@(Model.Waiting.Count == 1 ? "" : "s") at this hub for its areas, the most urgent first@(late > 0 ? $" · {late} late" : "")</p></div>
         </div>
         @if (areas.Count > 1)
         {
@@ -56,13 +59,13 @@
             {
                 <div class="table-wrap">
                     <table class="table compact">
-                        <thead><tr><th class="check-col"><input type="checkbox" data-select-all aria-label="Select all" title="Select every parcel due today" /></th><th>Parcel</th><th>Recipient</th><th>Area</th><th>Status</th><th class="num">COD</th></tr></thead>
+                        <thead><tr><th class="check-col"><input type="checkbox" data-select-all aria-label="Select all" title="Select every parcel due today" /></th><th>Parcel</th><th>Recipient</th><th>Area</th><th>Status</th><th class="num">Weight</th><th class="num">COD</th></tr></thead>
                         <tbody>
                             @foreach (var p in shown)
                             {
                                 var later = p.HoldUntil is { } day && day > today;
                                 <tr class="@(later ? "later" : "")">
-                                    <td class="check-col"><input type="checkbox" name="codes" value="@p.TrackingCode" aria-label="Select @p.TrackingCode" data-later="@(later ? "true" : null)" /></td>
+                                    <td class="check-col"><input type="checkbox" name="codes" value="@p.TrackingCode" aria-label="Select @p.TrackingCode" data-later="@(later ? "true" : null)" data-grams="@p.WeightGrams" /></td>
                                     <td><a class="code-link" asp-page="/Hub/Parcel" asp-route-code="@p.TrackingCode">@p.TrackingCode</a><div class="cell-sub">@p.Merchant</div></td>
                                     <td>@p.RecipientName</td>
                                     <td>@p.Area</td>
@@ -76,7 +79,12 @@
                                         {
                                             <div class="row-note">@Icons.Get("calendar") Customer asked for @p.HoldUntil!.Value.ToString("ddd d MMM")</div>
                                         }
+                                        else
+                                        {
+                                            <div>@Statuses.Due(p.DueOn, p.Status, today)</div>
+                                        }
                                     </td>
+                                    <td class="num nowrap">@Money.Kg(p.WeightGrams)</td>
                                     <td class="num">@Money.Taka(p.CodAmount)</td>
                                 </tr>
                             }
@@ -102,18 +110,34 @@
                 <div class="stack">
                     @foreach (var rider in Model.Riders)
                     {
+                        var parcelShare = rider.MaxParcels is { } most ? Math.Min(100, 100 * rider.WithThem / most) : 0;
+                        var weightShare = rider.MaxLoadGrams is { } heaviest ? Math.Min(100, (int)(100L * rider.CarriedGrams / heaviest)) : 0;
+                        var share = Math.Max(parcelShare, weightShare);
                         <label class="radio-card" style="display:flex;justify-content:space-between;align-items:center;gap:10px">
                             <span style="display:flex;gap:10px;align-items:center">
-                                <input type="radio" name="riderId" value="@rider.Id" form="assign" required />
+                                <input type="radio" name="riderId" value="@rider.Id" form="assign" required
+                                       data-name="@rider.Name" data-vehicle="@rider.Vehicle.DisplayName().ToLowerInvariant()"
+                                       data-room-parcels="@(rider.MaxParcels - rider.WithThem)" data-room-grams="@(rider.MaxLoadGrams - rider.CarriedGrams)" />
                                 <span class="avatar" style="width:32px;height:32px;font-size:12px">@string.Concat(rider.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(part => char.ToUpperInvariant(part[0])))</span>
-                                <span>@rider.Name<small>@Money.Phone(rider.Phone)</small></span>
+                                <span>@rider.Name<small><span class="vehicle">@Icons.Get(Statuses.Icon(rider.Vehicle)) @rider.Vehicle.DisplayName()</span> · @rider.DeliveredToday delivered today</small></span>
                             </span>
-                            <span class="muted" style="font-weight:500;font-size:12px;text-align:right">@rider.WithThem with them<br />@rider.DeliveredToday delivered today</span>
+                            <span class="load" title="What @rider.Name carries now">
+                                @if (rider.MaxParcels is { } max && rider.MaxLoadGrams is { } load)
+                                {
+                                    <span>@rider.WithThem/@max · @Money.Kg(rider.CarriedGrams) of @Money.Kg(load)</span>
+                                    <span class="meter @(share >= 100 ? "full" : share >= 80 ? "warn" : "")"><span style="width:@share%"></span></span>
+                                }
+                                else
+                                {
+                                    <span>@rider.WithThem with them</span>
+                                }
+                            </span>
                         </label>
                     }
                 </div>
+                <p class="hint warn" data-room hidden></p>
                 <button class="btn btn-primary btn-lg btn-block mt" type="submit" form="assign" data-hand-over>@Icons.Get("send") <span>Hand over the ticked parcels</span></button>
-                <p class="hint">The rider sees them on their phone at once, and each recipient gets a text that the parcel is on its way.</p>
+                <p class="hint">The rider sees them on their phone at once, and each recipient gets a text that the parcel is on its way. Parcels that do not fit on the rider's vehicle stay here.</p>
             }
         </div>
     </div>
@@ -126,8 +150,27 @@
         const all = document.querySelector("[data-select-all]");
         const count = document.querySelector("[data-selected]");
         const button = document.querySelector("[data-hand-over]");
+        const room = document.querySelector("[data-room]");
+        const riders = [...document.querySelectorAll("input[name=riderId]")];
+        const kg = grams => `${Math.round(grams / 100) / 10} kg`;
+        // Says before the hand-over when the ticked parcels are more than the chosen rider's vehicle has room for
+        const checkRoom = () => {
+            const rider = riders.find(radio => radio.checked);
+            const chosen = boxes.filter(box => box.checked);
+            const grams = chosen.reduce((sum, box) => sum + Number(box.dataset.grams || 0), 0);
+            const parcels = rider?.dataset.roomParcels;
+            const weight = rider?.dataset.roomGrams;
+            const over = parcels !== undefined && (chosen.length > Number(parcels) || grams > Number(weight));
+            room.hidden = !over;
+            if (over) {
+                room.textContent = `${chosen.length} parcels, ${kg(grams)}: ${rider.dataset.name}'s ${rider.dataset.vehicle} has room for ` +
+                    `${Math.max(0, Number(parcels))} more parcels and ${kg(Math.max(0, Number(weight)))}. The most urgent go; the rest stay here.`;
+            }
+        };
+        riders.forEach(radio => radio.addEventListener("change", checkRoom));
         const update = () => {
             const ticked = boxes.filter(box => box.checked).length;
+            checkRoom();
             count.textContent = ticked;
             count.classList.remove("bump");
             void count.offsetWidth;

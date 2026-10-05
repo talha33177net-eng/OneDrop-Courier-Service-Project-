@@ -16,7 +16,7 @@
     <div class="card-head"><h2>@Icons.Get("tag") Our rates</h2></div>
     <div class="table-wrap">
         <table class="table">
-            <thead><tr><th>Service</th><th class="num">First weight</th><th class="num">Charge</th><th class="num">Each extra kg</th><th class="num">COD charge</th><th class="num">Extra for a return</th></tr></thead>
+            <thead><tr><th>Service</th><th class="num">First weight</th><th class="num">Charge</th><th class="num">Each extra kg</th><th class="num">COD charge</th><th class="num">Extra for a return</th><th>Delivery after pickup</th></tr></thead>
             <tbody>
                 @foreach (var rate in Model.Rates)
                 {
@@ -27,6 +27,7 @@
                         <td class="num">@Money.Taka(rate.ExtraKgCharge)</td>
                         <td class="num">@rate.CodChargePercent.ToString("0.##")%</td>
                         <td class="num">@Money.Taka(rate.ReturnCharge)</td>
+                        <td>@Statuses.Promise(rate.DeliveryDays)</td>
                     </tr>
                 }
             </tbody>

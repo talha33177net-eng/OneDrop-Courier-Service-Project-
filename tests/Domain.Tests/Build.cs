@@ -1,5 +1,6 @@
 using System.Reflection;
 using Domain.Common;
+using Domain.Delivery;
 using Domain.Merchants;
 using Domain.Network;
 using Domain.Parcels;
@@ -14,9 +15,26 @@ internal static class Build
     public const long Gulshan = 2;
     public const long Sylhet = 3;
 
-    public static readonly RateValues InsideCity = new(1000, 60, 15, 1, 0);
-    public static readonly RateValues Suburb = new(1000, 100, 20, 1, 50);
-    public static readonly RateValues OutsideCity = new(1000, 120, 20, 1, 60);
+    /// <summary>The courier's date the tests' parcels are picked up on.</summary>
+    public static readonly DateOnly Today = new(2026, 10, 4);
+
+    public static readonly RateValues InsideCity = new(1000, 60, 15, 1, 0, 1);
+    public static readonly RateValues Suburb = new(1000, 100, 20, 1, 50, 2);
+    public static readonly RateValues OutsideCity = new(1000, 120, 20, 1, 60, 3);
+
+    /// <summary>
+    /// The launch courier's vehicles: a bicycle carries 25 parcels, 15 kg and 5 kg a parcel; a motorbike 40, 30 kg and
+    /// 10 kg; a pickup van 300, a tonne and 30 kg.
+    /// </summary>
+    public static Fleet Fleet()
+    {
+        return new Fleet(
+        [
+            VehicleCapacity.Create(Vehicle.Bicycle, new CapacityValues(25, 15_000, 5_000)).Value,
+            VehicleCapacity.Create(Vehicle.Motorbike, new CapacityValues(40, 30_000, 10_000)).Value,
+            VehicleCapacity.Create(Vehicle.Van, new CapacityValues(300, 1_000_000, 30_000)).Value
+        ]);
+    }
 
     public static Merchant Merchant(long id = 7)
     {
@@ -69,8 +87,8 @@ internal static class Build
     public static Parcel OutForDelivery(decimal cod = 1250)
     {
         var parcel = Parcel(cod: cod);
-        parcel.PickUp();
-        parcel.ReceiveAt(Mirpur);
+        parcel.PickUp(Build.Today);
+        parcel.ReceiveAt(Mirpur, Build.Today);
         parcel.AssignTo(5, Mirpur);
         parcel.ClearDomainEvents();
 

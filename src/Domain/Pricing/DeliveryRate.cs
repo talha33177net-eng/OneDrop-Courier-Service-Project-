@@ -2,14 +2,16 @@ using Domain.Common;
 
 namespace Domain.Pricing;
 
-/// <summary>What a parcel costs the merchant, worked out when it is booked and kept on the parcel.</summary>
+/// <summary>What a parcel costs the merchant and how soon it is delivered, worked out when it is booked and kept on the parcel.</summary>
 /// <param name="CodChargePercent">Taken off the cash collected when the parcel is delivered.</param>
 /// <param name="ReturnCharge">Added to the delivery charge when the parcel comes back to the merchant.</param>
+/// <param name="DeliveryDays">Days after pickup the courier promises to deliver in; null when it promises none.</param>
 public sealed record ParcelCharges(
     ServiceArea ServiceArea,
     decimal DeliveryCharge,
     decimal CodChargePercent,
-    decimal ReturnCharge)
+    decimal ReturnCharge,
+    int? DeliveryDays)
 {
     /// <summary>The COD charge on <paramref name="collected"/>, rounded to the whole taka.</summary>
     public decimal CodChargeOn(decimal collected)
@@ -26,12 +28,14 @@ public sealed record ParcelCharges(
 /// <summary>
 /// One line of a tenant's rate card: what a parcel in one <see cref="ServiceArea"/> costs the merchant. The first
 /// <see cref="IncludedWeightGrams"/> cost <see cref="BaseCharge"/>, each started kilogram above it
-/// <see cref="ExtraKgCharge"/>. Every number is the tenant's own, set by its admin; none has a default.
+/// <see cref="ExtraKgCharge"/>; <see cref="DeliveryDays"/> is how soon after pickup it is delivered. Every number is
+/// the tenant's own, set by its admin; none has a default.
 /// </summary>
 public class DeliveryRate : TenantEntity
 {
     public const decimal MaxCharge = 10_000m;
     public const decimal MaxCodChargePercent = 10m;
+    public const int MaxDeliveryDays = 30;
 
     private DeliveryRate()
     {
@@ -50,6 +54,12 @@ public class DeliveryRate : TenantEntity
 
     /// <summary>Charged on top of the delivery charge for a parcel that comes back to the merchant.</summary>
     public decimal ReturnCharge { get; private set; }
+
+    /// <summary>
+    /// Days after pickup the courier promises to deliver in: 0 the same day, 1 the next day. Null when it promises no
+    /// time, so parcels get no date to be delivered by.
+    /// </summary>
+    public int? DeliveryDays { get; private set; }
 
     public static Result<DeliveryRate> Create(ServiceArea area, RateValues values)
     {
@@ -78,11 +88,19 @@ public class DeliveryRate : TenantEntity
             return Error.Validation("rate.cod", $"The COD charge must be between 0% and {MaxCodChargePercent}%.");
         }
 
+        if (values.DeliveryDays is < 0 or > MaxDeliveryDays)
+        {
+            return Error.Validation(
+                "rate.days",
+                $"The delivery time must be between 0 days (the same day) and {MaxDeliveryDays}, or left empty for no promise.");
+        }
+
         IncludedWeightGrams = values.IncludedWeightGrams;
         BaseCharge = values.BaseCharge;
         ExtraKgCharge = values.ExtraKgCharge;
         CodChargePercent = values.CodChargePercent;
         ReturnCharge = values.ReturnCharge;
+        DeliveryDays = values.DeliveryDays;
 
         return Result.Success();
     }
@@ -99,7 +117,7 @@ public class DeliveryRate : TenantEntity
     /// <summary>The charges a parcel weighing <paramref name="weightGrams"/> is booked at.</summary>
     public ParcelCharges ChargesFor(int weightGrams)
     {
-        return new ParcelCharges(ServiceArea, DeliveryChargeFor(weightGrams), CodChargePercent, ReturnCharge);
+        return new ParcelCharges(ServiceArea, DeliveryChargeFor(weightGrams), CodChargePercent, ReturnCharge, DeliveryDays);
     }
 }
 
@@ -108,4 +126,5 @@ public sealed record RateValues(
     decimal BaseCharge,
     decimal ExtraKgCharge,
     decimal CodChargePercent,
-    decimal ReturnCharge);
+    decimal ReturnCharge,
+    int? DeliveryDays);

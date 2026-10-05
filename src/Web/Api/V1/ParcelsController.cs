@@ -8,7 +8,10 @@ using Web.Authentication;
 
 namespace Web.Api.V1;
 
-/// <summary>A parcel as the API returns it: its status and where the money stands.</summary>
+/// <summary>
+/// A parcel as the API returns it: its status, where the money stands, and the day it should be delivered by (DueOn,
+/// once picked up when a time was promised; Late when still on its way after it).
+/// </summary>
 public sealed record ParcelStatusResult(
     string TrackingCode,
     string? MerchantReference,
@@ -22,7 +25,9 @@ public sealed record ParcelStatusResult(
     int Attempts,
     string? Reason,
     DateTime Booked,
-    DateTime? Closed);
+    DateTime? Closed,
+    DateOnly? DueOn,
+    bool Late);
 
 public sealed record CancelParcelRequest(string? Reason);
 
@@ -88,7 +93,9 @@ public class ParcelsController : ControllerBase
             parcel.Attempts,
             parcel.Status == ParcelStatus.OnHold ? parcel.HoldReason : parcel.ReturnReason,
             parcel.Booked,
-            parcel.Closed));
+            parcel.Closed,
+            parcel.DueOn,
+            parcel.Late));
     }
 
     /// <summary>Cancels a parcel not yet picked up.</summary>

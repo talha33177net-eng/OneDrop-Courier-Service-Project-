@@ -16,6 +16,7 @@
         <div>
             <div class="page-kicker">@Icons.Get("warehouse") @t.Hub · @t.Date.ToString("dddd d MMMM")</div>
             <h1>Hello, @t.Rider</h1>
+            <span class="vehicle">@Icons.Get(Statuses.Icon(t.Vehicle)) @t.Vehicle.DisplayName()</span>
         </div>
     </div>
 
@@ -37,6 +38,10 @@
         <div class="day-progress">
             <div class="spread"><span>@t.Done.Count of @total done today</span><span>@percent%</span></div>
             <div class="meter"><span style="width:@percent%"></span></div>
+            @if (t.DueBack is { } back && (t.Deliveries.Count > 0 || t.CashInHand > 0))
+            {
+                <div class="hint">@Icons.Get("clock") Back at the hub by <strong>@back.ToString("h:mm tt")</strong> with the cash and any parcel you could not deliver.</div>
+            }
         </div>
     }
 
@@ -80,6 +85,10 @@
                 @if (d.Attempts > 0)
                 {
                     <div class="row-note">@Icons.Get("refresh") <span>Attempt @(d.Attempts + 1) of @d.MaxAttempts</span></div>
+                }
+                @if (d.DueOn < t.Date)
+                {
+                    <div>@Statuses.Due(d.DueOn, Domain.Parcels.ParcelStatus.OutForDelivery, t.Date)</div>
                 }
             </div>
             <div class="task-actions">

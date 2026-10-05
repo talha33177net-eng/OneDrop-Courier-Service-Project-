@@ -97,7 +97,7 @@ public class HubScanHandler(IAppDbContext db, ITenantContext tenantContext, HubD
 
     private async Task<ScanAnswer> ReceiveAsync(Parcel parcel, Hub hub, CancellationToken cancellationToken)
     {
-        var received = parcel.ReceiveAt(hub.Id);
+        var received = parcel.ReceiveAt(hub.Id, tenantContext.Require().Today(time.GetUtcNow().UtcDateTime));
         if (received.IsFailure)
         {
             return new ScanAnswer(ScanTone.Error, received.Error!.Message, null, parcel.TrackingCode);

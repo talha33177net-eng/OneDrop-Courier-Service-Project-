@@ -80,6 +80,57 @@ public static class Statuses
         return kind.DisplayName();
     }
 
+    /// <summary>
+    /// The day a parcel on its way should be delivered by: quiet while ahead, amber on the day, red once late. Nothing
+    /// for a parcel with no due day or no longer on its way.
+    /// </summary>
+    public static IHtmlContent Due(DateOnly? dueOn, ParcelStatus status, DateOnly today)
+    {
+        if (dueOn is not { } due || !ParcelStatuses.ToDeliver.Contains(status))
+        {
+            return HtmlString.Empty;
+        }
+
+        var (tone, text) = due < today ? ("late", $"Late, due {due:ddd d MMM}")
+            : due == today ? ("today", "Due today")
+            : ("", $"Due {due:ddd d MMM}");
+
+        return new HtmlString($"""<span class="due {tone}">{WebUtility.HtmlEncode(text)}</span>""");
+    }
+
+    /// <summary>A promised delivery time: "Same day", "Next day", "3 days"; "No set time" when none is promised.</summary>
+    public static string Promise(int? days)
+    {
+        return days switch
+        {
+            null => "No set time",
+            0 => "Same day",
+            1 => "Next day",
+            _ => $"{days} days"
+        };
+    }
+
+    /// <summary>How soon after pickup: "the same day as pickup", "the day after pickup", "within 3 days of pickup".</summary>
+    public static string AfterPickup(int days)
+    {
+        return days switch
+        {
+            0 => "the same day as pickup",
+            1 => "the day after pickup",
+            _ => $"within {days} days of pickup"
+        };
+    }
+
+    public static string Icon(Vehicle vehicle)
+    {
+        return vehicle switch
+        {
+            Vehicle.Bicycle => "bike",
+            Vehicle.Motorbike => "motorbike",
+            _ => "truck"
+        };
+    }
+
     private static HtmlString Pill(string tone, string text)
     {
         return new HtmlString($"""<span class="badge badge-{tone}">{WebUtility.HtmlEncode(text)}</span>""");
@@ -114,6 +165,6 @@ public static class Money
 
     public static string Kg(int grams)
     {
-        return (grams / 1000m).ToString("0.##", CultureInfo.InvariantCulture) + " kg";
+        return Weight.Kg(grams);
     }
 }

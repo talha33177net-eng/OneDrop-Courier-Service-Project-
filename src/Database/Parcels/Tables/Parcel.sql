@@ -5,11 +5,14 @@
 --          9 Returning, 10 Returned, 11 Cancelled. Where it is: CurrentHubId at a hub, TransferToHubId between hubs,
 --          RiderId with a rider; at most one is set. PickupHubId collects it and takes returns back, DeliveryHubId
 --          delivers it. ServiceArea (1 inside city, 2 suburb, 3 outside city), DeliveryCharge, CodChargePercent and
---          ReturnCharge are the rate it was booked at. A merchant's retry with the same Idempotency-Key returns the
---          first parcel; RequestHash detects the key reused for another body. RowVersion guards concurrent changes
---          (hub scan versus rider app). The four keys to Network.Hub are named FK_Parcel_Hub_{Column}
+--          ReturnCharge are the rate it was booked at, DeliveryDays the days after pickup it was promised in (NULL: no
+--          promise). DueOn is the day it should be delivered by, set when the courier takes it and moved to a later day
+--          the recipient asks for. A merchant's retry with the same Idempotency-Key returns the first parcel;
+--          RequestHash detects the key reused for another body. RowVersion guards concurrent changes (hub scan versus
+--          rider app). The four keys to Network.Hub are named FK_Parcel_Hub_{Column}
 -- Author: Courier team
 -- Date: 2026-10-04
+--       2026-10-05 DeliveryDays, DueOn
 -- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 CREATE TABLE [Parcels].[Parcel] (
     [Id]                BIGINT          IDENTITY (1, 1) NOT NULL,
@@ -34,7 +37,9 @@ CREATE TABLE [Parcels].[Parcel] (
     [DeliveryCharge]    DECIMAL (10, 2) NOT NULL,
     [CodChargePercent]  DECIMAL (5, 2)  NOT NULL,
     [ReturnCharge]      DECIMAL (10, 2) NOT NULL,
-    [Status]            TINYINT         NOT NULL,
+    [DeliveryDays]      INT             NULL,
+    [DueOn]             DATE            NULL,
+    [Status]           TINYINT         NOT NULL,
     [CurrentHubId]      BIGINT          NULL,
     [TransferToHubId]   BIGINT          NULL,
     [RiderId]           BIGINT          NULL,
@@ -119,3 +124,10 @@ CREATE NONCLUSTERED INDEX [IX_Parcel_RiderId]
 GO
 CREATE NONCLUSTERED INDEX [IX_Parcel_AreaId]
     ON [Parcels].[Parcel]([AreaId] ASC);
+
+
+GO
+-- Late parcels: due before today and still on their way
+CREATE NONCLUSTERED INDEX [IX_Parcel_Tenant_DueOn]
+    ON [Parcels].[Parcel]([TenantId] ASC, [DueOn] ASC)
+    INCLUDE([Status]) WHERE ([DueOn] IS NOT NULL);

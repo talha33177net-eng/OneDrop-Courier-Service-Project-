@@ -30,8 +30,8 @@ public class WebhookTests(WebAppFactory factory) : AppTests(factory)
         var code = await BookAsync(shop.ApiKey, cod: 900, reference: "WEB-4242");
         Assert.Empty(await MessagesAsync(code));
 
-        await ChangeAsync(code, parcel => parcel.PickUp());
-        await ChangeAsync(code, parcel => parcel.ReceiveAt(parcel.PickupHubId));
+        await ChangeAsync(code, parcel => parcel.PickUp(Today));
+        await ChangeAsync(code, parcel => parcel.ReceiveAt(parcel.PickupHubId, Today));
         var messages = await MessagesAsync(code);
         Assert.Equal(2, messages.Count);
         await SendUntilAsync(messages[^1].Id, m => m.Status == OutboxStatus.Sent, TimeProvider.System);
@@ -62,7 +62,7 @@ public class WebhookTests(WebAppFactory factory) : AppTests(factory)
         WebAppFactory.RequireDatabase();
         var plain = await NewMerchantAsync();
         var skipped = await BookAsync(plain.ApiKey);
-        await ChangeAsync(skipped, parcel => parcel.PickUp());
+        await ChangeAsync(skipped, parcel => parcel.PickUp(Today));
         var message = Assert.Single(await MessagesAsync(skipped));
         Assert.Equal(OutboxStatus.Skipped, (await SendUntilAsync(message.Id, m => m.Status != OutboxStatus.Pending, TimeProvider.System)).Status);
         Assert.DoesNotContain(Factory.Webhooks.Posted, request => request.Body.Contains(skipped));
@@ -71,8 +71,8 @@ public class WebhookTests(WebAppFactory factory) : AppTests(factory)
         var shop = await NewMerchantAsync();
         await SetWebhookAsync(shop, url);
         var code = await BookAsync(shop.ApiKey);
-        await ChangeAsync(code, parcel => parcel.PickUp());
-        await ChangeAsync(code, parcel => parcel.ReceiveAt(parcel.PickupHubId));
+        await ChangeAsync(code, parcel => parcel.PickUp(Today));
+        await ChangeAsync(code, parcel => parcel.ReceiveAt(parcel.PickupHubId, Today));
         var changes = await MessagesAsync(code);
         var (pickedUp, atHub) = (changes[0].Id, changes[1].Id);
 

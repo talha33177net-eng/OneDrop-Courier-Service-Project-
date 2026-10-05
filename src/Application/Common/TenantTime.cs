@@ -27,6 +27,21 @@ public static class TenantTime
         return TimeZoneInfo.ConvertTimeToUtc(day.ToDateTime(TimeOnly.MinValue), tenant.Zone());
     }
 
+    /// <summary>
+    /// When riders are due back at their hub from a run on <paramref name="runDate"/>, on the tenant's clock; null when
+    /// the tenant sets no time.
+    /// </summary>
+    public static DateTime? DueBack(this TenantInfo tenant, DateOnly runDate)
+    {
+        return tenant.RiderReturnTime is { } time ? runDate.ToDateTime(time) : null;
+    }
+
+    /// <summary>A run of <paramref name="runDate"/> still open after its riders were due back.</summary>
+    public static bool RunIsLate(this TenantInfo tenant, DateOnly runDate, DateTime utcNow)
+    {
+        return tenant.DueBack(runDate) is { } due && tenant.Local(utcNow) > due;
+    }
+
     /// <summary>The tenant the request or job runs for; a use case that needs one cannot run without it.</summary>
     public static TenantInfo Require(this ITenantContext context)
     {

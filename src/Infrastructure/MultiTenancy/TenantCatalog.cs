@@ -48,7 +48,8 @@ public class TenantCatalog(IServiceScopeFactory scopeFactory, IMemoryCache cache
                     t.CurrencyCode,
                     t.SmsSenderName,
                     t.SupportPhone,
-                    t.MaxDeliveryAttempts))
+                    t.MaxDeliveryAttempts,
+                    t.RiderReturnTime))
                 .AsNoTracking()
                 .ToListAsync(cancellationToken);
         }) ?? [];

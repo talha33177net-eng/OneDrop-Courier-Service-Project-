@@ -82,6 +82,11 @@ else if (active && s.Pending > 0 && !d.PickupOpen)
     </div>
 }
 
+@if (d.Late > 0)
+{
+    <a class="alert alert-error" asp-page="/Merchant/Parcels" asp-route-late="true">@Icons.Get("clock")<div><strong>@d.Late parcel@(d.Late == 1 ? " is" : "s are") late</strong>, past the day @(d.Late == 1 ? "it was" : "they were") due. See which, and call the hotline if a customer is waiting.</div></a>
+}
+
 <div class="stats">
     <a class="stat @(s.Pending > 0 && !d.PickupOpen && active ? "attention" : "")" asp-page="/Merchant/Parcels" asp-route-tab="Pending">
         <div class="stat-icon amber">@Icons.Get("clock")</div>
