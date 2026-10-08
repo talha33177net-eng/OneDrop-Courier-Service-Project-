@@ -4,64 +4,223 @@
 @{
     ViewData["Title"] = "Merchant payouts";
     var d = Model.Data;
+    var owing = d.OwingCourier.ToList();
+    var toPay = d.ToPay.ToList();
+    var online = Model.Online;
+    const int Shown = 15;
 }
 
 <div class="page-head">
     <div>
         <h1>Merchant payouts</h1>
-        <p>Every hour each merchant is paid the cash collected up to yesterday, less charges.</p>
+        <p>
+            Every hour each merchant is paid the cash collected up to yesterday, less charges.
+            @if (d.Schedule.LastRun is { } last)
+            {
+                <span>Last run @last.ToString("d MMM, h:mm tt")@(d.Schedule.NextRun is { } next ? $", next {next:h:mm tt}" : "").</span>
+            }
+        </p>
     </div>
     <div class="page-actions">
         <form method="post" asp-page-handler="Run" class="inline-form">
-            <button class="btn btn-primary" type="submit" data-confirm="Every merchant owed money up to yesterday is paid now, to their payout account." data-confirm-title="Send payouts now?" data-confirm-ok="Send payouts" data-confirm-tone="calm">@Icons.Get("send") Run payouts now</button>
+            <button class="btn btn-primary" type="submit" data-confirm="Every merchant owed money up to yesterday is paid now, to their payout account. Merchants on hold are skipped." data-confirm-title="Send payouts now?" data-confirm-ok="Send payouts" data-confirm-tone="calm">@Icons.Get("send") Run payouts now</button>
         </form>
     </div>
 </div>
 
 <partial name="_Alerts" />
 
+@if (d.RunIsLate)
+{
+    <div class="alert alert-warning" role="alert">@Icons.Get("clock")<div>
+        @(d.Schedule.LastRun is { } ran ? $"The hourly payout run has not run since {ran:d MMM, h:mm tt}." : "The hourly payout run has not run yet.")
+        It runs only while the app's background jobs are running. Until it does, use <strong>Run payouts now</strong>.
+    </div></div>
+}
+
+<div class="tip" data-tip="admin-payouts">
+    @Icons.Get("bulb")
+    <div>
+        <div class="tip-title">How payouts work</div>
+        <ul>
+            <li>When a parcel is delivered or returned, its cash and charges are written to the merchant's balance in the same moment.</li>
+            <li>Each hour, every merchant with money up to yesterday is paid in one payout, with an invoice, to its payout account.</li>
+            <li>A merchant waits when its charges are more than its cash, it has no payout account, or you hold its payouts. Nothing is lost: the lines carry over.</li>
+            <li>A transfer the gateway refuses is tried again every hour. It is listed below with the reason; send it again, or cancel it so the next payout goes to a corrected account.</li>
+            <li>A merchant who owes the courier can pay it online from its Payments page. The money reaches its balance once the gateway confirms it; a payment the gateway marks risky, or of another amount, waits below for you to credit or refund.</li>
+            <li>Settle a merchant who owes the courier in another way, or correct a balance, with an adjustment on the merchant's page.</li>
+        </ul>
+    </div>
+</div>
+
 <div class="stats">
     <div class="stat"><div class="stat-icon">@Icons.Get("wallet")</div><div><div class="stat-label">Payable now</div><div class="stat-value">@Money.Taka(d.PayableNow)</div><div class="stat-sub">Parcels finished up to yesterday</div></div></div>
     <div class="stat"><div class="stat-icon green">@Icons.Get("check-circle")</div><div><div class="stat-label">Paid this month</div><div class="stat-value">@Money.Taka(d.PaidThisMonth)</div></div></div>
     <div class="stat"><div class="stat-icon amber">@Icons.Get("clock")</div><div><div class="stat-label">Processing</div><div class="stat-value">@Money.Taka(d.PendingTotal)</div></div></div>
+    <div class="stat"><div class="stat-icon @(d.Stuck.Count > 0 ? "red" : "")">@Icons.Get("alert")</div><div><div class="stat-label">Refused by the gateway</div><div class="stat-value">@d.Stuck.Count</div><div class="stat-sub">@(d.Stuck.Count == 0 ? "None" : Money.Taka(d.Stuck.Sum(p => p.Amount)))</div></div></div>
 </div>
 
-<div class="grid grid-side">
+@if (d.Stuck.Count > 0)
+{
     <div class="card">
+        <div class="card-head"><div><h2>@Icons.Get("alert") Refused by the gateway</h2><p>Tried again every hour. Send one again now, or open it to cancel it.</p></div></div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Invoice</th><th>Merchant and account</th><th class="num">Amount</th><th>Why the gateway refused it</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var p in d.Stuck)
+                    {
+                        <tr>
+                            <td class="nowrap"><a class="code-link" asp-page="/Admin/Payout" asp-route-number="@p.Number">@p.Number</a><div class="cell-sub">@p.Created.ToString("d MMM")</div></td>
+                            <td>@p.Merchant<div class="cell-sub">@Application.Payments.MerchantPayments.PayoutNames.DisplayName(p.Method) @p.Account</div></td>
+                            <td class="num strong">@Money.Taka(p.Amount)</td>
+                            <td style="min-width:220px"><span class="negative">@p.LastError</span><div class="cell-sub">Refused @(p.FailedAttempts == 1 ? "once" : $"{p.FailedAttempts} times")@(p.LastTriedOn is { } tried ? $", last {tried:d MMM, h:mm tt}" : "")</div></td>
+                            <td class="num nowrap">
+                                <form method="post" asp-page-handler="Send" asp-route-number="@p.Number" class="inline-form"><button class="btn btn-outline btn-sm" type="submit">@Icons.Get("send") Send again</button></form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@if (online.ToCheck.Count > 0)
+{
+    <div class="card @(d.Stuck.Count > 0 ? "mt-lg" : "")">
+        <div class="card-head"><div><h2>@Icons.Get("flag") Online payments to check</h2><p>@online.Gateway took the money but held these. Credit one to the merchant, or refund it in @online.Gateway's own panel and record that here.</p></div></div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Payment</th><th>Merchant</th><th class="num">Received</th><th>Why it is held</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var p in online.ToCheck)
+                    {
+                        <tr>
+                            <td class="nowrap mono">@p.Number<div class="cell-sub">@((p.ConfirmedOn ?? p.Created).ToString("d MMM, h:mm tt"))</div></td>
+                            <td><a class="cell-main" asp-page="/Admin/Merchant" asp-route-id="@p.MerchantId" asp-fragment="money">@p.Merchant</a><div class="cell-sub">@(p.Method ?? "")@(p.BankTransactionId is null ? "" : $" · {p.BankTransactionId}")</div></td>
+                            <td class="num strong">@Money.Taka(p.PaidAmount)<div class="cell-sub">asked @Money.Taka(p.Amount)</div></td>
+                            <td style="min-width:220px">@p.Note</td>
+                            <td style="width:230px">
+                                <form method="post" asp-page-handler="Credit" asp-route-number="@p.Number">
+                                    <button class="btn btn-primary btn-sm" type="submit" style="width:100%" data-confirm="The amount received is credited to @p.Merchant's balance." data-confirm-title="Credit @p.Number?" data-confirm-ok="Credit it" data-confirm-tone="calm">@Icons.Get("check") Credit to the merchant</button>
+                                </form>
+                                <form method="post" asp-page-handler="Refunded" asp-route-number="@p.Number" style="display:flex;flex-direction:column;gap:6px;margin-top:10px">
+                                    <input type="text" name="note" maxlength="300" placeholder="Or: what was refunded" required aria-label="What was refunded" />
+                                    <button class="btn btn-outline btn-sm" type="submit" data-confirm="Refund it in @online.Gateway's panel first: nothing is credited to the merchant." data-confirm-title="Record @p.Number as refunded?" data-confirm-ok="It is refunded">Record the refund</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<div class="grid grid-side @(d.Stuck.Count > 0 || online.ToCheck.Count > 0 ? "mt-lg" : "")">
+    <div class="card" data-swap="payouts">
         <div class="card-head">
             <h2>Payouts</h2>
             <div class="segmented">
                 <a class="@(Model.Status is null ? "active" : "")" asp-route-status="">All</a>
                 <a class="@(Model.Status == PayoutStatus.Paid ? "active" : "")" asp-route-status="Paid">Paid</a>
                 <a class="@(Model.Status == PayoutStatus.Pending ? "active" : "")" asp-route-status="Pending">Processing</a>
+                <a class="@(Model.Status == PayoutStatus.Cancelled ? "active" : "")" asp-route-status="Cancelled">Cancelled</a>
             </div>
         </div>
         @await Html.PartialAsync("_PayoutTable", (d.Payouts, "/Admin/Payout/", true))
     </div>
-    <div class="card" style="align-self:start">
-        <div class="card-head"><div><h2>Owed now</h2><p>Lines not yet paid out, by merchant. Today's parcels are paid from tomorrow.</p></div></div>
-        @if (d.Owed.Count == 0)
-        {
-            <div class="card-body muted">Nothing owed.</div>
-        }
-        else
-        {
-            <div class="table-wrap">
-                <table class="table compact">
-                    <tbody>
-                        @foreach (var m in d.Owed)
-                        {
-                            <tr>
-                                <td><a class="cell-main" asp-page="/Admin/Merchant" asp-route-id="@m.MerchantId">@m.Merchant</a>@if (!m.HasPayoutAccount) { <div class="cell-sub negative">No payout account</div> }</td>
-                                <td class="num strong @(m.Payable < 0 ? "negative" : "")">
-                                    @Money.Taka(m.Payable)
-                                    @if (m.DueTomorrow != 0) { <div class="cell-sub">@Money.Taka(m.DueTomorrow) from today, tomorrow</div> }
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
+    <div class="stack" style="align-self:start">
+        <div class="card">
+            <div class="card-head"><div><h2>Owed to merchants</h2><p>@if (toPay.Count > 0) { <text>@toPay.Count merchant@(toPay.Count == 1 ? "" : "s"), @Money.Taka(toPay.Sum(m => m.Net)) in all. </text> }Today's parcels are paid from tomorrow.</p></div></div>
+            @if (toPay.Count == 0)
+            {
+                <div class="card-body muted">Nothing owed.</div>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="table compact">
+                        <tbody>
+                            @foreach (var m in toPay.Take(Shown))
+                            {
+                                <tr>
+                                    <td>
+                                        <a class="cell-main" asp-page="/Admin/Merchant" asp-route-id="@m.MerchantId">@m.Merchant</a>
+                                        @if (m.Hold is not null)
+                                        {
+                                            <div class="cell-sub negative">@Icons.Get("pause") On hold</div>
+                                        }
+                                        else if (!m.HasPayoutAccount)
+                                        {
+                                            <div class="cell-sub negative">No payout account</div>
+                                        }
+                                    </td>
+                                    <td class="num strong">
+                                        @Money.Taka(m.Payable)
+                                        @if (m.DueTomorrow != 0) { <div class="cell-sub">@Money.Taka(m.DueTomorrow) from today, tomorrow</div> }
+                                    </td>
+                                </tr>
+                            }
+                            @if (toPay.Count > Shown)
+                            {
+                                <tr><td colspan="2" class="muted">and @(toPay.Count - Shown) more, smaller</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+        <div class="card">
+            <div class="card-head"><div><h2>Owe the courier</h2><p>@if (owing.Count > 0) { <text>@owing.Count merchant@(owing.Count == 1 ? "" : "s"), @Money.Taka(-owing.Sum(m => m.Net)) in all. </text> }Carried over until their cash covers it or they pay online. Settle one another way with an adjustment on its page.</p></div></div>
+            @if (owing.Count == 0)
+            {
+                <div class="card-body muted">No merchant owes the courier.</div>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="table compact">
+                        <tbody>
+                            @foreach (var m in owing.Take(Shown))
+                            {
+                                <tr>
+                                    <td><a class="cell-main" asp-page="/Admin/Merchant" asp-route-id="@m.MerchantId" asp-fragment="money">@m.Merchant</a></td>
+                                    <td class="num strong negative">@Money.Taka(-m.Net)</td>
+                                </tr>
+                            }
+                            @if (owing.Count > Shown)
+                            {
+                                <tr><td colspan="2" class="muted">and @(owing.Count - Shown) more, smaller</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+        <div class="card">
+            <div class="card-head"><div><h2>Paid online by merchants</h2><p>@(online.Available ? $"Through {online.Gateway}, the latest first." : "Online payments are not set up.")</p></div></div>
+            @if (online.Recent.Count == 0)
+            {
+                <div class="card-body muted">No merchant has paid online yet.</div>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="table compact">
+                        <tbody>
+                            @foreach (var p in online.Recent)
+                            {
+                                <tr>
+                                    <td><span class="cell-main">@p.Merchant</span><div class="cell-sub">@p.Number · @p.Created.ToString("d MMM")</div></td>
+                                    <td class="num">@Money.Taka(p.PaidAmount ?? p.Amount)<div>@Statuses.Badge(p.Status)</div></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
     </div>
 </div>

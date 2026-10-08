@@ -7,9 +7,10 @@ namespace Application.Abstractions;
 public interface IPayoutGateway
 {
     /// <summary>
-    /// Sends <paramref name="amount"/> to <paramref name="account"/> and returns the gateway's reference. Sending again
-    /// with the same <paramref name="key"/> sends nothing more and returns the first transfer's reference, so a payout
-    /// retried after a failure is never paid twice.
+    /// Sends <paramref name="amount"/> to <paramref name="account"/> and returns the gateway's reference, or throws
+    /// <see cref="PayoutRefusedException"/> with why it would not. Sending again with the same <paramref name="key"/>
+    /// sends nothing more and returns the first transfer's reference, so a payout retried after a failure is never
+    /// paid twice.
     /// </summary>
     Task<string> SendAsync(
         string account,
@@ -18,3 +19,6 @@ public interface IPayoutGateway
         string key,
         CancellationToken cancellationToken = default);
 }
+
+/// <summary>The gateway refused a transfer; <see cref="Exception.Message"/> says why, in words the admin can act on.</summary>
+public class PayoutRefusedException(string message) : Exception(message);

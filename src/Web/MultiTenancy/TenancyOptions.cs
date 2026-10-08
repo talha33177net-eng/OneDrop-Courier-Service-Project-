@@ -11,6 +11,12 @@ public class TenancyOptions
     /// <summary>Subdomains that never name a tenant.</summary>
     public string[] ReservedSubdomains { get; set; } = ["www", "api", "admin"];
 
+    /// <summary>
+    /// The courier whose site a visitor to the bare root domain is sent to, by its slug; null or unknown shows the list
+    /// of couriers instead. Platform staff still sign in on the root domain at <c>/Account/Login</c>.
+    /// </summary>
+    public string? HomeCourier { get; set; }
+
     /// <summary>The tenant slug in a host name, or null for the root domain and anything unrelated.</summary>
     public string? SlugFromHost(string host)
     {

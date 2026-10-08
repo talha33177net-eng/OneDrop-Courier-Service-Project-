@@ -1,0 +1,143 @@
+@page
+@using Application.Parcels.Browse
+@using Domain.Common
+@using Domain.Merchants
+@model Web.Pages.Merchant.StatsModel
+@{
+    ViewData["Title"] = "Stats";
+    var s = Model.Stats;
+    var rights = ViewContext.HttpContext.Items[MerchantPages.RightsKey] as MerchantRights;
+    var seeParcels = rights is null || rights.May(MerchantPermissions.Parcels);
+
+    // Where the parcels of the period are now, in the order a parcel passes through
+    (string Name, string Tone, ParcelStatus[] Statuses)[] places =
+    [
+        ("Waiting for pickup", "pending", [ParcelStatus.Pending]),
+        ("With us on the way", "transit", [ParcelStatus.PickedUp, ParcelStatus.AtHub, ParcelStatus.InTransit, ParcelStatus.OnHold]),
+        ("Out for delivery", "out", [ParcelStatus.OutForDelivery]),
+        ("Delivered", "done", [ParcelStatus.Delivered, ParcelStatus.PartlyDelivered]),
+        ("Coming back or returned", "return", [ParcelStatus.Returning, ParcelStatus.Returned]),
+        ("Cancelled", "cancel", [ParcelStatus.Cancelled])
+    ];
+
+    string Percent(double share) => $"{Math.Round(share * 100, MidpointRounding.AwayFromZero)}%";
+    string Rate(double? rate) => rate is { } value ? Percent(value) : "—";
+    string Share(int count) => s is null ? "" : Percent(s.Share(count));
+    string ListOf(ParcelStatus status) =>
+        "/Merchant/Parcels?tab=" +
+        Enum.GetValues<ParcelTab>().First(tab => tab != ParcelTab.All && ParcelListHandler.IssueOf(tab) is null && ParcelListHandler.StatusesOf(tab).Contains(status)) +
+        "&from=" + s!.Period.From.ToString("yyyy-MM-dd") + "&to=" + s.Period.To.ToString("yyyy-MM-dd");
+}
+
+<div class="page-head">
+    <div>
+        <h1>Stats</h1>
+        <p>Your parcels booked in a period: how many were delivered, cancelled or came back, where the rest are now, and the cash they carry.</p>
+    </div>
+</div>
+
+@await Html.PartialAsync("_PeriodPicker", (Model.Kind, Model.Kind == PeriodKind.Custom ? Model.From : s?.Period.From, Model.Kind == PeriodKind.Custom ? Model.To : s?.Period.To))
+
+@if (Model.Problem is not null)
+{
+    <div class="alert alert-error" role="alert">@Icons.Get("alert")<div>@Model.Problem</div></div>
+}
+
+@if (s is not null)
+{
+    <p class="muted">Parcels booked from <strong>@s.Period.From.ToString("d MMM yyyy")</strong> to <strong>@s.Period.To.ToString("d MMM yyyy")</strong>, @s.Period.Days day@(s.Period.Days == 1 ? "" : "s"), as they stand now.</p>
+
+    <div class="stats">
+        <div class="stat">
+            <div class="stat-icon blue">@Icons.Get("package")</div>
+            <div><div class="stat-label">Booked</div><div class="stat-value">@s.Booked.ToString("N0")</div><div class="stat-sub">@Money.Taka(s.BookedCod) cash on delivery</div></div>
+        </div>
+        <div class="stat">
+            <div class="stat-icon green">@Icons.Get("check-circle")</div>
+            <div><div class="stat-label">Delivery rate</div><div class="stat-value">@Rate(s.DeliveryRate)</div><div class="stat-sub">@s.Delivered delivered of @(s.Delivered + s.Returned) that reached an end</div></div>
+        </div>
+        <div class="stat">
+            <div class="stat-icon red">@Icons.Get("return")</div>
+            <div><div class="stat-label">Return rate</div><div class="stat-value">@Rate(s.ReturnRate)</div><div class="stat-sub">@s.Returned coming back or returned</div></div>
+        </div>
+        <div class="stat">
+            <div class="stat-icon">@Icons.Get("x-circle")</div>
+            <div><div class="stat-label">Cancel rate</div><div class="stat-value">@Rate(s.CancelRate)</div><div class="stat-sub">@s.Cancelled cancelled before pickup</div></div>
+        </div>
+        <div class="stat">
+            <div class="stat-icon green">@Icons.Get("cash")</div>
+            <div><div class="stat-label">Cash collected</div><div class="stat-value">@Money.Taka(s.Collected)</div><div class="stat-sub">at the door, for you</div></div>
+        </div>
+    </div>
+
+    @if (s.Booked == 0)
+    {
+        <div class="card">
+            <div class="empty">
+                @Icons.Get("chart")
+                <h3>No parcels were booked in these days</h3>
+                <p>Choose a longer period, or book a parcel and its numbers show up here.</p>
+                @if (rights is null || rights.May(MerchantPermissions.Booking))
+                {
+                    <a class="btn btn-primary" asp-page="/Merchant/NewParcel">@Icons.Get("plus") Book a parcel</a>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card mb">
+            <div class="card-head"><div><h2>Where they are now</h2><p>The @s.Booked.ToString("N0") parcels of the period, by where each one is today</p></div></div>
+            <div class="card-body">
+                <div class="stack-bar" role="img" aria-label="@string.Join(", ", places.Select(place => place.Name + " " + Share(s.Count(place.Statuses))))">
+                    @foreach (var place in places.Where(place => s.Count(place.Statuses) > 0))
+                    {
+                        <span class="tone-@place.Tone" style="width:@((s.Share(s.Count(place.Statuses)) * 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%"></span>
+                    }
+                </div>
+                <div class="stack-legend">
+                    @foreach (var place in places)
+                    {
+                        var count = s.Count(place.Statuses);
+                        <div class="@(count == 0 ? "faint" : "")">
+                            <span class="swatch tone-@place.Tone"></span>
+                            <span>@place.Name</span>
+                            <strong>@count.ToString("N0")</strong>
+                            <span class="muted">@Share(count)</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><div><h2>By status</h2><p>Each status with its parcels, their share of the period and their cash</p></div></div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Status</th><th class="num">Parcels</th><th class="num">Share</th><th class="num">Cash on delivery</th><th class="num">Collected</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var line in s.Statuses)
+                        {
+                            <tr class="@(line.Count == 0 ? "faint" : "")">
+                                <td>@Statuses.Badge(line.Status)</td>
+                                <td class="num strong">@line.Count.ToString("N0")</td>
+                                <td class="num">@Share(line.Count)</td>
+                                <td class="num">@Money.Taka(line.Cod)</td>
+                                <td class="num">@(line.Status is ParcelStatus.Delivered or ParcelStatus.PartlyDelivered ? Money.Taka(line.Collected) : Money.Taka((decimal?)null))</td>
+                                <td class="text-right">
+                                    @if (line.Count > 0 && seeParcels)
+                                    {
+                                        <a class="btn btn-ghost btn-sm" href="@ListOf(line.Status)">See them @Icons.Get("arrow-right")</a>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr><th>Total</th><th class="num">@s.Booked.ToString("N0")</th><th class="num">100%</th><th class="num">@Money.Taka(s.BookedCod)</th><th class="num">@Money.Taka(s.Collected)</th><th></th></tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    }
+}

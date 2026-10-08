@@ -67,6 +67,41 @@ public class DeliveryAttemptConfiguration : IEntityTypeConfiguration<DeliveryAtt
     }
 }
 
+public class ReturnListConfiguration : IEntityTypeConfiguration<ReturnList>
+{
+    public void Configure(EntityTypeBuilder<ReturnList> builder)
+    {
+        builder.MapTenantOwned(Schemas.Delivery);
+
+        // RL-100001, from the Delivery.ReturnListNumber sequence in the column default; EF reads it back after insert
+        builder.Property(l => l.Number)
+            .HasMaxLength(20)
+            .ValueGeneratedOnAdd()
+            .HasDefaultValueSql("(concat(N'RL-',NEXT VALUE FOR [Delivery].[ReturnListNumber]))");
+        builder.Property(l => l.Note).HasMaxLength(ReturnList.MaxNoteLength);
+        builder.Property(l => l.RowVersion).IsRowVersion();
+        builder.HasOne<Merchant>().WithMany().HasForeignKey(l => l.MerchantId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<PickupPoint>().WithMany().HasForeignKey(l => l.PickupPointId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Hub>().WithMany().HasForeignKey(l => l.HubId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Rider>().WithMany().HasForeignKey(l => l.RiderId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<AppUser>().WithMany().HasForeignKey(l => l.ConfirmedById).OnDelete(DeleteBehavior.Restrict);
+        builder.HasMany(l => l.Parcels).WithOne(p => p.ReturnList).HasForeignKey(p => p.ReturnListId).OnDelete(DeleteBehavior.Restrict);
+        builder.Navigation(l => l.Parcels).HasField("parcels");
+        builder.HasIndex(l => l.Number).IsUnique().HasDatabaseName("UX_ReturnList_Number");
+    }
+}
+
+public class ReturnListParcelConfiguration : IEntityTypeConfiguration<ReturnListParcel>
+{
+    public void Configure(EntityTypeBuilder<ReturnListParcel> builder)
+    {
+        builder.MapTenantOwned(Schemas.Delivery);
+        builder.HasOne<Parcel>().WithMany().HasForeignKey(p => p.ParcelId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Merchant>().WithMany().HasForeignKey(p => p.MerchantId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(p => new { p.ReturnListId, p.ParcelId }).IsUnique().HasDatabaseName("UX_ReturnListParcel_ReturnList_Parcel");
+    }
+}
+
 public class PickupRequestConfiguration : IEntityTypeConfiguration<PickupRequest>
 {
     public void Configure(EntityTypeBuilder<PickupRequest> builder)

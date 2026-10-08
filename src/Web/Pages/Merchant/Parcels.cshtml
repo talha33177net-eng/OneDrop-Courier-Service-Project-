@@ -1,4 +1,5 @@
 @page
+@using Application.Parcels.Browse
 @model Web.Pages.Merchant.ParcelsModel
 @{
     ViewData["Title"] = "Parcels";
@@ -10,7 +11,7 @@
         <p>Every parcel you have booked, newest first.</p>
     </div>
     <div class="page-actions">
-        <a class="btn btn-outline" asp-page-handler="Export" asp-all-route-data="@(Request.Query.ToDictionary(q => q.Key, q => q.Value.ToString()))">@Icons.Get("download") Export CSV</a>
+        <a class="btn btn-outline" asp-page="/Merchant/Export" asp-page-handler="Csv" asp-all-route-data="@(Request.Query.Where(q => q.Key != "page").ToDictionary(q => q.Key, q => q.Value.ToString()))" title="Every parcel of this tab and filters">@Icons.Get("download") Export CSV</a>
         <a class="btn btn-outline" asp-page="/Merchant/BulkUpload">@Icons.Get("upload") Bulk upload</a>
         <a class="btn btn-primary" asp-page="/Merchant/NewParcel">@Icons.Get("plus") Book a parcel</a>
     </div>
@@ -42,7 +43,31 @@
         }
     </form>
     <form method="get" asp-page="/Merchant/Labels" id="selected">
-        @await Html.PartialAsync("_ParcelTable", (Model.List.Page.Items, "/Merchant/Parcel/", false, true))
+        @if (Model.List.Page.Items.Count == 0)
+        {
+            var filtered = Model.Search is not null || Model.From is not null || Model.To is not null || Model.Late;
+            <div class="empty">
+                @Icons.Get(filtered ? "search" : "package")
+                <h3>@(filtered ? "No parcels match" : Model.Tab == ParcelTab.All ? "No parcels yet" : "Nothing in this tab")</h3>
+                <p>@(filtered ? "Nothing booked fits the search and days chosen." : Model.Tab == ParcelTab.All ? "Book your first parcel and follow it here from your shop to your customer." : "Parcels show up here as they reach this stage.")</p>
+                @if (filtered)
+                {
+                    <a class="btn btn-outline" asp-page="/Merchant/Parcels" asp-route-tab="@Model.Tab">@Icons.Get("x") Clear the filters</a>
+                }
+                else if (Model.Tab == ParcelTab.All)
+                {
+                    <a class="btn btn-primary" asp-page="/Merchant/NewParcel">@Icons.Get("plus") Book a parcel</a>
+                }
+                else
+                {
+                    <a class="btn btn-outline" asp-page="/Merchant/Parcels">@Icons.Get("package") See all parcels</a>
+                }
+            </div>
+        }
+        else
+        {
+            @await Html.PartialAsync("_ParcelTable", (Model.List.Page.Items, "/Merchant/Parcel/", false, true))
+        }
         @if (Model.List.Page.Items.Count > 0)
         {
             <div class="card-foot spread no-print">

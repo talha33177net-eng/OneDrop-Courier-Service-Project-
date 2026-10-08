@@ -2,13 +2,15 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Application.Abstractions;
+using Application.Notifications.SendEmails;
 using Application.Notifications.SendOutbox;
 using Application.Notifications.SendWebhooks;
 
 namespace Infrastructure.Jobs;
 
 /// <summary>
-/// Runs the outbox senders, <see cref="SendOutboxJob"/> (texts) and <see cref="SendWebhooksJob"/> (shops' webhooks),
+/// Runs the outbox senders, <see cref="SendOutboxJob"/> (texts), <see cref="SendWebhooksJob"/> (shops webhooks) and
+/// <see cref="SendEmailsJob"/> (merchants emails),
 /// for every active tenant every few seconds (<c>Jobs:OutboxInterval</c>), in process: Hangfire's recurring jobs run
 /// at most once a minute, too slow for "out for delivery" texts. Each sender has a loop of its own, so a slow shop
 /// server never holds up an SMS. Each tenant runs in its own scope through <see cref="TenantJobRunner"/>, and a
@@ -24,7 +26,8 @@ public class OutboxDispatcher(
     {
         return Task.WhenAll(
             RunAsync(nameof(SendOutboxJob), stoppingToken),
-            RunAsync(nameof(SendWebhooksJob), stoppingToken));
+            RunAsync(nameof(SendWebhooksJob), stoppingToken),
+            RunAsync(nameof(SendEmailsJob), stoppingToken));
     }
 
     private async Task RunAsync(string job, CancellationToken stoppingToken)

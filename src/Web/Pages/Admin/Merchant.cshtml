@@ -11,6 +11,10 @@
         <div class="breadcrumb"><a asp-page="/Admin/Merchants">Merchants</a> <span>/</span> <span>@m.Profile.Name</span></div>
         <h1>@m.Profile.Name @Statuses.Badge(m.Status)</h1>
         <p>@m.Profile.OwnerName · joined @m.Joined.ToString("d MMM yyyy")@(m.LoginEmail is null ? "" : $" · signs in as {m.LoginEmail}")</p>
+        @if (m.Account is { } account)
+        {
+            <p>@Icons.Get("store") A business of <a asp-page="/Admin/Merchant" asp-route-id="@account.Id">@account.Name</a>'s account. Approving, suspending and the payout account apply to the whole account.</p>
+        }
     </div>
     <div class="page-actions">
         <a class="btn btn-outline" asp-page="/Hub/Parcels" asp-route-merchantId="@m.Id">@Icons.Get("package") Parcels</a>
@@ -74,7 +78,78 @@
     </div>
 </div>
 
-<div class="card mt-lg">
+<div class="card mt-lg" id="money">
+    <div class="card-head">
+        <div><h2>@Icons.Get("cash") Money</h2><p>Owed now: <strong class="@(m.Unpaid < 0 ? "negative" : "")">@Money.Taka(m.Unpaid)</strong>@(m.Unpaid < 0 ? " (the merchant owes the courier)" : "")</p></div>
+        <div class="page-actions">
+            @if (m.PayoutHold is null)
+            {
+                <form method="post" asp-page-handler="PayNow" asp-route-id="@m.Id" class="inline-form"><button class="btn btn-outline btn-sm" type="submit" data-confirm="Everything not yet paid out, today's parcels too, goes to the payout account in one payout now." data-confirm-title="Pay @m.Profile.Name now?" data-confirm-ok="Pay now" data-confirm-tone="calm">@Icons.Get("send") Pay now</button></form>
+            }
+        </div>
+    </div>
+    <div class="card-body">
+        @if (m.PayoutHold is { } hold)
+        {
+            <div class="alert alert-warning" role="status">@Icons.Get("pause")<div>Payouts are on hold for the whole account: <strong>@hold.TrimEnd('.').</strong> Its balance keeps counting and is paid once you release it.</div></div>
+        }
+        <div class="grid grid-2">
+            <div>
+                <h3 class="mb">Payouts</h3>
+                @if (m.PayoutHold is null)
+                {
+                    <form method="post" asp-page-handler="Hold" asp-route-id="@m.Id">
+                        <div class="field"><label for="holdReason">Hold the payouts because</label><input type="text" id="holdReason" name="reason" maxlength="200" placeholder="Checking a claim about damaged parcels" required /></div>
+                        <button class="btn btn-outline" type="submit">@Icons.Get("pause") Hold payouts</button>
+                    </form>
+                }
+                else
+                {
+                    <p class="muted">The merchant sees the reason on its Payments page and cannot ask to be paid now.</p>
+                    <form method="post" asp-page-handler="Release" asp-route-id="@m.Id" class="inline-form"><button class="btn btn-primary" type="submit">Release payouts</button></form>
+                }
+            </div>
+            <div>
+                <h3 class="mb">Adjust the balance</h3>
+                <form method="post" asp-page-handler="Adjust" asp-route-id="@m.Id">
+                    <div class="form-grid">
+                        <div class="field">
+                            <label for="direction">Kind</label>
+                            <select id="direction" name="direction">
+                                <option value="credit">Credit: the merchant paid us, or is compensated</option>
+                                <option value="charge">Charge: the merchant owes us more</option>
+                            </select>
+                        </div>
+                        <div class="field"><label for="amount">Amount (৳)</label><input type="number" id="amount" name="amount" min="1" step="0.01" required /></div>
+                        <div class="field field-full"><label for="note">Why (the merchant reads this)</label><input type="text" id="note" name="note" maxlength="200" placeholder="Paid the courier in cash at Mirpur hub" required /></div>
+                    </div>
+                    <button class="btn btn-outline" type="submit" data-confirm="The line goes on the merchant's statement and into its next payout. It cannot be removed, only balanced by another adjustment." data-confirm-title="Write this adjustment?" data-confirm-ok="Write it" data-confirm-tone="calm">Write adjustment</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    @if (m.Adjustments.Count > 0)
+    {
+        <div class="table-wrap">
+            <table class="table compact">
+                <thead><tr><th>Day</th><th>Why</th><th class="num">Amount</th><th>Paid in</th></tr></thead>
+                <tbody>
+                    @foreach (var a in m.Adjustments)
+                    {
+                        <tr>
+                            <td class="nowrap">@a.Date.ToString("d MMM yyyy")</td>
+                            <td>@a.Note</td>
+                            <td class="num strong @(a.Amount < 0 ? "negative" : "")">@Money.Taka(a.Amount)</td>
+                            <td>@if (a.Payout is { } number) { <a class="code-link" asp-page="/Admin/Payout" asp-route-number="@number">@number</a> } else { <span class="muted">Next payout</span> }</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<div class="card">
     <div class="card-head"><h2>@Icons.Get("map-pin") Pickup points</h2></div>
     <div class="table-wrap">
         <table class="table compact">

@@ -22,5 +22,9 @@ public static class AppClaims
 {
     public const string TenantId = "app:tenant";
 
+    /// <summary>A merchant login's account (its main profile); an API key's own merchant.</summary>
     public const string MerchantId = "app:merchant";
+
+    /// <summary>The account's other businesses a merchant login may work in, as ids separated by spaces.</summary>
+    public const string Businesses = "app:businesses";
 }

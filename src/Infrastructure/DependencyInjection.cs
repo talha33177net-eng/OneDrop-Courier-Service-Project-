@@ -4,8 +4,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Application.Abstractions;
+using Infrastructure.Email;
 using Infrastructure.Identity;
+using Infrastructure.Jobs;
 using Infrastructure.MultiTenancy;
 using Infrastructure.Payments;
 using Infrastructure.Persistence;
@@ -53,6 +56,43 @@ public static class DependencyInjection
         services.AddSingleton<ISmsSender, FakeSmsSender>();
         services.AddSingleton<FakePayoutLog>();
         services.AddSingleton<IPayoutGateway, FakePayoutGateway>();
+        services.AddScoped<IJobSchedule, HangfireJobSchedule>();
+
+        // Online payments: the real SSLCommerz store when one is configured (its password lives in a git-ignored
+        // Local.json), the fake in Development, and none elsewhere, so a fake can never take "payments" for real
+        services.AddSingleton<FakePaymentLog>();
+        services.AddSingleton(provider =>
+        {
+            var options = new SslcommerzOptions();
+            provider.GetRequiredService<IConfiguration>().GetSection("Sslcommerz").Bind(options);
+
+            return options;
+        });
+        services.AddHttpClient<SslcommerzGateway>((provider, client) =>
+        {
+            client.BaseAddress = new Uri(provider.GetRequiredService<SslcommerzOptions>().BaseUrl
+                ?? throw new InvalidOperationException("Sslcommerz:BaseUrl is not set."));
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
+        services.AddScoped<IPaymentGateway>(provider =>
+            provider.GetRequiredService<SslcommerzOptions>().Configured
+                ? provider.GetRequiredService<SslcommerzGateway>()
+                : provider.GetRequiredService<IHostEnvironment>().IsDevelopment()
+                    ? ActivatorUtilities.CreateInstance<FakePaymentGateway>(provider)
+                    : ActivatorUtilities.CreateInstance<NoPaymentGateway>(provider));
+
+        // The real mail server when one is configured (the password lives in a git-ignored Local.json), else the fake
+        services.AddSingleton<EmailLog>();
+        services.AddSingleton(provider =>
+        {
+            var options = new EmailOptions();
+            provider.GetRequiredService<IConfiguration>().GetSection("Email").Bind(options);
+
+            return options;
+        });
+        services.AddSingleton<IEmailSender>(provider => provider.GetRequiredService<EmailOptions>().Configured
+            ? ActivatorUtilities.CreateInstance<SmtpEmailSender>(provider)
+            : ActivatorUtilities.CreateInstance<FakeEmailSender>(provider));
 
         services
             .AddHttpClient<IWebhookSender, HttpWebhookSender>((provider, client) => client.Timeout = TimeSpan.Parse(

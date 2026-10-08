@@ -52,12 +52,6 @@ public class MerchantAccountHandler(IAppDbContext db, ICurrentUser currentUser)
         return await SaveAsync(merchant.Edit(profile), cancellationToken);
     }
 
-    public async Task<Result> SetPayoutAsync(PayoutMethod method, string? account, string? name, CancellationToken cancellationToken = default)
-    {
-        var merchant = await MerchantAsync(cancellationToken);
-
-        return await SaveAsync(merchant.SetPayoutAccount(method, account, name), cancellationToken);
-    }
 
     /// <summary>Adds a pickup point, or changes one when <paramref name="id"/> is given.</summary>
     public async Task<Result> SavePickupPointAsync(

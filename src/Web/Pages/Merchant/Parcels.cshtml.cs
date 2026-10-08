@@ -1,13 +1,10 @@
-using System.Globalization;
-using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Application.Parcels.Browse;
-using Domain.Parcels;
 
 namespace Web.Pages.Merchant;
 
-/// <summary>The merchant's parcels: tabs by stage, search, a date range, label printing for the ones ticked and a CSV export.</summary>
+/// <summary>The merchant's parcels: tabs by stage, search, a date range, and label printing for the ones ticked.</summary>
 public class ParcelsModel(ParcelListHandler parcels) : PageModel
 {
     [BindProperty(SupportsGet = true)]
@@ -34,31 +31,6 @@ public class ParcelsModel(ParcelListHandler parcels) : PageModel
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         List = await parcels.ListAsync(Query(PageNumber, 25), cancellationToken);
-    }
-
-    /// <summary>The parcels of the current tab and filters as a CSV file, up to the list's largest page.</summary>
-    public async Task<IActionResult> OnGetExportAsync(CancellationToken cancellationToken)
-    {
-        var list = await parcels.ListAsync(Query(1, ParcelListHandler.MaxPageSize), cancellationToken);
-        var csv = new StringBuilder("tracking_code,invoice,recipient,phone,area,status,cod_amount,collected,delivery_charge,booked,due_by\r\n");
-        foreach (var row in list.Page.Items)
-        {
-            csv.AppendLine(string.Join(",", new[]
-            {
-                row.TrackingCode, row.MerchantReference ?? "", row.RecipientName, row.RecipientPhone, row.Area,
-                row.Status.DisplayName(), row.CodAmount.ToString(CultureInfo.InvariantCulture),
-                row.CollectedAmount?.ToString(CultureInfo.InvariantCulture) ?? "",
-                row.DeliveryCharge.ToString(CultureInfo.InvariantCulture), row.Booked.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
-                row.DueOn?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? ""
-            }.Select(Quote)));
-        }
-
-        return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv.ToString())).ToArray(), "text/csv", "parcels.csv");
-
-        static string Quote(string value)
-        {
-            return value.Contains(',') || value.Contains('"') ? $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"" : value;
-        }
     }
 
     private ParcelQuery Query(int page, int size)

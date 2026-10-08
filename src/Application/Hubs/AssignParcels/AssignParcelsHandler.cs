@@ -22,8 +22,11 @@ public sealed record RiderLoad(
     int? MaxParcels,
     int? MaxLoadGrams);
 
-/// <summary>What an assignment did: the parcels handed over, and the ones that could not be with why.</summary>
-public sealed record AssignResult(int Assigned, IReadOnlyList<string> Problems);
+/// <summary>
+/// What an assignment did: the parcels handed over, the ones that could not be with why, and the rider's run, so the
+/// hub can print its sheet straight away.
+/// </summary>
+public sealed record AssignResult(int Assigned, IReadOnlyList<string> Problems, long RunId);
 
 /// <summary>
 /// Hub staff hand parcels waiting at their hub to a rider for delivery. The parcels go on the rider's run sheet for the
@@ -163,7 +166,7 @@ public class AssignParcelsHandler(IAppDbContext db, ITenantContext tenantContext
             return Error.Conflict("assign.changed", "Some of these parcels were moved by someone else just now. Reload and try again.");
         }
 
-        return new AssignResult(assigned, problems);
+        return new AssignResult(assigned, problems, run.Id);
     }
 
     /// <summary>The rider's run sheet for the day, opened (and saved, for its id) with the first parcel.</summary>

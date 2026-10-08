@@ -1,9 +1,11 @@
+using System.Globalization;
 using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using Application.Payments.AdminPayouts;
 using Application.Payments.RunPayouts;
+using Domain.Merchants;
 using Domain.Parcels;
 using Domain.Payments;
 using Infrastructure.Payments;
@@ -69,13 +71,140 @@ public class PayoutTests(WebAppFactory factory) : AppTests(factory)
         Assert.Equal(0, tomorrow.DueTomorrow);
     }
 
+    [Fact]
+    public async Task A_refused_transfer_shows_why_and_is_sent_again_once_the_gateway_takes_it()
+    {
+        WebAppFactory.RequireDatabase();
+        var shop = await NewMerchantAsync();
+        await DeliveredAsync(shop, cod: 1000);
+        var account = await QueryAsync("onedrop", db => db.Merchants.Where(m => m.Id == shop.Id).Select(m => m.PayoutAccount!).SingleAsync(Cancel));
+        var gateway = Factory.Services.GetRequiredService<FakePayoutLog>();
+        gateway.Refuse(account, "The wallet is frozen.");
+        try
+        {
+            var admin = await SignInAsync("onedrop", "admin@onedrop.test");
+            var merchantPage = $"/Admin/Merchant/{shop.Id}";
+            Assert.Contains("the gateway refused it", await admin.SubmitAsync(merchantPage, $"{merchantPage}?handler=PayNow"));
+            var payout = await QueryAsync("onedrop", db => db.Payouts.SingleAsync(p => p.MerchantId == shop.Id, Cancel));
+            // Another test's run may have tried it again meanwhile, so it was refused at least once
+            Assert.Equal((PayoutStatus.Pending, "The wallet is frozen."), (payout.Status, payout.LastError));
+            Assert.True(payout.FailedAttempts >= 1);
+
+            // The admin sees it and why; so does the merchant on its invoice
+            var payouts = await admin.PageAsync("/Admin/Payouts");
+            Assert.Contains("Refused by the gateway", payouts);
+            Assert.Contains("The wallet is frozen.", payouts);
+            var merchant = await SignInAsync("onedrop", shop.Email);
+            Assert.Contains("The wallet is frozen.", await merchant.PageAsync($"/Merchant/Payment/{payout.Number}"));
+
+            // Sent again while still refused, it says so and counts the try
+            Assert.Contains("refused", await admin.SubmitAsync("/Admin/Payouts", "/Admin/Payouts?handler=Send", ("number", payout.Number)));
+            gateway.StopRefusing(account);
+            Assert.Matches("was sent|not waiting", await admin.SubmitAsync("/Admin/Payouts", "/Admin/Payouts?handler=Send", ("number", payout.Number)));
+
+            var sent = await QueryAsync("onedrop", db => db.Payouts.SingleAsync(p => p.Id == payout.Id, Cancel));
+            Assert.Equal((PayoutStatus.Paid, (string?)null), (sent.Status, sent.LastError));
+            Assert.True(sent.FailedAttempts >= 2);
+            Assert.Single(gateway.Recent, p => p.Key == $"onedrop-payout-{payout.Id}");
+        }
+        finally
+        {
+            gateway.StopRefusing(account);
+        }
+    }
+
+    [Fact]
+    public async Task A_cancelled_payout_frees_its_lines_for_a_payout_to_the_corrected_account()
+    {
+        WebAppFactory.RequireDatabase();
+        var shop = await NewMerchantAsync();
+        await DeliveredAsync(shop, cod: 1000);
+        var wrong = await QueryAsync("onedrop", db => db.Merchants.Where(m => m.Id == shop.Id).Select(m => m.PayoutAccount!).SingleAsync(Cancel));
+        var gateway = Factory.Services.GetRequiredService<FakePayoutLog>();
+        gateway.Refuse(wrong, "No such wallet.");
+        try
+        {
+            var admin = await SignInAsync("onedrop", "admin@onedrop.test");
+            var merchantPage = $"/Admin/Merchant/{shop.Id}";
+            await admin.SubmitAsync(merchantPage, $"{merchantPage}?handler=PayNow");
+            var stuck = await QueryAsync("onedrop", db => db.Payouts.SingleAsync(p => p.MerchantId == shop.Id, Cancel));
+
+            // Another courier's admin cannot touch it
+            var rival = await SignInAsync("rival", "admin@rival.test");
+            Assert.Equal(
+                HttpStatusCode.NotFound,
+                (await rival.PostFormAsync("/Admin/Payouts", $"/Admin/Payout/{stuck.Number}?handler=Cancel")).StatusCode);
+
+            // The account is corrected; the stuck payout still names the old one, so it is cancelled
+            var right = NewPhone();
+            await admin.SubmitAsync(merchantPage, $"{merchantPage}?handler=Payout", ("method", "Nagad"), ("payoutAccount", right), ("accountName", "Test Owner"));
+            var invoice = $"/Admin/Payout/{stuck.Number}";
+            Assert.Contains("was cancelled", await admin.SubmitAsync(invoice, $"{invoice}?handler=Cancel"));
+            Assert.Equal(PayoutStatus.Cancelled, (await QueryAsync("onedrop", db => db.Payouts.SingleAsync(p => p.Id == stuck.Id, Cancel))).Status);
+            Assert.Empty(await QueryAsync("onedrop", db => db.LedgerEntries.Where(e => e.PayoutId == stuck.Id).ToListAsync(Cancel)));
+
+            // The next payout goes to the corrected account with the same money (made here, or by another test's run)
+            await admin.SubmitAsync(merchantPage, $"{merchantPage}?handler=PayNow");
+            var paid = await QueryAsync("onedrop", db => db.Payouts.SingleAsync(p => p.MerchantId == shop.Id && p.Status == PayoutStatus.Paid, Cancel));
+            Assert.Equal((stuck.Amount, PayoutMethod.Nagad, "+88" + right), (paid.Amount, paid.Method, paid.Account));
+        }
+        finally
+        {
+            gateway.StopRefusing(wrong);
+        }
+    }
+
+    [Fact]
+    public async Task Held_payouts_wait_and_adjustments_settle_a_merchant_who_owes_the_courier()
+    {
+        WebAppFactory.RequireDatabase();
+        var admin = await SignInAsync("onedrop", "admin@onedrop.test");
+
+        // A merchant with only a return owes the courier, and is listed apart until an adjustment settles it
+        var owing = await NewMerchantAsync();
+        await ReturnedAsync(owing);
+        var owes = -await QueryAsync("onedrop", db => db.LedgerEntries.Where(e => e.MerchantId == owing.Id).SumAsync(e => e.Amount, Cancel));
+        Assert.Contains("Owe the courier", await admin.PageAsync("/Admin/Payouts"));
+        Assert.Contains((await OverviewAsync(DateTime.UtcNow)).OwingCourier, m => m.MerchantId == owing.Id && m.Net == -owes);
+        var owingPage = $"/Admin/Merchant/{owing.Id}";
+        await admin.SubmitAsync(owingPage, $"{owingPage}?handler=Adjust", ("direction", "credit"), ("amount", owes.ToString(CultureInfo.InvariantCulture)), ("note", "Paid at Mirpur hub"));
+        Assert.DoesNotContain((await OverviewAsync(DateTime.UtcNow)).Owed, m => m.MerchantId == owing.Id);
+
+        // Held, the merchant is not paid by the run nor when it asks, and reads why
+        var shop = await NewMerchantAsync();
+        await DeliveredAsync(shop, cod: 1000);
+        var shopPage = $"/Admin/Merchant/{shop.Id}";
+        Assert.Contains("Payouts held", await admin.SubmitAsync(shopPage, $"{shopPage}?handler=Hold", ("reason", "Checking a damage claim")));
+        var merchant = await SignInAsync("onedrop", shop.Email);
+        var payments = await merchant.PageAsync("/Merchant/Payments");
+        Assert.Contains("Checking a damage claim", payments);
+        Assert.DoesNotContain("Get paid now", payments);
+        Assert.Contains("on hold", await merchant.SubmitAsync("/Merchant/Payments", "/Merchant/Payments?handler=PayNow"));
+        await RunAsync(DateTime.UtcNow.AddDays(1));
+        Assert.Empty(await QueryAsync("onedrop", db => db.Payouts.Where(p => p.MerchantId == shop.Id).ToListAsync(Cancel)));
+
+        // With a charge written on it and released, it is paid the rest (here, or by another test's run) and reads why
+        await admin.SubmitAsync(shopPage, $"{shopPage}?handler=Adjust", ("direction", "charge"), ("amount", "30"), ("note", "Extra packing"));
+        await admin.SubmitAsync(shopPage, $"{shopPage}?handler=Release");
+        await admin.SubmitAsync(shopPage, $"{shopPage}?handler=PayNow");
+        var payout = await QueryAsync("onedrop", db => db.Payouts.SingleAsync(p => p.MerchantId == shop.Id, Cancel));
+        Assert.Equal(1000 - 70 - 30, payout.Amount);
+        Assert.Equal((70m, -30m), (payout.ChargesTotal, payout.AdjustmentsTotal));
+        var invoice = await merchant.PageAsync($"/Merchant/Payment/{payout.Number}");
+        Assert.Contains("Extra packing", invoice);
+    }
+
     private async Task<MerchantBalance> OwedAsync(long merchantId, DateTime utcNow)
+    {
+        return (await OverviewAsync(utcNow)).Owed.Single(m => m.MerchantId == merchantId);
+    }
+
+    private async Task<PayoutsOverview> OverviewAsync(DateTime utcNow)
     {
         await using var scope = await ScopeAsync("onedrop");
         var handler = ActivatorUtilities.CreateInstance<AdminPayoutsHandler>(scope.ServiceProvider, (TimeProvider)new FakeTimeProvider(utcNow));
-        var overview = await handler.GetAsync(null, Cancel);
 
-        return overview.Owed.Single(m => m.MerchantId == merchantId);
+        return await handler.GetAsync(null, Cancel);
     }
 
     private async Task<(PayoutRun Run, IReadOnlyList<Payout> Payouts)> RunAsync(DateTime utcNow)

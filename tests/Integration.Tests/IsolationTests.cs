@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.StaticAssets;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Domain.Delivery;
 using Domain.Parcels;
 using Domain.Payments;
 using Infrastructure.Persistence;
@@ -35,6 +36,7 @@ public partial class IsolationTests(WebAppFactory factory) : AppTests(factory)
         var waiting = await BookAsync(shop.ApiKey, area: "Pallabi", phone: phone);
         var outCode = await BookAsync(shop.ApiKey, area: "Pallabi", phone: phone);
         var payout = await PaidAsync(shop);
+        var returnList = await ReturnListAsync(shop, rider);
         await QueryAsync("onedrop", async db =>
         {
             var parcel = await db.Parcels.SingleAsync(p => p.TrackingCode == outCode, Cancel);
@@ -58,6 +60,14 @@ public partial class IsolationTests(WebAppFactory factory) : AppTests(factory)
         var admin = await SignInAsync("onedrop", "admin@onedrop.test");
         var hub = await SignInAsync("onedrop", "hub@onedrop.test");
         Assert.Contains("1 parcel handed over", await hub.SubmitAsync("/Hub/Assign?hub=MIR", "/Hub/Assign?hub=MIR", ("riderId", $"{rider.Id}"), ("codes", outCode)));
+        var runId = await QueryAsync("onedrop", db => db.DeliveryRuns.Where(r => r.RiderId == rider.Id).Select(r => r.Id).SingleAsync(Cancel));
+        await QueryAsync("onedrop", async db =>
+        {
+            var parcel = await db.Parcels.SingleAsync(p => p.TrackingCode == outCode, Cancel);
+            db.ParcelRequests.Add(ParcelRequest.Ask(parcel, ParcelRequestKind.ChangeCod, 999, "Sweep", null).Value);
+
+            return await db.SaveChangesAsync(Cancel);
+        });
         var rivalAdmin = await SignInAsync("rival", "admin@rival.test");
         var rivalHub = await SignInAsync("rival", "hub@rival.test");
         var ownRider = await SignInAsync("onedrop", rider.Email);
@@ -92,9 +102,40 @@ public partial class IsolationTests(WebAppFactory factory) : AppTests(factory)
                 Assert.Equal(HttpStatusCode.OK, refused.StatusCode);
             }),
             ("/Account/Register", async () => Assert.DoesNotContain("Gulshan", await publicRival.PageAsync("/Account/Register"))),
+            ("/Account/Password", async () =>
+            {
+                Assert.Contains(shop.Email, await (await SignInAsync("onedrop", shop.Email)).PageAsync("/Account/Password"));
+                Assert.DoesNotContain(shop.Email, await rivalAdmin.PageAsync("/Account/Password"));
+                Assert.Equal(HttpStatusCode.Redirect, (await publicRival.GetAsync("/Account/Password")).StatusCode);
+            }),
 
             // Merchant panel: only the parcel's merchant
             ("/Merchant/Index", async () => await NotSeenByOthersAsync("/Merchant", shop.Name)),
+            ("/Merchant/Export", async () =>
+            {
+                Assert.Contains(outCode, await (await owner.GetAsync("/Merchant/Export?handler=Csv")).Content.ReadAsStringAsync(Cancel));
+                Assert.DoesNotContain(outCode, await (await other.GetAsync("/Merchant/Export?handler=Csv")).Content.ReadAsStringAsync(Cancel));
+                Assert.DoesNotContain(outCode, await (await rivalShop.GetAsync("/Merchant/Export?handler=Csv")).Content.ReadAsStringAsync(Cancel));
+            }),
+            ("/Merchant/ByDate", async () =>
+            {
+                Assert.DoesNotContain("No parcels were booked", await owner.PageAsync("/Merchant/ByDate"));
+                Assert.Contains("No parcels were booked", await other.PageAsync("/Merchant/ByDate"));
+            }),
+            ("/Merchant/Stats", async () =>
+            {
+                // The owner's parcels were booked today; a merchant of its own counts none of them
+                Assert.DoesNotContain("No parcels were booked", await owner.PageAsync("/Merchant/Stats"));
+                Assert.Contains("No parcels were booked", await other.PageAsync("/Merchant/Stats"));
+            }),
+            ("/Merchant/Businesses", async () =>
+            {
+                Assert.DoesNotContain(shop.Name, await other.PageAsync("/Merchant/Businesses"));
+                var opened = await other.PostFormAsync("/Merchant/Businesses", $"/Merchant/Businesses?handler=Open&id={shop.Id}");
+                Assert.Equal(HttpStatusCode.NotFound, opened.StatusCode);
+            }),
+            ("/Merchant/Picture", async () => Assert.Equal(HttpStatusCode.NotFound, (await other.GetAsync($"/Merchant/Picture/{shop.Id}")).StatusCode)),
+            ("/Merchant/NewBusiness", Fixed("a blank form; it adds only to the signed-in merchant's own account")),
             ("/Merchant/Parcels", async () => await OnlyTheShopSeesAsync("/Merchant/Parcels", outCode)),
             ("/Merchant/Parcel", async () => await NotFoundForOtherShopsAsync($"/Merchant/Parcel/{outCode}")),
             ("/Merchant/EditParcel", async () => await NotFoundForOtherShopsAsync($"/Merchant/EditParcel/{waiting}")),
@@ -105,6 +146,9 @@ public partial class IsolationTests(WebAppFactory factory) : AppTests(factory)
                 Assert.DoesNotContain(waiting, await other.PageAsync("/Merchant/BulkUpload"));
             }),
             ("/Merchant/Labels", async () => await OnlyTheShopSeesAsync("/Merchant/Labels", waiting)),
+            ("/Merchant/Returns", async () => await OnlyTheShopSeesAsync("/Merchant/Returns", returnList)),
+            ("/Merchant/Requests", async () => await OnlyTheShopSeesAsync("/Merchant/Requests", outCode)),
+            ("/Merchant/Return", async () => await NotFoundForOtherShopsAsync($"/Merchant/Return/{returnList}")),
             ("/Merchant/Pickups", async () => await NotSeenByOthersAsync("/Merchant/Pickups", shop.Name)),
             ("/Merchant/Payments", async () => await OnlyTheShopSeesAsync("/Merchant/Payments", payout)),
             ("/Merchant/Payment", async () => await NotFoundForOtherShopsAsync($"/Merchant/Payment/{payout}")),
@@ -116,7 +160,27 @@ public partial class IsolationTests(WebAppFactory factory) : AppTests(factory)
             ("/Merchant/Pricing", async () => Assert.DoesNotContain("৳120", await rivalShop.PageAsync("/Merchant/Pricing"))),
             ("/Merchant/Settings", async () => await OnlyTheShopSeesAsync("/Merchant/Settings", Domain.Common.PhoneNumber.Parse(account).Value.Local)),
             ("/Merchant/ApiKeys", async () => await OnlyTheShopSeesAsync("/Merchant/ApiKeys", keyPrefix)),
+            ("/Merchant/Moderators", async () =>
+            {
+                var added = await (await SignInAsync("onedrop", shop.Email)).PostFormAsync(
+                    "/Merchant/Moderators",
+                    "/Merchant/Moderators?handler=Add",
+                    ("Name", "Sweep staff"),
+                    ("Email", $"{Guid.NewGuid():N}@staff.test"),
+                    ("Permissions", "Dashboard"));
+                Assert.Equal(HttpStatusCode.OK, added.StatusCode);
+                Assert.DoesNotContain("Sweep staff", await other.PageAsync("/Merchant/Moderators"));
+                Assert.DoesNotContain("Sweep staff", await rivalShop.PageAsync("/Merchant/Moderators"));
+            }),
             ("/Merchant/Webhook", async () => await OnlyTheShopSeesAsync("/Merchant/Webhook", secret)),
+
+            ("/Hub/RunSheet", async () =>
+            {
+                var sheet = await hub.GetAsync($"/Hub/RunSheet/{runId}?hub=MIR");
+                Assert.Equal(HttpStatusCode.OK, sheet.StatusCode);
+                Assert.Equal(HttpStatusCode.NotFound, (await rivalHub.GetAsync($"/Hub/RunSheet/{runId}?hub=MIR")).StatusCode);
+                Assert.Equal(HttpStatusCode.NotFound, (await rivalAdmin.GetAsync($"/Hub/RunSheet/{runId}?hub=MIR")).StatusCode);
+            }),
 
             // Hub pages: the courier's own staff; another courier's staff and admin get a 404 for this courier's hub
             ("/Hub/Index", async () => await HubOnlyAsync("/Hub?hub=MIR")),
@@ -136,6 +200,11 @@ public partial class IsolationTests(WebAppFactory factory) : AppTests(factory)
             ("/Hub/Pickups", async () => await HubOnlyAsync("/Hub/Pickups?hub=MIR")),
             ("/Hub/Assign", async () => await HubOnlyAsync("/Hub/Assign?hub=MIR")),
             ("/Hub/Runs", async () => await HubOnlyAsync("/Hub/Runs?hub=MIR")),
+            ("/Hub/Returns", async () =>
+            {
+                await HubOnlyAsync("/Hub/Returns?hub=MIR");
+                Assert.Contains(returnList, await hub.PageAsync("/Hub/Returns?hub=MIR"));
+            }),
             ("/Hub/Parcels", async () =>
             {
                 Assert.Contains(outCode, await hub.PageAsync($"/Hub/Parcels?search={outCode}"));
@@ -168,6 +237,13 @@ public partial class IsolationTests(WebAppFactory factory) : AppTests(factory)
                 Assert.Equal(HttpStatusCode.NotFound, (await neighbour.PostFormAsync("/Rider", $"/Rider/Delivery/{outCode}?handler=Refuse", ("reason", "Test"))).StatusCode);
             }),
             ("/Rider/Pickups", async () => Assert.DoesNotContain(shop.Name, await neighbour.PageAsync("/Rider/Pickups"))),
+            ("/Rider/Return", async () =>
+            {
+                Assert.Equal(HttpStatusCode.OK, (await ownRider.GetAsync($"/Rider/Return/{returnList}")).StatusCode);
+                Assert.Equal(HttpStatusCode.NotFound, (await neighbour.GetAsync($"/Rider/Return/{returnList}")).StatusCode);
+                Assert.Equal(HttpStatusCode.NotFound, (await rivalRider.GetAsync($"/Rider/Return/{returnList}")).StatusCode);
+                Assert.Equal(HttpStatusCode.NotFound, (await neighbour.PostFormAsync("/Rider", $"/Rider/Return/{returnList}?handler=HandOver")).StatusCode);
+            }),
 
             // Courier admin: only the courier's own admin
             ("/Admin/Index", async () => Assert.DoesNotContain("Mirpur hub", await rivalAdmin.PageAsync("/Admin"))),
@@ -193,8 +269,27 @@ public partial class IsolationTests(WebAppFactory factory) : AppTests(factory)
                 Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync($"/Admin/Payout/{payout}")).StatusCode);
                 Assert.Equal(HttpStatusCode.NotFound, (await rivalAdmin.GetAsync($"/Admin/Payout/{payout}")).StatusCode);
             }),
+            ("/Admin/Reports", async () =>
+            {
+                Assert.Contains(shop.Name, await admin.PageAsync("/Admin/Reports"));
+                Assert.DoesNotContain(shop.Name, await rivalAdmin.PageAsync("/Admin/Reports"));
+            }),
+            ("/Admin/Requests", async () =>
+            {
+                Assert.Contains(outCode, await admin.PageAsync("/Admin/Requests"));
+                Assert.DoesNotContain(outCode, await rivalAdmin.PageAsync("/Admin/Requests"));
+            }),
             ("/Admin/Rates", async () => Assert.DoesNotContain("৳120", await rivalAdmin.PageAsync("/Admin/Rates"))),
-            ("/Admin/Coverage", async () => Assert.DoesNotContain("Gulshan", await rivalAdmin.PageAsync("/Admin/Coverage"))),
+            ("/Admin/Coverage", async () =>
+            {
+                Assert.DoesNotContain("Gulshan", await rivalAdmin.PageAsync("/Admin/Coverage"));
+                // The hub and area tabs carry the seed's own names as form placeholders, so the sweep looks at data only
+                Assert.DoesNotContain("Section 10, Mirpur", await rivalAdmin.PageAsync("/Admin/Coverage?tab=Hubs"));
+                Assert.DoesNotContain("Gulshan", await rivalAdmin.PageAsync("/Admin/Coverage?tab=Zones"));
+                Assert.DoesNotContain("Sylhet Sadar", await rivalAdmin.PageAsync("/Admin/Coverage?tab=Areas"));
+            }),
+            // The seeded van carries 300 parcels for OneDrop only; the rival courier sets its own capacities
+            ("/Admin/Vehicles", async () => Assert.DoesNotContain("value=\"300\"", await rivalAdmin.PageAsync("/Admin/Vehicles"))),
             ("/Admin/Messages", async () => Assert.DoesNotContain(outCode, await rivalAdmin.PageAsync("/Admin/Messages"))),
 
             // The platform's list of couriers and the jobs dashboard are for platform admins only
@@ -205,6 +300,29 @@ public partial class IsolationTests(WebAppFactory factory) : AppTests(factory)
             ("/Dev/Sms", Fixed("Development only")),
             ("/Dev/Payouts", Fixed("Development only")),
             ("/Dev/Webhooks", Fixed("Development only")),
+            ("/Dev/Emails", Fixed("Development only")),
+            // The fake gateway's payment page, reached only by a payment's random transaction id
+            ("/Dev/Pay", Fixed("Development only")),
+
+            // The gateway's return and notice: open to anyone, but a payment is found on its own courier's host only,
+            // and nothing posted is believed (OnlinePaymentsTests forges one)
+            ("GET /pay/{transactionId}/{outcome:regex(^(success|fail|cancel)$)}", async () =>
+            {
+                var transaction = await QueryAsync("onedrop", async db =>
+                {
+                    var payment = OnlinePayment.Start(shop.Id, 50, "BDT", new PaymentLimits(10, 500_000)).Value;
+                    db.OnlinePayments.Add(payment);
+                    await db.SaveChangesAsync(Cancel);
+
+                    return payment.TransactionId;
+                });
+                Assert.Equal(HttpStatusCode.NotFound, (await Visit("rival").SendAsync(HttpMethod.Post, $"/pay/{transaction}/success")).StatusCode);
+                Assert.Equal(HttpStatusCode.NotFound, (await Visit("onedrop").SendAsync(HttpMethod.Post, $"/pay/{Guid.NewGuid():N}/success")).StatusCode);
+                var number = (await QueryAsync("onedrop", db => db.OnlinePayments.SingleAsync(p => p.TransactionId == transaction, Cancel))).Number;
+                Assert.DoesNotContain(number, await other.PageAsync($"/Merchant/Payments?payment={number}"));
+                Assert.DoesNotContain(number, await rivalAdmin.PageAsync("/Admin/Payouts"));
+            }),
+            ("POST /pay/notice", async () => Assert.Equal(HttpStatusCode.OK, (await Visit("rival").SendAsync(HttpMethod.Post, "/pay/notice")).StatusCode)),
 
             // The merchant API: a merchant's key reaches its own parcels only, another courier's key none
             ("POST /api/v1/parcels", async () =>
@@ -339,13 +457,31 @@ public partial class IsolationTests(WebAppFactory factory) : AppTests(factory)
             AllowAutoRedirect = false
         });
 
-        foreach (var url in new[] { "/Dev/Sms", "/Dev/Payouts", "/Dev/Webhooks" })
+        foreach (var url in new[] { "/Dev/Sms", "/Dev/Payouts", "/Dev/Webhooks", "/Dev/Emails", "/Dev/Pay/1" })
         {
             Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(url, Cancel)).StatusCode);
         }
 
         Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsync("/Dev/Webhooks", new StringContent("{}"), Cancel)).StatusCode);
         Assert.DoesNotContain("onedrop.test", await client.GetStringAsync("/Account/Login", Cancel));
+    }
+
+    /// <summary>A parcel of the merchant's asked back at its hub and sent back with the rider; returns the list's number.</summary>
+    private async Task<string> ReturnListAsync(TestMerchant shop, TestRider rider)
+    {
+        var code = await BookAsync(shop.ApiKey, area: "Pallabi", cod: 400);
+
+        return await QueryAsync("onedrop", async db =>
+        {
+            var parcel = await db.Parcels.SingleAsync(p => p.TrackingCode == code, Cancel);
+            parcel.ReceiveAt(parcel.PickupHubId, Today);
+            parcel.RequestReturn("The shop asked for it back");
+            var list = ReturnList.Send(await db.Riders.SingleAsync(r => r.Id == rider.Id, Cancel), parcel.PickupHubId, [parcel]).Value;
+            db.ReturnLists.Add(list);
+            await db.SaveChangesAsync(Cancel);
+
+            return list.Number;
+        });
     }
 
     /// <summary>A delivered parcel of the merchant's, paid out to it; returns the payout's number.</summary>

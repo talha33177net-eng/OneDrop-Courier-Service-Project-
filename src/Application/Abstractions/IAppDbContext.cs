@@ -32,11 +32,19 @@ public interface IAppDbContext
 
     DbSet<MerchantApiKey> MerchantApiKeys { get; }
 
+    DbSet<MerchantPicture> MerchantPictures { get; }
+
+    DbSet<Moderator> Moderators { get; }
+
+    DbSet<MerchantPayoutAccount> MerchantPayoutAccounts { get; }
+
     DbSet<PickupPoint> PickupPoints { get; }
 
     DbSet<Parcel> Parcels { get; }
 
     DbSet<ParcelEvent> ParcelEvents { get; }
+
+    DbSet<ParcelRequest> ParcelRequests { get; }
 
     DbSet<Rider> Riders { get; }
 
@@ -48,9 +56,15 @@ public interface IAppDbContext
 
     DbSet<VehicleCapacity> VehicleCapacities { get; }
 
+    DbSet<ReturnList> ReturnLists { get; }
+
+    DbSet<ReturnListParcel> ReturnListParcels { get; }
+
     DbSet<LedgerEntry> LedgerEntries { get; }
 
     DbSet<Payout> Payouts { get; }
+
+    DbSet<OnlinePayment> OnlinePayments { get; }
 
     DbSet<OutboxMessage> OutboxMessages { get; }
 

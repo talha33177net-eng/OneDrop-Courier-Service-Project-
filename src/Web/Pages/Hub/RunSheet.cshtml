@@ -1,0 +1,82 @@
+@page "{id:long}"
+@model Web.Pages.Hub.RunSheetModel
+@{
+    ViewData["Title"] = "Run sheet";
+    var sheet = Model.Sheet!;
+}
+
+<div class="page-head no-print">
+    <div>
+        <h1>Run sheet</h1>
+        <p>@sheet.Rider's parcels for @sheet.Date.ToString("dddd d MMMM"). Print it, hand it over with the parcels and take it back with the cash.</p>
+    </div>
+    <div class="page-actions">
+        <button class="btn btn-primary" type="button" onclick="window.print()">@Icons.Get("printer") Print</button>
+        <a class="btn" asp-page="/Hub/Runs">Back to closing</a>
+    </div>
+</div>
+
+<div class="card run-sheet">
+    <div class="run-sheet-head">
+        <div>
+            <div class="run-sheet-brand">@Model.Courier</div>
+            <h2>@sheet.Rider <span class="run-sheet-sub">@Money.Phone(sheet.RiderPhone) · @sheet.Vehicle</span></h2>
+            <div class="run-sheet-sub">@sheet.Hub · @sheet.Date.ToString("dddd d MMMM yyyy") · run #@sheet.RunId</div>
+        </div>
+        <div class="run-sheet-total">
+            <div class="stat-label">Cash to bring back</div>
+            <div class="stat-value">@Money.Taka(sheet.CashDue)</div>
+            <div class="run-sheet-sub">@sheet.Stops.Count parcel@(sheet.Stops.Count == 1 ? "" : "s")</div>
+        </div>
+    </div>
+
+    @if (sheet.Stops.Count == 0)
+    {
+        <div class="empty">@Icons.Get("check-circle")<h3>Nothing left to hand over</h3><p>Every parcel of this run has been recorded.</p></div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table run-sheet-table">
+                <thead>
+                    <tr><th class="num">#</th><th>Parcel</th><th>Where it goes</th><th class="num">Collect</th><th>Outcome and signature</th></tr>
+                </thead>
+                <tbody>
+                    @{ var number = 0; }
+                    @foreach (var stop in sheet.Stops)
+                    {
+                        number++;
+                        <tr>
+                            <td class="num">@number</td>
+                            <td>
+                                <div class="cell-main mono">@stop.TrackingCode</div>
+                                @if (stop.Attempt > 1)
+                                {
+                                    <div class="cell-sub">Attempt @stop.Attempt of @stop.OfAttempts</div>
+                                }
+                            </td>
+                            <td>
+                                <div class="cell-main">@stop.Recipient · @Money.Phone(stop.Phone)</div>
+                                <div class="cell-sub">@stop.Address, @stop.Area</div>
+                                @if (stop.Note is { Length: > 0 } note)
+                                {
+                                    <div class="cell-sub">Note: @note</div>
+                                }
+                            </td>
+                            <td class="num">@Money.Taka(stop.CodAmount)</td>
+                            <td class="run-sheet-sign"></td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr><td colspan="3" class="text-right">Total to collect</td><td class="num">@Money.Taka(sheet.CashDue)</td><td></td></tr>
+                </tfoot>
+            </table>
+        </div>
+        <div class="run-sheet-foot">
+            <div>Rider's signature: ______________________</div>
+            <div>Hub staff: ______________________</div>
+            <div>Help: @Model.Hotline</div>
+        </div>
+    }
+</div>

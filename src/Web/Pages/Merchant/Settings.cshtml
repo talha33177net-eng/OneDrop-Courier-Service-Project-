@@ -4,6 +4,7 @@
 @{
     ViewData["Title"] = "Settings";
     var a = Model.Account;
+    var pa = Model.PayoutAccounts;
 }
 
 <div class="page-head">
@@ -11,7 +12,13 @@
         <h1>Settings</h1>
         <p>Your business, where we pay you, and where we pick up your parcels.</p>
     </div>
-    <div>@Statuses.Badge(a.Status)</div>
+    <div class="page-actions">
+        <div class="merchant-id" title="Give this number when you call the hotline">
+            <span>Merchant ID <strong class="mono">@Model.MerchantId</strong></span>
+            <button type="button" class="btn btn-ghost btn-sm" data-copy="@Model.MerchantId" title="Copy the merchant ID" aria-label="Copy the merchant ID">@Icons.Get("copy")</button>
+        </div>
+        @Statuses.Badge(a.Status)
+    </div>
 </div>
 
 <partial name="_Alerts" />
@@ -20,6 +27,32 @@
     <div class="card">
         <div class="card-head"><h2>@Icons.Get("store") Business profile</h2></div>
         <div class="card-body">
+            <div class="picture-edit">
+                <span class="avatar picture-edit-image">
+                    @if (Model.PictureUrl is { } pictureUrl)
+                    {
+                        <img src="@pictureUrl" alt="Picture of @a.Profile.Name" />
+                    }
+                    else
+                    {
+                        @Icons.Get("store")
+                    }
+                </span>
+                <div class="picture-edit-actions">
+                    <form method="post" asp-page-handler="Picture" enctype="multipart/form-data">
+                        <label for="picture">Picture of @a.Profile.Name</label>
+                        <input type="file" id="picture" name="picture" accept="image/png,image/jpeg,image/webp" required />
+                        <span class="hint">Your logo or photo. PNG, JPEG or WebP, up to 512 KB. It shows beside the business name.</span>
+                        <button class="btn btn-outline btn-sm" type="submit">@Icons.Get("upload") @(Model.PictureUrl is null ? "Upload picture" : "Change picture")</button>
+                    </form>
+                    @if (Model.PictureUrl is not null)
+                    {
+                        <form method="post" asp-page-handler="RemovePicture" class="inline-form">
+                            <button class="btn btn-ghost btn-sm" type="submit" data-confirm="The business shows its initial icon again." data-confirm-title="Remove this picture?" data-confirm-ok="Remove">Remove picture</button>
+                        </form>
+                    }
+                </div>
+            </div>
             <form method="post" asp-page-handler="Profile">
                 <div class="field"><label for="name">Business name</label><input type="text" id="name" name="name" value="@a.Profile.Name" required /></div>
                 <div class="field"><label for="owner">Owner's name</label><input type="text" id="owner" name="owner" value="@a.Profile.OwnerName" required /></div>
@@ -33,28 +66,64 @@
         </div>
     </div>
 
-    <div class="card">
-        <div class="card-head"><h2>@Icons.Get("wallet") Payout account</h2></div>
+    <div class="card" id="payout">
+        <div class="card-head">
+            <div>
+                <h2>@Icons.Get("wallet") Payout accounts</h2>
+                <p>@(pa.Method is { } now ? $"Payouts go to {Statuses.PayoutAccount(now, pa.Number)}" : "No payout account yet: add one so we can pay you")</p>
+            </div>
+        </div>
+        @if (pa.Saved.Count > 0)
+        {
+            <div class="table-wrap">
+                <table class="table compact">
+                    <tbody>
+                        @foreach (var saved in pa.Saved)
+                        {
+                            <tr>
+                                <td><strong>@Statuses.PayoutAccount(saved.Method, saved.Number)</strong><div class="cell-sub">@saved.Name</div></td>
+                                <td class="text-right nowrap">
+                                    @if (saved.InUse)
+                                    {
+                                        <span class="badge badge-done">Payouts go here</span>
+                                    }
+                                    else
+                                    {
+                                        <form method="post" asp-page-handler="UsePayout" asp-route-id="@saved.Id" class="inline-form">
+                                            <button class="btn btn-outline btn-sm" type="submit">Use for payouts</button>
+                                        </form>
+                                        <form method="post" asp-page-handler="RemovePayout" asp-route-id="@saved.Id" class="inline-form">
+                                            <button class="btn btn-ghost btn-sm" type="submit" data-confirm="The account is no longer kept. Payouts that went there stay on your invoices." data-confirm-title="Remove this account?" data-confirm-ok="Remove">@Icons.Get("x") Remove</button>
+                                        </form>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
         <div class="card-body">
             <form method="post" asp-page-handler="Payout">
                 <div class="field">
-                    <label>Pay me by</label>
+                    <label>Add an account</label>
                     <div class="radio-cards">
-                        <label class="radio-card"><input type="radio" name="method" value="@PayoutMethod.Bkash" checked="@(a.PayoutMethod is null or PayoutMethod.Bkash)" /> bKash<small>Personal or merchant number</small></label>
-                        <label class="radio-card"><input type="radio" name="method" value="@PayoutMethod.Nagad" checked="@(a.PayoutMethod == PayoutMethod.Nagad)" /> Nagad<small>Personal or merchant number</small></label>
-                        <label class="radio-card"><input type="radio" name="method" value="@PayoutMethod.Bank" checked="@(a.PayoutMethod == PayoutMethod.Bank)" /> Bank<small>Transfer to an account</small></label>
+                        <label class="radio-card"><input type="radio" name="method" value="@PayoutMethod.Bkash" checked /> bKash<small>Personal or merchant number</small></label>
+                        <label class="radio-card"><input type="radio" name="method" value="@PayoutMethod.Nagad" /> Nagad<small>Personal or merchant number</small></label>
+                        <label class="radio-card"><input type="radio" name="method" value="@PayoutMethod.Bank" /> Bank<small>Transfer to an account</small></label>
                     </div>
                 </div>
                 <div class="field">
                     <label for="payoutAccount">Number or account number</label>
-                    <input type="text" id="payoutAccount" name="payoutAccount" value="@(a.PayoutMethod == PayoutMethod.Bank ? a.PayoutAccount : Money.Phone(a.PayoutAccount))" required />
+                    <input type="text" id="payoutAccount" name="payoutAccount" required />
                 </div>
                 <div class="field">
                     <label for="accountName">Account name</label>
-                    <input type="text" id="accountName" name="accountName" value="@a.PayoutAccountName" required />
+                    <input type="text" id="accountName" name="accountName" required />
                     <span class="hint">For a bank, also write the bank and branch.</span>
                 </div>
-                <button class="btn btn-primary" type="submit">Save payout account</button>
+                <label class="check mb"><input type="checkbox" name="use" value="true" checked /> Send my payouts to this account<input type="hidden" name="use" value="false" /></label>
+                <button class="btn btn-primary" type="submit">Save the account</button>
             </form>
         </div>
     </div>

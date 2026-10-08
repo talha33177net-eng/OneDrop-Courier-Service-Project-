@@ -4,8 +4,10 @@ using Hangfire.SqlServer;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Application.Notifications.SendEmails;
 using Application.Notifications.SendOutbox;
 using Application.Notifications.SendWebhooks;
+using Application.Payments.OnlinePayments;
 using Application.Payments.RunPayouts;
 
 namespace Infrastructure.Jobs;
@@ -23,7 +25,9 @@ public static class JobsSetup
         services.AddSingleton(new TenantJobRegistry(
             typeof(SendOutboxJob),
             typeof(SendWebhooksJob),
-            typeof(PayoutsJob)));
+            typeof(SendEmailsJob),
+            typeof(PayoutsJob),
+            typeof(CheckOnlinePaymentsJob)));
         services.AddScoped<TenantJobRunner>();
         // The connection string is read when Hangfire first opens a connection, from the final configuration
         services.AddHangfire((provider, configuration) => configuration
@@ -52,8 +56,12 @@ public static class JobsSetup
     {
         var recurring = services.GetRequiredService<IRecurringJobManager>();
         recurring.AddOrUpdate<TenantJobRunner>(
-            "merchant-payouts",
+            PayoutsJob.RecurringId,
             runner => runner.EnqueueForEveryTenantAsync(nameof(PayoutsJob), CancellationToken.None),
             configuration["Jobs:Payouts"] ?? throw new InvalidOperationException("Jobs:Payouts is not set."));
+        recurring.AddOrUpdate<TenantJobRunner>(
+            OnlinePaymentsHandler.RecurringId,
+            runner => runner.EnqueueForEveryTenantAsync(nameof(CheckOnlinePaymentsJob), CancellationToken.None),
+            configuration["Jobs:OnlinePayments"] ?? throw new InvalidOperationException("Jobs:OnlinePayments is not set."));
     }
 }

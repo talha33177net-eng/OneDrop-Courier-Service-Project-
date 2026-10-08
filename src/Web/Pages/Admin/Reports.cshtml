@@ -1,0 +1,163 @@
+@page
+@model Web.Pages.Admin.ReportsModel
+@{
+    ViewData["Title"] = "Reports";
+    var report = Model.Report;
+    var total = report.Total;
+    var from = report.From.ToString("yyyy-MM-dd");
+    var to = report.To.ToString("yyyy-MM-dd");
+}
+
+<div class="page-head">
+    <div>
+        <h1>Reports</h1>
+        <p>What the courier delivered, collected and earned over a period: day by day, by rider and by merchant. The days are the courier's own.</p>
+    </div>
+</div>
+
+<form method="get" class="card filters">
+    <div class="field">
+        <label for="From">From</label>
+        <input type="date" id="From" name="From" value="@from" />
+    </div>
+    <div class="field">
+        <label for="To">To</label>
+        <input type="date" id="To" name="To" value="@to" />
+    </div>
+    <button type="submit" class="btn btn-primary">Show</button>
+</form>
+
+<div class="stats mt">
+    <div class="stat">
+        <div class="stat-icon green">@Icons.Get("check-circle")</div>
+        <div><div class="stat-label">Delivered</div><div class="stat-value">@total.Delivered</div><div class="stat-sub">@total.Returned returned</div></div>
+    </div>
+    <div class="stat">
+        <div class="stat-icon">@Icons.Get("cash")</div>
+        <div><div class="stat-label">Cash collected</div><div class="stat-value">@Money.Taka(total.Cod)</div><div class="stat-sub">for the merchants</div></div>
+    </div>
+    <div class="stat">
+        <div class="stat-icon blue">@Icons.Get("tag")</div>
+        <div><div class="stat-label">Charges earned</div><div class="stat-value">@Money.Taka(total.Earned)</div><div class="stat-sub">delivery, COD and returns</div></div>
+    </div>
+    <div class="stat">
+        <div class="stat-icon">@Icons.Get("wallet")</div>
+        <div><div class="stat-label">Owed to merchants</div><div class="stat-value">@Money.Taka(total.OwedToMerchants)</div><div class="stat-sub">the cash less the charges@(total.Adjustments != 0 ? ", with adjustments" : "")</div></div>
+    </div>
+</div>
+
+<div class="card mt-lg">
+    <div class="card-head">
+        <div><h2>Day by day</h2><p>@report.From.ToString("d MMM") to @report.To.ToString("d MMM yyyy")</p></div>
+        <a class="btn btn-sm" asp-page-handler="Export" asp-route-table="days" asp-route-From="@from" asp-route-To="@to">@Icons.Get("download") CSV</a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Day</th><th class="num">Delivered</th><th class="num">Returned</th><th class="num">Cash collected</th>
+                    <th class="num">Delivery</th><th class="num">COD charge</th><th class="num">Return</th>
+                    <th class="num">Earned</th><th class="num">Owed</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var day in report.Days)
+                {
+                    <tr>
+                        <td class="nowrap">@day.Day.ToString("ddd d MMM")</td>
+                        <td class="num">@day.Delivered</td>
+                        <td class="num">@day.Returned</td>
+                        <td class="num">@Money.Taka(day.Cod)</td>
+                        <td class="num">@Money.Taka(day.DeliveryCharges)</td>
+                        <td class="num">@Money.Taka(day.CodCharges)</td>
+                        <td class="num">@Money.Taka(day.ReturnCharges)</td>
+                        <td class="num strong">@Money.Taka(day.Earned)</td>
+                        <td class="num">@Money.Taka(day.OwedToMerchants)</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td>Total</td>
+                    <td class="num">@total.Delivered</td>
+                    <td class="num">@total.Returned</td>
+                    <td class="num">@Money.Taka(total.Cod)</td>
+                    <td class="num">@Money.Taka(total.DeliveryCharges)</td>
+                    <td class="num">@Money.Taka(total.CodCharges)</td>
+                    <td class="num">@Money.Taka(total.ReturnCharges)</td>
+                    <td class="num strong">@Money.Taka(total.Earned)</td>
+                    <td class="num">@Money.Taka(total.OwedToMerchants)</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+<div class="grid grid-2 mt-lg">
+    <div class="card">
+        <div class="card-head">
+            <div><h2>By rider</h2><p>Deliveries and the cash handed in</p></div>
+            <a class="btn btn-sm" asp-page-handler="Export" asp-route-table="riders" asp-route-From="@from" asp-route-To="@to">@Icons.Get("download") CSV</a>
+        </div>
+        @if (report.Riders.Count == 0)
+        {
+            <div class="empty">@Icons.Get("bike")<h3>No runs in this period</h3><p>Assign parcels to a rider and their day appears here.</p></div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Rider</th><th class="num">Stops</th><th class="num">Delivered</th><th class="num">Collected</th><th class="num">Handed in</th><th class="num">Short</th></tr></thead>
+                    <tbody>
+                        @foreach (var rider in report.Riders)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="cell-main">@rider.Rider</div>
+                                    <div class="cell-sub">@rider.Hub · @rider.Runs run@(rider.Runs == 1 ? "" : "s")@(rider.OpenRuns > 0 ? ", " + rider.OpenRuns + " still open" : "")</div>
+                                </td>
+                                <td class="num">@rider.Stops<div class="cell-sub">@rider.Held held, @rider.Refused refused</div></td>
+                                <td class="num">@rider.Delivered<div class="cell-sub">@rider.SuccessRate.ToString("P0")</div></td>
+                                <td class="num">@Money.Taka(rider.Collected)</td>
+                                <td class="num">@Money.Taka(rider.Received)</td>
+                                <td class="num @(rider.Short > 0 && rider.OpenRuns == 0 ? "negative" : "")">@Money.Taka(rider.Short)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-body hint">A rider with a run still open has cash with them: their "short" is only final once every run is closed.</div>
+        }
+    </div>
+
+    <div class="card">
+        <div class="card-head">
+            <div><h2>Returns by merchant</h2><p>Parcels that came back, and what they cost</p></div>
+            <a class="btn btn-sm" asp-page-handler="Export" asp-route-table="returns" asp-route-From="@from" asp-route-To="@to">@Icons.Get("download") CSV</a>
+        </div>
+        @if (report.Returns.Count == 0)
+        {
+            <div class="empty">@Icons.Get("return")<h3>Nothing finished in this period</h3><p>Delivered and returned parcels are counted here.</p></div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Merchant</th><th class="num">Delivered</th><th class="num">Returned</th><th class="num">Return rate</th><th class="num">Return charges</th></tr></thead>
+                    <tbody>
+                        @foreach (var merchant in report.Returns)
+                        {
+                            <tr>
+                                <td class="cell-main">@merchant.Merchant</td>
+                                <td class="num">@merchant.Delivered</td>
+                                <td class="num">@merchant.Returned</td>
+                                <td class="num @(merchant.ReturnRate >= 0.2 ? "negative" : "")">@merchant.ReturnRate.ToString("P0")</td>
+                                <td class="num">@Money.Taka(merchant.ReturnCharges)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>

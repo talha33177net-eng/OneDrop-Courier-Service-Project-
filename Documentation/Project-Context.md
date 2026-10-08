@@ -52,7 +52,9 @@ The service area comes from the pickup point's zone and the destination's zone (
 and neither a suburb → inside city; same city with a suburb zone → suburb; different cities → outside city. The COD
 charge is a percentage of the COD amount rounded to whole taka (away from zero). A returned parcel costs the delivery
 charge plus the return charge; a cancelled one costs nothing; a delivered or partly delivered one costs the delivery
-charge plus the COD charge on what was collected.
+charge plus the COD charge on what was collected. A hub that weighs a parcel (`MeasuredWeightGrams`) reprices the
+delivery charge on its scale, at the rates the parcel was booked under; the merchant's own figure is kept and both are
+shown on the parcel.
 
 ### The life of a parcel
 `Pending` (booked) → `PickedUp` (rider collected) → `AtHub` (received) → `InTransit` (sent to the delivery hub) →
@@ -66,8 +68,13 @@ Each finished parcel writes its ledger lines in the same save (`LedgerEntry.For`
 `DeliveryCharge` (−), `CodCharge` (−), `ReturnCharge` (−); ৳0 lines are skipped. The hourly `merchant-payouts` job pays
 each merchant every unpaid line up to yesterday (courier's time zone) as a `Payout` (`INV-000001`) through the payout
 gateway (fake in Development, listed on `/Dev/Payouts`) with the key `{slug}-payout-{id}`; a merchant whose lines
-come to ৳0 or less, or with no payout account, waits. The rider's cash is checked when hub staff close the run
-(`CashExpected` vs `CashReceived`); payouts do not wait for it.
+come to ৳0 or less, with no payout account, or whose payouts the courier holds (`Merchant.PayoutHold`), waits. A
+transfer the gateway refuses stays `Pending` with what it said (`FailedAttempts`, `LastError`) and is sent again every
+hour; the admin can send it again or cancel it (`Cancelled`, its lines freed). The courier settles or corrects a
+balance with an `Adjustment` line (no parcel, a reason the merchant reads). A merchant whose charges come to more
+than its cash can pay what it owes online through SSLCommerz (`OnlinePayment`, `PAY-100001`): once the gateway, asked by
+our server, confirms the money, the payment writes one `Adjustment` credit, and never a second. The rider's cash is
+checked when hub staff close the run (`CashExpected` vs `CashReceived`); payouts do not wait for it.
 
 ### Multi-tenancy
 A **tenant is a courier operator** with its own hubs, zones, areas, rates, riders and merchants. One courier is seeded
@@ -88,13 +95,13 @@ three test suites pass; the app was checked live on the dev database. The plan's
 ### Solution layout (`Courier.sln`)
 | Project | Path | Contents |
 |---|---|---|
-| Domain | `src/Domain` | `Common` (Entity with domain events, TenantEntity, Result/Error, PhoneNumber), `Platform/Tenant`, `Network` (Hub, Zone with `City` and `IsSuburb`, Area), `Pricing` (ServiceArea, DeliveryRate, ParcelCharges), `Merchants` (Merchant with status, payout account, webhook; MerchantApiKey; PickupPoint; WebhookSignature), `Parcels` (Parcel and its state machine, ParcelEvent, ParcelStatusChanged), `Delivery` (Rider, DeliveryRun, DeliveryAttempt, PickupRequest), `Payments` (LedgerEntry, Payout), `Notifications` (OutboxMessage) |
-| Application | `src/Application` | Use cases as vertical slices: `Parcels` (CreateParcel, Browse, ParcelActions, Labels, Track, Quote, FraudCheck, BulkImport), `Hubs` (HubDirectory, HubScan, HubBoard, AssignParcels, Runs), `Delivery` (Pickups, RiderDay, Riders), `Merchants` (Onboarding, Admin, Account, ApiKeys, Webhook), `Payments` (RunPayouts/PayoutsJob, MerchantPayments, AdminPayouts), `Pricing/Rates`, `Network` (ListAreas, Coverage), `Dashboards`, `Notifications` (outbox contracts, RecipientTexts + SendOutboxJob, SendWebhooksJob, FailedMessages). Interfaces: `IAppDbContext`, `ITenantContext`, `ITenantCatalog`, `ICurrentUser`, `ISmsSender`, `IWebhookSender`, `IPayoutGateway`, `ITrackingLinks`, `IUserAccounts`, `IOperationsFeed`, `ITenantJob` |
-| Infrastructure | `src/Infrastructure` | `Persistence/AppDbContext` (query filters, outbox writer, `AcrossTenantsAsync`), `Configurations/*`, `TenantSaveInterceptor`, `TenantSessionInterceptor`, `MultiTenancy`, `Identity` (AppUser, UserAccounts), `Sms/FakeSmsSender`, `Payments/FakePayoutGateway`, `Webhooks/HttpWebhookSender`, `Seeding` (DemoDataSeeder, DemoActivity), `Jobs` (Hangfire, TenantJobRunner, TenantJobRegistry, OutboxDispatcher) |
+| Domain | `src/Domain` | `Common` (Entity with domain events, TenantEntity, Result/Error, PhoneNumber), `Platform/Tenant`, `Network` (Hub, Zone with `City` and `IsSuburb`, Area), `Pricing` (ServiceArea, DeliveryRate, ParcelCharges), `Merchants` (Merchant with status, payout account, webhook; MerchantApiKey; PickupPoint; Moderator with MerchantPermissions; WebhookSignature), `Parcels` (Parcel and its state machine, ParcelEvent, ParcelStatusChanged), `Delivery` (Rider, DeliveryRun, DeliveryAttempt, PickupRequest), `Payments` (LedgerEntry, Payout, OnlinePayment), `Notifications` (OutboxMessage) |
+| Application | `src/Application` | Use cases as vertical slices: `Parcels` (CreateParcel, Browse, ParcelActions, Labels, Track, Quote, FraudCheck, BulkImport), `Hubs` (HubDirectory, HubScan, HubBoard, AssignParcels, Runs), `Delivery` (Pickups, RiderDay, Riders), `Merchants` (Onboarding, Admin, Account, ApiKeys, Webhook, Moderators with MerchantAccess), `Payments` (RunPayouts/PayoutsJob, MerchantPayments, AdminPayouts, OnlinePayments + CheckOnlinePaymentsJob), `Pricing/Rates`, `Network` (ListAreas, Coverage), `Dashboards`, `Notifications` (outbox contracts, RecipientTexts + SendOutboxJob, SendWebhooksJob, FailedMessages). Interfaces: `IAppDbContext`, `ITenantContext`, `ITenantCatalog`, `ICurrentUser`, `ISmsSender`, `IWebhookSender`, `IPayoutGateway`, `IPaymentGateway`, `ITrackingLinks`, `IUserAccounts`, `IOperationsFeed`, `ITenantJob` |
+| Infrastructure | `src/Infrastructure` | `Persistence/AppDbContext` (query filters, outbox writer, `AcrossTenantsAsync`), `Configurations/*`, `TenantSaveInterceptor`, `TenantSessionInterceptor`, `MultiTenancy`, `Identity` (AppUser, UserAccounts), `Sms/FakeSmsSender`, `Payments/FakePayoutGateway`, `Payments/SslcommerzGateway` and `FakePaymentGateway`, `Webhooks/HttpWebhookSender`, `Seeding` (DemoDataSeeder, DemoActivity), `Jobs` (Hangfire, TenantJobRunner, TenantJobRegistry, OutboxDispatcher) |
 | Web | `src/Web` | Razor Pages: public site (`/`, `/Track`, `/Coverage`, `/Account/*`), `Merchant/*`, `Hub/*`, `Rider/*`, `Admin/*`, `Platform/Tenants`, `Dev/*`; `Api/V1` (parcels, charge, areas); `Live` (SignalR); `Display` (`Icons`, `Statuses`, `Money`); `wwwroot/css/site.css` (the design system, with its motion), `wwwroot/css/landing.css` (the front page's drawings) and `wwwroot/js/site.js` (shared behaviours: count-up, busy buttons, confirm dialog, toasts, tips, "/" search, drawings resting off screen, sections rising in); `Pages/Shared/Art/*` (the front page's line drawings), `Pages/Shared/_BrandMark.cshtml` (the logo); `wwwroot/images/logo.svg` and `logo-on-dark.svg` (the logo with its name, outlined), `wwwroot/icons` (app icons) |
 | Database | `src/Database` | SQL project (Microsoft.Build.Sql 2.1.0) → `Database.dacpac`. Owns the schema |
 | Database Update | `src/Database Update` | DbUp: `Scripts/2026/001_SeedCourier.sql` (the courier, 16 hubs, 21 zones, 87 areas, the rate card); `Scripts/Pre` empty |
-| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 111 + 6 + 57 = **174 tests, all passing** |
+| Tests | `tests/Domain.Tests`, `tests/Architecture.Tests`, `tests/Integration.Tests` | 161 + 6 + 68 = **235 tests, all passing** |
 | Tools | `tools/db/publish.ps1`, `tools/Simulator` | Deploy a database; book made-up shops' parcels through the running app's API (`--parcels 40 --pace 2`) |
 | Docker and CI | `Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml` | Compose = SQL Server 2025 + deploy + app on `onedrop.localhost:5080`; CI deploys a throwaway SQL Server from nothing and runs every suite |
 
@@ -104,25 +111,126 @@ three test suites pass; the app was checked live on the dev database. The plan's
   download). Area by id or name; the pickup point defaults to the merchant's default; the phone is normalised to E.164;
   charges are snapshot from the rate card. Idempotency per merchant and request hash (same key + same body → 200 with
   the same parcel, other body → 409). A merchant not `Active` cannot book (403 `parcel.merchantNotActive`).
-- **Merchant panel.** Dashboard (counts by stage, last 7 days, money waiting), parcels with tabs, search, date range and
-  CSV export, parcel page (progress, route, money, attempts, history; edit and cancel before pickup, ask for a return
-  while at a hub), labels (QR, A6, hub code), pickup requests, payments (statement and payouts) and invoices, fraud
+- **Every panel.** The menu is one list (`Display/Menu.cs`) that draws the sidebar and the favourites: a bar under the
+  top bar (merchant, admin, hub) of up to eight pages a person pins with the menu's stars or the "Add" picker, kept in a
+  cookie per login (`favourites-{userId}`) with defaults per role. The avatar at the top right opens the account menu
+  (name, email, role, account pages, change password at `/Account/Password`, sign out).
+- **Merchant panel.** Dashboard ("Right now" by stage with cash, quick actions, tools, last 30 days, last 7 days, money
+  and last payment), parcels with tabs (partly delivered has its own; in review and exceptional show while a hub has
+  flagged one), search, date range and
+  CSV export, parcel page (progress, route, money, attempts, history; edit and cancel before pickup, ask the courier
+  to cancel it or change its cash once it is on its way), labels (QR, A6, hub code), pickup requests, returns,
+  requests, payments (statement and payouts) and invoices, fraud
   check, rate card and calculator, settings (profile, payout account bKash / Nagad / bank, pickup points), API keys,
   webhook.
+- **Returns the merchant signs for.** The hub that collected returning parcels sends them back with one of its riders
+  on a **return list** (`RL-100001`) per pickup point (`/Hub/Returns`, also the hub board's "Hand back" step), or
+  hands them over at its counter as before. The rider's app lists the lists to hand back; at the merchant's door the
+  rider records "handed over" (each parcel is returned, and its delivery and return charges go to the ledger in the
+  same save) or why not (the parcels stay with the rider until the hub scans them in, then can go on a new list). The
+  merchant follows its returns on `/Merchant/Returns` (what is coming back and where each is, and the lists) and
+  confirms a handed-over list on `/Merchant/Return/{number}`, its signature for the parcels, with a note when
+  something is missing; the dashboard asks until it does, and the hub sees the note. A flagged parcel does not go out
+  on a list.
+- **Requests to cancel or change the cash.** Once a parcel is on its way (picked up, at a hub, between hubs, out for
+  delivery or on hold) the merchant no longer changes it itself: from the parcel's page it asks the courier to
+  **cancel** it (it comes back as a return, charged delivery plus return) or to **change its cash on delivery**, with
+  a reason. One open request per parcel. The courier's admins answer on `/Admin/Requests` (also a banner on their
+  dashboard): approving changes the parcel there and then (a history line says so; the COD charge follows the new
+  amount), refusing needs a reason the merchant reads on the parcel and on `/Merchant/Requests`. A cancellation
+  cannot be approved while a rider has the parcel; it stays open until the rider brings it back. This replaces the
+  merchant's direct "Ask for it back"; hub staff still return a parcel directly from its hub page.
+- **Work marks in the menu.** A red "!" on a menu item (and its favourite, and the phone's menu button) while open
+  work waits there (`MenuWorkHandler`): for the admin sign-ups, requests, flagged parcels, hub work, failed messages
+  and stuck payouts; for a merchant parcels with no pickup asked for, return lists to confirm, no payout account; for
+  a rider deliveries or return lists, and pickups. A filter whose part is marked `data-swap` (the payouts card) swaps
+  only that part when clicked instead of reloading the page (`site.js`).
+- **The admin's bell.** A bell in the admin's top bar lists what waits for them (`AdminBellHandler`), each as one
+  line with its count and a link: sign-ups to approve, requests to answer, parcels flagged in review or exceptional,
+  messages that failed, payouts the gateway refused, merchants owed money with no payout account; and for the last
+  week, riders who handed in less cash than they collected and notes merchants left on return lists. Worked out when
+  the page is drawn, like the merchant's; a line shows as new when something joined it since the bell was opened.
+- **Payouts the admin steers.** `/Admin/Payouts` explains how payouts work, says when the hourly run last ran and runs
+  next (and warns when it has not run for two hours), lists the transfers the gateway refused with its reason (send
+  again, or cancel on the invoice so the lines go to a corrected account), what each merchant is owed and, apart, the
+  merchants who owe the courier. On `/Admin/Merchant/{id}` the admin holds the account's payouts with a reason (the
+  merchant reads it on Payments and cannot ask to be paid now), releases them, pays the business now, and writes an
+  adjustment (a credit when the merchant paid the courier or is compensated, a charge otherwise), which shows on the
+  merchant's statement and invoice with its reason. `/Dev/Payouts` can make the fake gateway refuse an account.
+- **Paying what is owed, online (SSLCommerz).** A merchant whose charges come to more than its cash reads "You owe
+  the courier ৳X" on `/Merchant/Payments` and can pay it online ("Pay ৳X online"), or let it come off the next cash
+  collected. The amount is worked out on the server from the merchant's own lines; the payer goes to SSLCommerz's page
+  (in Development without a store, the test page `/Dev/Pay/{transaction}`) and is posted back to
+  `/pay/{transaction}/success|fail|cancel` on the courier's host, which is open to anyone because nothing posted is
+  believed: our server asks the gateway (validation by `val_id`, or the transaction query) before anything is
+  recorded, and lands the payer on Payments with a banner for that payment. The gateway's own notice
+  (`/pay/notice`) is handled the same way, and the `online-payments` job (every 10 minutes) asks about every payment
+  still waiting and every one that failed in the last day, so money taken from a payer whose browser never came back
+  is still credited; one still waiting after a day is closed as not finished. Confirmed money writes exactly one
+  `Adjustment` credit ("Paid online by bKash, PAY-100001", shown as "Paid online" on statements and invoices), even
+  after the page said it failed. A payment the gateway marks risky, or confirms for another amount, is held
+  (`Review`): the admin sees it on `/Admin/Payouts` and in the bell, and credits it or records that it was refunded
+  through SSLCommerz's panel. The merchant's Payments page lists its online payments; the admin's lists the latest.
+- **Payout accounts and getting paid now.** A merchant account keeps several bKash, Nagad and bank accounts
+  (`Merchants.MerchantPayoutAccount`, on the account's main profile like moderators) and chooses the one payouts go
+  to, which is copied onto the main profile as before so every business, the payout run and the admin's page read it
+  unchanged; one in use cannot be removed, and an account the admin sets is kept among them. `/Merchant/Payments`
+  splits the balance into what the next payout run sends by itself (up to yesterday) and what came in today, shows the
+  cash still to collect on parcels on their way, and offers **Get paid now**: every line not yet paid out, today's
+  too, in one payout sent at once (`PayoutsJob.PayNowAsync`, the same rules as the run: nothing at ৳0 or less or
+  without an account; a failed transfer is sent again by the next run).
+- **The bell.** A bell in the merchant's top bar lists what happened over the last week, newest first: deliveries
+  (a line a day with the cash), partly delivered, held or refused at the door, back with the merchant, problems a hub
+  flagged, return lists to confirm, answered requests and payouts sent; a count of what came since it was last
+  opened. Nothing new is stored: the notices are worked out from the parcels, attempts, lists, requests and payouts,
+  and "seen" is a cookie per login (`bell-{userId}`) like the favourites. A moderator is told only what their
+  permissions show.
+- **Small things.** `/Merchant/Export` downloads every parcel of a stage, days and search as CSV (up to 10,000, with
+  the charges); the parcel list's Export button uses it with its own filters. `/Merchant/ByDate` lists each day of a
+  period with the parcels booked and where they stand, each linking to that day's parcels. The merchant's ID shows
+  with a copy button in the account menu and on Settings, and the admin's merchant search finds it. Empty lists say
+  what to do next (book a parcel, clear the filters).
+- **Stats.** `/Merchant/Stats` sums up the parcels booked in the last 7 or 30 days, this month, last month or the
+  merchant's own days (at most a year): booked with their cash, delivery, return and cancel rates, cash collected,
+  where they are now as one bar, and count, cash and share per status, each linking to those parcels. Moderators see
+  it with the dashboard permission.
+- **Problems a hub flags.** Hub staff or an admin flag a parcel the courier has as **in review** (something to
+  check: the address, the contents, the packing) or **exceptional** (something went wrong: damaged, opened, missing),
+  with what is wrong, on `/Hub/Parcel/{code}`, and clear it with what was done. The flag sits beside the status, which
+  does not change: the parcel can still be scanned, sent between hubs and returned, but it is not handed to a rider
+  (the assign page offers no box for it and `Parcel.AssignTo` refuses). The merchant sees it in the tab, on the
+  parcel's page and in a banner on its dashboard, and the API returns it (`issue`, `issueNote`); the admin's dashboard
+  counts both kinds. Flagging and clearing are written to the parcel's history but post no webhook (the status did
+  not move).
+- **Several businesses per account.** A merchant adds up to ten businesses (the courier's setting) (`/Merchant/NewBusiness`: name, phone, address, first pickup
+  point) and switches between them from the sidebar or the account menu, or from `/Merchant/Businesses` (each with its
+  parcels on the way and money waiting). One login works in all of them; each keeps its own parcels, pickups, payments,
+  balance, API keys and webhook. Approval and the payout account are shared from the account; the admin sees which
+  account a business belongs to.
+- **Moderators.** A merchant account's owner adds people who work in the account with a sign-in of their own
+  (`/Merchant/Moderators`: name, email, phone, and tick boxes for dashboard, parcels, booking, payments, tools and
+  settings). Each is a `Merchants.Moderator` row pointing at the account's main profile and an ordinary merchant
+  login, so a moderator works in every business of the account and sees only that account's parcels and money. We
+  send no email yet, so the page shows a first password once, to hand over (and can issue a new one); the person
+  changes it at `/Account/Password`. Stopping one locks the login out at once and keeps the row. Pages are held by
+  `MerchantPermissionFilter` against the list in `Web/Authentication/MerchantPages.cs` — a merchant page missing
+  from that list is the owner's alone — and the menu, favourites and dashboard only offer what the person may open.
+  Moderators themselves are the owner's: a moderator never sees that page.
 - **Sign-up and approval.** `/Account/Register` makes a `Pending` merchant with its login and default pickup point and
   signs it in; the admin approves (`Active`), suspends or reactivates on `/Admin/Merchant/{id}`, or adds a merchant
   directly (`/Admin/NewMerchant`, active at once).
 - **Hub.** "Choose your hub" first (`/Hub/Choose`: every hub with its waiting work, busiest first; the choice is
   remembered until the next sign-in, and the hub menu on each page shows each hub's waiting count). Board (live counts: pickups open, coming from other hubs, waiting for a rider, to send on, out with riders,
   to hand back, cash with riders), scan page with three modes (Receive, Dispatch, Hand back; the answer says what to do
-  next), pickups (assign a rider of this hub), assign parcels to a rider (opens the rider's `DeliveryRun` for the day and
+  next), weigh a parcel on the parcel page (the charge follows the scale), pickups (assign a rider of this hub), assign parcels to a rider (opens the rider's `DeliveryRun` for the day and
   a `DeliveryAttempt` per parcel), rider closing (cash received against expected; held and refused parcels go back on
   the shelf), parcel search and page (ask for a return), label reprints.
 - **Rider app.** Today: cash in hand, stops with address, phone, COD; a delivery page per parcel with Delivered,
   Partly delivered (amount and reason), On hold (reason and date), Refused (reason); pickups to collect.
 - **Admin.** Live dashboard (today's counts, stages, last 7 days, hubs, top merchants, cash with riders, owed to
   merchants), merchants, riders (add with a login, edit, stop), payouts (owed per merchant, run now, payouts and
-  invoices), rates (change for new bookings only), coverage, failed messages (send again).
+  invoices), rates (change for new bookings only), coverage (the map, and tabs that open and close hubs, draw zones on
+  them and keep the areas), failed messages (send again).
 - **Public.** Landing page: the promise, a tracking box and the courier's real counts (cities, hubs, areas) beside an
   animated line drawing (a rider driving round a little planet of shops, a hub and homes, parcels on parachutes, cards
   following one parcel), a ribbon of services, the four steps drawn and animated, services, the rate card and a closing
@@ -137,18 +245,74 @@ three test suites pass; the app was checked live on the dev database. The plan's
   progress) with the merchant filter lifted, and returns counts and a verdict only.
 - **Live dashboards.** After a committed save touching parcels, runs, attempts, pickups or riders, the courier's SignalR
   group hears "changed" and the page re-reads its `data-live` parts.
-- **Not yet:** real SMS and bKash/Nagad/bank gateways (fakes), an admin screen to add hubs/zones/areas (seed only),
-  printing a run sheet, the app's own SQL login instead of `sa`, merchant notifications of payouts, COD reconciliation
-  reports over time.
+- **Coverage, kept by the admin.** `/Admin/Coverage` opens as the map it always was and carries three more tabs: hubs
+  (open one, edit it, close it), zones (code, name, city, suburb flag and the hub that serves it) and areas (name and
+  zone, filtered by zone). The seed still lays the map out; nothing on it is ever deleted, only archived, so parcels
+  keep the route and the charge they were given. Guards: a hub closes only once its zones, riders, parcels and pickups
+  have gone; a zone leaves the map only once its areas have, and keeps its hub, city and suburb flag while parcels
+  priced by them are still moving; an area stays put while parcels are on their way there or a merchant collects from
+  it; a zone or area comes back only onto an open parent. Codes are letters and digits, unique per courier, and area
+  names are unique per courier.
+- **Email to merchants.** A real mail server (`Email:*` in the git-ignored `appsettings.Local.json`; Gmail over SMTP
+  with an app password today) sends a merchant its payout email the moment the money leaves: what was collected, the
+  charges, what was sent, to which account, and a link to the invoice. It goes through the outbox like every other
+  message, in a loop of its own (`SendEmailsJob`), so a slow mail server never holds up a text or a webhook; with no
+  mail server configured the fake keeps them for `/Dev/Emails`, which also has a button that sends a test email. The
+  integration tests always use the fake.
+- **Reports.** `/Admin/Reports` over any period up to 92 days (a week by default): day by day (delivered, returned,
+  cash collected, each kind of charge, what the courier earned and what it owes), by rider (stops, deliveries, cash
+  collected against cash handed in, what is short) and returns by merchant (rate and return charges). Each table
+  downloads as CSV.
+- **Run sheet.** `/Hub/RunSheet/{run}`: the paper a rider carries, with every parcel still to hand over, the door,
+  the phone, the cash to collect and a line to sign; offered as soon as parcels are assigned and from the closing
+  page while the rider is out. A parcel the rider has recorded leaves the sheet.
+- **Not yet:** real SMS and bKash/Nagad/bank payout gateways (fakes; the owner has no accounts for them yet; SSLCommerz
+  takes money in and cannot send it to merchants), the app's own SQL login instead of `sa`.
 
 ### Database
+- `Merchants.Merchant.MainMerchantId` (2026-10-06): set on a business added to another merchant's account, pointing at its main profile (`FK_Merchant_Merchant`, never itself).
+- `Merchants.MerchantPicture` (2026-10-06): the picture (PNG, JPEG or WebP, at most 512 KB, judged by its first bytes) of a main profile or a business, one row per merchant, in a table of its own so that reading a merchant never loads the bytes. Uploaded in `/Merchant/Settings` for the business being worked in and served by `/Merchant/Picture/{id}` to logins of the same account only; it shows in the sidebar, the account menu, the business switcher and `/Merchant/Businesses`.
+- `Merchants.Moderator` (2026-10-06): a person who works in a merchant account with a login of their own, and what
+  they may do (`Permissions`, a bit field; see `Domain.Merchants.MerchantPermissions`). It carries `AccountId` (the
+  account's main profile) instead of the usual `MerchantId`, because a moderator works in every business of the
+  account and so is not merchant-filtered; `UserId` is unique per courier. Stopping one archives the row.
+- `Merchants.MerchantPayoutAccount` (2026-10-07): the payout accounts a merchant account keeps (method, number,
+  name), by `AccountId` like `Merchants.Moderator`, archived when removed, a number kept once per account. The one in
+  use stays on the main profile's `PayoutMethod`, `PayoutAccount` and `PayoutAccountName`;
+  `Scripts/2026/004_PayoutAccounts.sql` copied each account's existing one in.
+- `Parcels.ParcelRequest` (2026-10-07): a merchant's request about a parcel on its way (kind 1 cancel, 2 change the
+  cash on delivery with `NewCodAmount`), its reason, who asked, and the courier's answer (status 1 open, 2 approved,
+  3 refused). One open request per parcel (`UX_ParcelRequest_Parcel_Open`); merchant-filtered and in the policy.
+- `Delivery.ReturnList` and `Delivery.ReturnListParcel` (2026-10-07): returning parcels a hub sends back to one
+  pickup point of a merchant with a rider (status 1 out, 2 handed over, 3 confirmed by the merchant, 4 not handed
+  over), with its parcels; numbered from the sequence `Delivery.ReturnListNumber` (`RL-100001`). Both carry
+  `MerchantId` and are in the security policy.
+- `Parcels.Parcel.Issue`, `IssueNote`, `IssueRaisedOn` (2026-10-07): a problem a hub flagged (1 in review, 2
+  exceptional), what it is and when it was first flagged; all three NULL while there is none (`chk_Parcel_Issue`),
+  with the filtered index `IX_Parcel_Tenant_Issue` for the tabs.
+- `Payments.Payout` `FailedAttempts`, `LastError`, `LastTriedOn` and status 3 Cancelled; `Payments.LedgerEntry` kind 5
+  Adjustment with `Note` and no `ParcelId` (`chk_LedgerEntry_Parcel`; `UX_LedgerEntry_Parcel_Kind` is filtered to rows
+  with a parcel); `Merchants.Merchant.PayoutHold` (2026-10-07).
+- `Parcels.Parcel` keeps the weight rule it was booked under (`IncludedWeightGrams`, `BaseCharge`, `ExtraKgCharge`)
+  and what a hub's scale read (`MeasuredWeightGrams`, NULL until weighed); `Scripts/Pre/002_ParcelWeightRule.sql`
+  backfills the three from each courier's rate card before the publish.
+- `Payments.OnlinePayment` (2026-10-08): a merchant paying what it owes online, numbered from the sequence
+  `Payments.OnlinePaymentNumber` (`PAY-100001`), with the random `TransactionId` the gateway knows it by (unique), the
+  amount asked, status (1 started, 2 paid, 3 failed, 4 held for review, 5 refunded), what the gateway confirmed
+  (`PaidAmount`, `StoreAmount` after its fee, `Method`, `ValidationId`, `BankTransactionId`) and `LedgerEntryId`, the
+  one credit it wrote (`UX_OnlinePayment_LedgerEntry`; `chk_OnlinePayment_Credit`: paid exactly when credited).
+  Merchant-filtered and in the policy.
 - Schemas: `Platform` (Tenant), `Identity`, `Network` (Hub, Zone, Area), `Pricing` (DeliveryRate), `Merchants`
-  (Merchant, MerchantApiKey, PickupPoint), `Parcels` (Parcel, ParcelEvent, sequence TrackingNumber → `OD10000001`),
-  `Delivery` (Rider, DeliveryRun, DeliveryAttempt, PickupRequest), `Payments` (LedgerEntry, Payout, sequence
-  PayoutNumber → `INV-000001`), `Notifications` (OutboxMessage).
+  (Merchant, MerchantApiKey, MerchantPicture, MerchantPayoutAccount, Moderator, PickupPoint), `Parcels` (Parcel,
+  ParcelEvent, ParcelRequest, sequence TrackingNumber →
+  `OD10000001`),
+  `Delivery` (Rider, DeliveryRun, DeliveryAttempt, PickupRequest, VehicleCapacity, ReturnList, ReturnListParcel,
+  sequence ReturnListNumber → `RL-100001`), `Payments` (LedgerEntry, Payout, OnlinePayment, sequences
+  PayoutNumber → `INV-000001` and OnlinePaymentNumber → `PAY-100001`), `Notifications` (OutboxMessage).
 - Every tenant table has `TenantId` + FK + index, the housekeeping columns, and its predicates in the security policy
-  `Platform.TenantIsolation` (17 tables).
-- Seed (`001_SeedCourier.sql`): OneDrop Courier (Asia/Dhaka, BDT, SMS sender `OneDrop`, hotline 09610-001122, 3
+  `Platform.TenantIsolation` (25 tables).
+- Seed (`001_SeedCourier.sql`, then `002`, `003`): OneDrop Courier (Asia/Dhaka, BDT, SMS sender `OneDrop`, hotline 09610-001122,
+  10 businesses per merchant account, 3
   attempts); 16 hubs (Dhaka city 5; suburbs Savar, Gazipur, Narayanganj; Chattogram, Sylhet, Rajshahi, Khulna,
   Barishal, Rangpur, Mymensingh, Cumilla), 21 zones, 87 areas; the rate card above. Demo logins, merchants, riders and (in Development)
   about twenty sample parcels come from `DemoDataSeeder` / `DemoActivity` at app start.
@@ -181,7 +345,7 @@ three test suites pass; the app was checked live on the dev database. The plan's
 | Jobs take the tenant as a parameter, stored by name | A slow courier never holds up another; Hangfire cannot load generic methods |
 | No product-name prefix in code | Owner's preference (DCN style) |
 | No hard-coded business values: prices, attempts, time zone, sender name are data | Owner's rule; each courier states its own |
-| Razor Pages (no SPA); custom CSS design system with tokens, a dark sidebar shell, inline SVG icons | One deployment, host-only cookies per courier, a clean "courier software" look without a front-end build |
+| Razor Pages (no SPA); custom CSS design system with tokens, a light sidebar shell (2026-10-06; dark until then), inline SVG icons | One deployment, host-only cookies per courier, a clean "courier software" look without a front-end build |
 | Tenant from the subdomain (panels) or API key (API) | Host-only cookies keep couriers apart |
 | API keys `od_{12-char prefix}_{32-char secret}`, only a SHA-256 hash stored | The prefix finds the key before the tenant is known |
 | Outbox in the change's transaction; texts written at send time; webhooks in their own loop | A change never saves without its message; a slow merchant server never delays an SMS |
@@ -191,8 +355,24 @@ three test suites pass; the app was checked live on the dev database. The plan's
 | 2026-10-05: a pickup point cannot move to another zone while parcels or a pickup wait there | Those parcels were priced, and the pickup sent to a hub, by the old zone |
 | 2026-10-05: a hold's "deliver on" day must be after today | A past day would put the parcel straight back in the queue as if the customer had asked for it |
 | 2026-10-05 UI: success is a toast that goes by itself, a problem stays on the page; anything hard to undo asks first (`data-confirm`, a styled dialog); motion only on first paint (`html.js-enter`) and never for reduced-motion users | People read problems, not confirmations; live dashboards must not jump on every update |
+| 2026-10-06 UI (owner, from Steadfast's panel): a favourites bar on every desk panel that each person fills with the menu's stars (up to eight, in a cookie per login, so it is drawn with the page and needs no schema change; it does not follow a person to another browser), and an account menu behind the avatar with a new change-password page; a white sidebar with the signed-in account on top and sign out in red; the page title and the hotline (tap to call) in the top bar; larger type and rounder cards; number cards read icon and label, then the number, then context; the merchant dashboard is "Right now" (each stage with its count and cash), quick actions, tools and links, the last 30 days, the week and the money; Payments opens with the next payout beside how it adds up | The owner found Steadfast's panel easier to use; the layout and spacing were taken, the colours were not (sky blue stays the one accent). Not taken: several businesses per login, a Bangla switch and a dark theme, which are product work rather than layout |
+| **2026-10-06: several businesses in one merchant account** (owner, after Steadfast). Each business is a merchant row of its own; an added one points at its account's main profile (`Merchant.MainMerchantId`). The login's claims list its other businesses and a cookie per login (`business-{userId}`) picks the one worked in, which `ICurrentUser.MerchantId` returns; approval and the payout account are the account's, set on the main profile and followed by every business (`FollowAccount`), from the merchant's settings or the admin's page | Every query already keeps a merchant to `ICurrentUser.MerchantId`, so a business per merchant row gives each its own parcels, pickups, pickup points, balance, payouts, API keys and webhook without touching any of them. A cookie that names a business outside the login's own list is ignored, so it cannot open someone else's. Up to `Tenant.MaxBusinessesPerAccount` businesses besides the main profile (10 for OneDrop Courier, as Steadfast; NULL for none), owner's choice; a business has no login of its own, by the owner's choice: the one login works in all of them |
 | 2026-10-05 brand (owner): a new logo, a drop-shaped map pin holding a taped parcel and landing on a ripple, on a sky blue tile; colour kept to ink on cool light grey paper with one accent, sky blue `#7cc6f2` (`--accent`; `--accent-text` `#0b6a9e` for text), flat fills, no gradients or glows; display headings in Bricolage Grotesque | The green made the product look like a copy of Steadfast; ultraviolet was rejected as looking AI-generated and marigold as too yellow; the owner asked for something light like sky blue. One exact door for each parcel is the name's promise |
+| **2026-10-05: a hub weighs a parcel and the charge follows its scale** (`Parcel.Reweigh`); the parcel keeps the weight rule it was booked under (`IncludedWeightGrams`, `BaseCharge`, `ExtraKgCharge`) and is repriced on that, never on today's rate card | Merchants under-declare weight, and the charge was frozen at whatever they typed: a 5 kg parcel booked as 500 g travelled for ৳60 for ever. Couriers weigh at the hub and bill the real weight. Repricing from the current rate card would have broken the snapshot rule, so the rule itself is snapshotted |
 | 2026-10-05 front page: drawn, looping animations (line art, ink and sky blue) only on the public front page; they rest while off screen and stay still for reduced-motion users | The owner asked for a cartoon animation like Steadfast's, but not a copy: a little planet instead of their road strip |
+| **2026-10-06: the coverage map stays seeded but the admin can change it** (owner): hubs, zones and areas are added, edited and taken off on `/Admin/Coverage`; nothing is deleted, only archived, and a part of the map with work still on it refuses to move | The seed is the fastest way to launch a courier with 16 hubs and 87 areas, but a courier that cannot open a hub or add an area without a developer is not usable. Deleting would orphan parcels that were priced and routed by a zone, so what leaves the map is archived and the rows stay; the guards are the same idea as the rider and pickup-point ones (2026-10-05): nothing moves out from under work already in flight |
+| **2026-10-06: email, not SMS, is the real channel** (owner: "as we cant intigrate real SMS lets use mail insted"). A real SMTP sender (Gmail with an app password, in the git-ignored `appsettings.Local.json`) carries the merchant notifications; recipients' texts stay on the fake SMS sender. The payout email is raised by `Payout.MarkPaid` as a domain event and goes through the outbox in a loop of its own | An SMS gateway in Bangladesh needs a contract the owner does not have yet, while a mailbox is free and merchants all have one. Merchants are the people our notifications are for; recipients are the ones who need SMS, and they gave us no email address, so there is nothing to send to until either a gateway or a recipient email field exists. Going through the outbox means a payout email is written in the same transaction as the payout, is retried, and never blocks the money |
+| 2026-10-06: the payout gateways (bKash, Nagad, bank) and the app's own SQL login are left alone (owner: "we still dont have those so leave them") | Neither can be built without something the owner does not yet have: merchant accounts with the payment providers, and a decision about the shared SQL Server |
+| **2026-10-06: moderators, people inside a merchant account with a sign-in of their own** (owner, from Steadfast). A moderator is an ordinary merchant login plus a `Merchants.Moderator` row saying what they may do; the row hangs off the account's main profile, not off a business. Pages are held by a filter over a list of page to permission (`Web/Authentication/MerchantPages.cs`), and a merchant page not on that list is the owner's alone. No email is sent: the owner is shown a first password once and hands it over | Shops are run by more than one person, and today they all share the owner's password, which also hands over the payout account and the API keys. A login plus a permission row needed no change to any query, because every merchant query already keeps to `ICurrentUser.MerchantId` and the account's main profile is what a merchant login already carries. Default-deny on the page list means a page added later cannot quietly open itself to moderators. Email is the one piece missing (there is no sender yet), so the password is handed over by the owner |
+| **2026-10-07: problems a hub flags are a flag beside the status, not new statuses** (Phase 3.2, from Steadfast's "in review" and "exceptional" tabs). `Parcel.Issue` is in review or exceptional with what is wrong; it is raised only while the courier has the parcel, keeps the time it was first raised when changed, and is cleared with what was done. A flagged parcel is not handed to a rider; everything else it can still do. Partly delivered becomes a tab of its own, and the dashboards count it apart from delivered (the delivery rate still counts both) | A problem is not a stage of the journey: a damaged parcel can be at a hub, on its way back or even delivered, and the state machine, the webhooks and every count by status stay as they were. Keeping it from a rider is the one guard that matters, because the door is where a parcel under review must not go. Pending parcels are not flagged (the courier does not have them yet), so a cancelled parcel can never be left flagged. The flag tabs show only while they hold a parcel, so eleven tabs do not crowd a merchant who has none |
+| **2026-10-07: returns go back to the merchant on a return list a rider carries, and the merchant confirms them** (Phase 3.4, from Steadfast's return lists). A list is one pickup point's returning parcels with one rider of the hub that collected them; the rider's hand-over is what returns and charges each parcel, and the merchant's confirmation afterwards is a signature, not a gate. A list the rider could not hand over closes, and its parcels come back through the hub's scan like any parcel a rider brings back | Merchants should not have to come to the hub for their returns, and a courier needs proof they arrived. Charging at the hand-over keeps the ledger's rule that a parcel is charged when it reaches its final status, and payouts never wait on a merchant who forgets to confirm; a note on the confirmation is how a missing parcel reaches the courier. Reusing the hub's scan-in for parcels that did not go keeps one way back into a hub |
+| **2026-10-07: changes to a parcel on its way are requests the courier answers** (Phase 3.5, from Steadfast). After pickup a merchant asks to cancel a parcel (approval sends it back as a return) or to change its cash on delivery (approval sets the new amount and the COD charge follows); the courier's admins approve or refuse with a reason. The merchant's own "Ask for it back" became this cancellation request | Once the courier has a parcel it has spent on it and may have it on a van or with a rider, so it decides; a request also leaves a record of who asked, why and what was answered. Approval applies the change through the parcel's own rules (a return, or a new cash amount with a history line), so an approved request can never put a parcel where the state machine would not. A cancellation is refused while a rider has the parcel rather than chasing the rider: it waits for the parcel to come back |
+| **2026-10-07: several payout accounts, the one in use still on the main profile; and "get paid now"** (Phase 3.6, from Steadfast). Saved accounts are a table of the account's; choosing one copies it onto the main profile, which the businesses, the payout run, the admin and every payout already read. Get paid now makes the same payout the run makes, with today's lines too, and sends it at once | Copying the chosen account onto the main profile meant no change to how payouts are made or who reads the account, and keeps "where the money goes" in one place for every business. Paying now through the run's own rules (the ledger lines, the payout's idempotency key, the gateway, the email) means a merchant cannot be paid twice or paid what it does not have; there is no limit on how often, which a courier that wants one can add as a setting |
+| **2026-10-07: the bell is worked out, not stored** (Phase 3.7). Its notices come from the parcels, attempts, return lists, requests and payouts of the last week when a page is drawn, and "seen" is the newest notice's time in a cookie per login | Every source already records what happened and when, so a notices table would be a second copy to keep in step with each flow. A week of a merchant's own rows is a few small indexed queries. The cookie, like the favourites, needs no schema change; it does not follow a person to another browser |
+| **2026-10-07: the merchant's ID is shown** (Phase 3.8, owner's request from Steadfast) though "never show a raw id" is the rule: it is the business's id, shown as "Merchant ID" with a copy button for calls to the hotline, and the admin's merchant search finds it | A merchant reading out a number the courier can look up is quicker than spelling a shop name; it is the one id a person is meant to read, so the rule stays for everything else |
+| **2026-10-07: payouts the admin can steer** (Phase 4.1, owner: "Lets fix these"). A refused transfer keeps the gateway's reason and is retried hourly; the admin sends it again or cancels it, which frees its lines. Holding is per account, with a reason. A merchant who owes the courier is settled by an adjustment line (no parcel, a reason), never by editing lines. Payouts still do not wait for a rider's cash | A payout copies the account it was made for, so a payout to a wrong account could never succeed: cancelling it is the only way to send the money to a corrected one. Its key stays the same on every retry, so a transfer the gateway made but failed to confirm is never made twice (the cancel dialog says to check with the gateway first). A ledger is only ever added to, so a settlement or a correction is a line of its own the merchant can read. The merchant is owed what the door collected; a rider short of cash is the courier's matter with its rider, made visible in 4.2 and 4.7 rather than taken from the merchant |
+| 2026-10-07: the admin's bell is a list of what waits, not of events (Phase 4.2): one line per kind of work with its count, timed by its newest item | An admin acts on work that is open, not on a feed; counting what waits keeps the bell short however busy the courier is, and each line's time still tells them when something new joined it |
+| **2026-10-08: SSLCommerz (the owner's sandbox store) takes one kind of money in: a merchant paying what it owes.** Not the payout gateway, and no prepaid wallet; paying a recipient's COD online comes next, with refunds (owner, unsure which use; this was the recommendation). The payment credits an `Adjustment` line, and is believed only when our server asks the gateway; a held one (risky, or another amount) waits for the admin; a check job catches payers whose browser never came back | SSLCommerz collects payments; it cannot send money to merchants' bKash accounts, so payouts stay fake. A prepaid wallet would fight the ledger: the hourly payout run pays any positive balance back the next morning, so a top-up would be returned. Paying a debt is the one use the ledger already understands; a credit adjustment is what 4.1 already writes when a merchant pays by hand, so statements, invoices, payouts and reports needed no change. The return address is open to anyone, because the merchant's sign-in does not travel with the gateway's post, so nothing posted is believed. Money the gateway took is always credited, once (the payment's row version and a unique credit), even after the page said it failed, because double-charging a merchant is worse than a late credit. Localhost cannot receive SSLCommerz's notice, hence the job |
 
 ---
 
@@ -201,13 +381,14 @@ three test suites pass; the app was checked live on the dev database. The plan's
 | Item | Value |
 |---|---|
 | Machine | Windows 11, .NET SDK 10.0.4xx, PowerShell 5.1 + Git Bash, Node 25 (for screenshot scripts) |
-| SQL Server | `10.50.0.1,1433` over the VPN (the host `ras-x2` does not resolve), SQL Server 2025, login `sa`. Shared with the team |
+| SQL Server | `ras-x2,1433` (SQL Server 2025, login `sa`, shared with the team). From 2026-10-04 to 2026-10-06 it was reached as `10.50.0.1,1433` over the VPN while `ras-x2` did not resolve; the owner switched back to `ras-x2` on 2026-10-06 |
 | Databases | `OneDrop` (development), `OneDrop-Test` (integration tests). **Ask before creating any other** |
 | Connection strings | `src/Web/appsettings.Local.json` and `tests/Integration.Tests/testsettings.Local.json`, git-ignored |
+| SSLCommerz | The owner's sandbox store (2026-10-08; its merchant panel is `sandbox-gw.sslcommerz.com`, the API `sandbox.sslcommerz.com`). `Sslcommerz:StoreId` and `StorePassword` belong in `src/Web/appsettings.Local.json` only; without them Development uses the test gateway (`/Dev/Pay`) |
 | Tools | `sqlpackage` (dotnet global tool), `sqlcmd`, Docker Desktop, GitHub CLI at `C:\Program Files\GitHub CLI\gh.exe` |
 | Repository | https://github.com/talha33177net-eng/OneDrop (private), local folder `C:\Courier Project`; the rebuild is on branch `traditional-courier` |
 | Git identity | Talha Ahmed &lt;talha33177.net@gmail.com&gt; |
-| App URLs | http://onedrop.localhost:5080 (the courier), http://localhost:5080 (platform) |
+| App URLs | http://onedrop.localhost:5080 (the courier; the launch profile opens it); http://localhost:5080 sends visitors there (`Tenancy:HomeCourier`, 2026-10-08), and platform admins sign in at http://localhost:5080/Account/Login |
 | Demo logins, API keys | [README](../README.md) — password `OneDrop#2026` (Development only) |
 
 ### Everyday commands
@@ -258,6 +439,8 @@ dotnet run --project src/Web
 | SqlPackage blocks NULL → NOT NULL on a table with rows | Backfill and alter in a guarded `Scripts/Pre` script |
 | `sqlcmd` runs with `QUOTED_IDENTIFIER OFF` | Pass `-I` when running scripts by hand |
 | A running `dotnet run --project src/Web` locks `src/Web/bin` | Stop the app (`taskkill //F //IM Web.exe`) before rebuilding or testing |
+| `dotnet run --no-build` after editing a file in `wwwroot` serves browsers an empty stylesheet or script: the asset list still names the old pre-compressed (gzip) copy, which no longer exists, and only a request asking for gzip gets it, so `curl` looks fine | Build (or plain `dotnet run`) after any `wwwroot` change; to test by hand, ask with `-H "Accept-Encoding: gzip"` |
+| The app running on `OneDrop-Test` while the integration suite runs makes `FailedMessagesTests` fail: its outbox sender (every 5 s) handles the text the test plants before the test reads it | Stop any app pointed at `OneDrop-Test` before running the suite; live checks on it go before or after |
 | A test that tries to write another tenant's rows really writes them when isolation is broken | Isolation tests write each row's own value back |
 | Since Row-Level Security, SqlPackage refuses table rebuilds | `publish.ps1` passes `AllowUnsafeRowLevelSecurityDataMovement` (safe: its connection is unrestricted) |
 | Hangfire cannot load a generic job method back | Job methods are never generic (jobs go by name) |

@@ -1,44 +1,297 @@
 @page
+@using Web.Pages.Admin
 @model Web.Pages.Admin.CoverageModel
 @{
     ViewData["Title"] = "Coverage";
+    var openHubs = Model.Hubs.Where(h => h.Active).ToList();
+    var openZones = Model.Zones.Where(z => z.Active).ToList();
+    string TabUrl(CoverageTab tab) => Url.Page("/Admin/Coverage", new { tab })!;
+    (CoverageTab Tab, string Name)[] tabs =
+    [
+        (CoverageTab.Map, "The map"), (CoverageTab.Hubs, "Hubs"), (CoverageTab.Zones, "Zones"), (CoverageTab.Areas, "Areas")
+    ];
 }
 
 <div class="page-head">
     <div>
         <h1>Coverage</h1>
-        <p>@Model.Hubs.Count hubs, @Model.Hubs.Sum(h => h.Zones.Count) zones, @Model.Hubs.Sum(h => h.Zones.Sum(z => z.Areas.Count)) areas. A zone's city and suburb flag decide which rate a parcel is charged.</p>
+        <p>Where the courier collects and delivers. A zone's hub decides who carries a parcel; its city and suburb flag decide which rate it is charged at.</p>
     </div>
 </div>
 
-<div class="card">
-    <div class="table-wrap">
-        <table class="table">
-            <thead><tr><th>Hub</th><th>Zone</th><th>City</th><th>Areas</th></tr></thead>
-            <tbody>
-                @foreach (var hub in Model.Hubs)
-                {
-                    var first = true;
-                    foreach (var zone in hub.Zones)
-                    {
-                        <tr>
-                            @if (first)
-                            {
-                                <td rowspan="@hub.Zones.Count" style="vertical-align:top">
-                                    <div class="cell-main"><span class="code-link">@hub.Code</span> @hub.Name</div>
-                                    <div class="cell-sub">@hub.Address</div>
-                                    <div class="cell-sub">@hub.Phone</div>
-                                </td>
-                                first = false;
-                            }
-                            <td><span class="code-link">@zone.Code</span> @zone.Name</td>
-                            <td>@zone.City @if (zone.Suburb) { <span class="badge badge-transit plain">Suburb</span> }</td>
-                            <td><div class="pill-row">@foreach (var area in zone.Areas) { <span class="pill">@area</span> }</div></td>
-                        </tr>
-                    }
-                }
-            </tbody>
-        </table>
-    </div>
-    <div class="card-foot muted">Hubs, zones and areas are set up with the launch data. Ask the platform team to add a new city.</div>
+<div class="card" style="margin-bottom:20px">
+    <nav class="tabs" aria-label="Coverage">
+        @foreach (var (tab, name) in tabs)
+        {
+            <a class="tab @(tab == Model.Tab ? "active" : "")" href="@TabUrl(tab)">@name</a>
+        }
+    </nav>
 </div>
+
+<partial name="_Alerts" />
+
+@if (Model.Tab == CoverageTab.Map)
+{
+    <div class="card">
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Hub</th><th>Zone</th><th>City</th><th>Areas</th></tr></thead>
+                <tbody>
+                    @foreach (var hub in Model.Map)
+                    {
+                        var first = true;
+                        foreach (var zone in hub.Zones)
+                        {
+                            <tr>
+                                @if (first)
+                                {
+                                    <td rowspan="@hub.Zones.Count" style="vertical-align:top">
+                                        <div class="cell-main"><span class="code-link">@hub.Code</span> @hub.Name</div>
+                                        <div class="cell-sub">@hub.Address</div>
+                                        <div class="cell-sub">@hub.Phone</div>
+                                    </td>
+                                    first = false;
+                                }
+                                <td><span class="code-link">@zone.Code</span> @zone.Name</td>
+                                <td>@zone.City @if (zone.Suburb) { <span class="badge badge-transit plain">Suburb</span> }</td>
+                                <td><div class="pill-row">@foreach (var area in zone.Areas) { <span class="pill">@area</span> }</div></td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="card-foot muted">@Model.Map.Count hubs, @Model.Map.Sum(h => h.Zones.Count) zones and @Model.Map.Sum(h => h.Zones.Sum(z => z.Areas.Count)) areas are open to merchants. The Hubs, Zones and Areas tabs change them.</div>
+    </div>
+}
+
+@if (Model.Tab == CoverageTab.Hubs)
+{
+    <div class="grid grid-side">
+        <div class="card">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Hub</th><th class="num">Zones</th><th class="num">Riders</th><th class="num">Parcels</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var h in Model.Hubs)
+                        {
+                            <tr style="@(h.Active ? "" : "opacity:.55")">
+                                <td>
+                                    <div class="cell-main"><span class="code-link">@h.Code</span> @h.Name @if (!h.Active) { <span class="badge badge-cancel">Closed</span> }</div>
+                                    <div class="cell-sub">@h.Address</div>
+                                    <div class="cell-sub">@h.Phone</div>
+                                </td>
+                                <td class="num">@h.Zones</td>
+                                <td class="num">@h.Riders</td>
+                                <td class="num">@h.Parcels</td>
+                                <td class="text-right nowrap">
+                                    <a class="btn btn-ghost btn-sm" asp-route-tab="Hubs" asp-route-edit="@h.Id">Edit</a>
+                                    <form method="post" asp-page-handler="HubActive" asp-route-id="@h.Id" asp-route-active="@(!h.Active)" asp-route-tab="Hubs" class="inline-form">
+                                        <button class="btn btn-ghost btn-sm" type="submit" data-confirm="@(h.Active ? $"{h.Name} stops serving zones and taking parcels. Its history stays." : $"{h.Name} can serve zones and take parcels again.")" data-confirm-title="@(h.Active ? "Close this hub?" : "Open this hub again?")" data-confirm-ok="@(h.Active ? "Close hub" : "Open hub")" data-confirm-tone="@(h.Active ? "danger" : "calm")">@(h.Active ? "Close" : "Open")</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            @if (Model.Edit == h.Id)
+                            {
+                                <tr>
+                                    <td colspan="5" style="background:var(--brand-tint)">
+                                        <form method="post" asp-page-handler="EditHub" asp-route-id="@h.Id" asp-route-tab="Hubs" class="gap">
+                                            <input type="text" name="code" value="@h.Code" required maxlength="20" style="max-width:110px" aria-label="Code" />
+                                            <input type="text" name="name" value="@h.Name" required maxlength="200" style="max-width:200px" aria-label="Name" />
+                                            <input type="text" name="address" value="@h.Address" required maxlength="500" style="max-width:320px" aria-label="Address" />
+                                            <input type="text" name="phone" value="@h.Phone" required maxlength="20" style="max-width:150px" aria-label="Phone" />
+                                            <button class="btn btn-primary btn-sm" type="submit">Save</button>
+                                            <a class="btn btn-ghost btn-sm" asp-route-tab="Hubs">Cancel</a>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-foot muted">A hub closes only once its zones, riders and parcels have moved on, so nothing is left with nowhere to go.</div>
+        </div>
+
+        <div class="card" style="align-self:start">
+            <div class="card-head"><h2>@Icons.Get("plus") Open a hub</h2></div>
+            <div class="card-body">
+                <form method="post" asp-page-handler="AddHub" asp-route-tab="Hubs">
+                    <div class="field"><label for="hub-code">Code</label><input type="text" id="hub-code" name="code" maxlength="20" required /><span class="hint">Short, letters and digits: MIR, CTG. It is printed on labels.</span></div>
+                    <div class="field"><label for="hub-name">Name</label><input type="text" id="hub-name" name="name" maxlength="200" required placeholder="Mirpur hub" /></div>
+                    <div class="field"><label for="hub-address">Address</label><input type="text" id="hub-address" name="address" maxlength="500" required /></div>
+                    <div class="field"><label for="hub-phone">Phone</label><input type="text" id="hub-phone" name="phone" maxlength="20" required placeholder="01700-100101" /></div>
+                    <button class="btn btn-primary btn-block" type="submit">Open hub</button>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
+@if (Model.Tab == CoverageTab.Zones)
+{
+    <div class="grid grid-side">
+        <div class="card">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Zone</th><th>City</th><th>Hub</th><th class="num">Areas</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var z in Model.Zones)
+                        {
+                            <tr style="@(z.Active ? "" : "opacity:.55")">
+                                <td><div class="cell-main"><span class="code-link">@z.Code</span> @z.Name @if (!z.Active) { <span class="badge badge-cancel">Off the map</span> }</div></td>
+                                <td>@z.City @if (z.Suburb) { <span class="badge badge-transit plain">Suburb</span> }</td>
+                                <td>@z.Hub</td>
+                                <td class="num"><a href="@Url.Page("/Admin/Coverage", new { tab = CoverageTab.Areas, zoneId = z.Id })">@z.Areas</a></td>
+                                <td class="text-right nowrap">
+                                    <a class="btn btn-ghost btn-sm" asp-route-tab="Zones" asp-route-edit="@z.Id">Edit</a>
+                                    <form method="post" asp-page-handler="ZoneActive" asp-route-id="@z.Id" asp-route-active="@(!z.Active)" asp-route-tab="Zones" class="inline-form">
+                                        <button class="btn btn-ghost btn-sm" type="submit" data-confirm="@(z.Active ? $"No address can be booked to {z.Name} any more. The parcels already priced by it are unchanged." : $"{z.Name} can take addresses again.")" data-confirm-title="@(z.Active ? "Take this zone off the map?" : "Put this zone back?")" data-confirm-ok="@(z.Active ? "Take it off" : "Put it back")" data-confirm-tone="@(z.Active ? "danger" : "calm")">@(z.Active ? "Take off" : "Put back")</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            @if (Model.Edit == z.Id)
+                            {
+                                <tr>
+                                    <td colspan="5" style="background:var(--brand-tint)">
+                                        <form method="post" asp-page-handler="EditZone" asp-route-id="@z.Id" asp-route-tab="Zones" class="gap">
+                                            <input type="text" name="code" value="@z.Code" required maxlength="20" style="max-width:110px" aria-label="Code" />
+                                            <input type="text" name="name" value="@z.Name" required maxlength="200" style="max-width:200px" aria-label="Name" />
+                                            <input type="text" name="city" value="@z.City" required maxlength="60" style="max-width:150px" aria-label="City" />
+                                            @* A zone taken off the map may hang on a hub that has since closed, so its own hub is always listed *@
+                                            <select name="hubId" style="max-width:200px" aria-label="Hub">
+                                                @foreach (var hub in Model.Hubs.Where(h => h.Active || h.Id == z.HubId))
+                                                {
+                                                    <option value="@hub.Id" selected="@(hub.Id == z.HubId)">@hub.Name</option>
+                                                }
+                                            </select>
+                                            <label class="check"><input type="checkbox" name="isSuburb" value="true" checked="@z.Suburb" /> Suburb</label>
+                                            <button class="btn btn-primary btn-sm" type="submit">Save</button>
+                                            <a class="btn btn-ghost btn-sm" asp-route-tab="Zones">Cancel</a>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-foot muted">A zone keeps its hub, city and suburb flag while parcels priced by them are still on the way: those were charged and routed as the zone stands.</div>
+        </div>
+
+        <div class="card" style="align-self:start">
+            <div class="card-head"><h2>@Icons.Get("plus") Add a zone</h2></div>
+            <div class="card-body">
+                <form method="post" asp-page-handler="AddZone" asp-route-tab="Zones">
+                    <div class="field"><label for="zone-code">Code</label><input type="text" id="zone-code" name="code" maxlength="20" required /></div>
+                    <div class="field"><label for="zone-name">Name</label><input type="text" id="zone-name" name="name" maxlength="200" required placeholder="Mirpur" /></div>
+                    <div class="field"><label for="zone-city">City or district</label><input type="text" id="zone-city" name="city" maxlength="60" required placeholder="Dhaka" /><span class="hint">Two zones in the same city are charged the inside-city rate.</span></div>
+                    <div class="field">
+                        <label for="zone-hub">Served by</label>
+                        <select id="zone-hub" name="hubId" required>
+                            <option value="">Choose a hub</option>
+                            @foreach (var hub in openHubs)
+                            {
+                                <option value="@hub.Id">@hub.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field"><label class="check"><input type="checkbox" name="isSuburb" value="true" /> A suburb of that city</label><span class="hint">Savar or Gazipur: charged between the inside-city and outside-city rates.</span></div>
+                    <button class="btn btn-primary btn-block" type="submit">Add zone</button>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
+@if (Model.Tab == CoverageTab.Areas)
+{
+    <div class="grid grid-side">
+        <div class="card">
+            <div class="card-head">
+                <h2>@(Model.Areas.Count) area@(Model.Areas.Count == 1 ? "" : "s")</h2>
+                <form method="get" class="hub-switch">
+                    <input type="hidden" name="tab" value="Areas" />
+                    @Icons.Get("globe")
+                    <select name="zoneId" onchange="this.form.submit()" aria-label="Zone">
+                        <option value="">All zones</option>
+                        @foreach (var zone in Model.Zones)
+                        {
+                            <option value="@zone.Id" selected="@(zone.Id == Model.ZoneId)">@zone.Name (@zone.City)</option>
+                        }
+                    </select>
+                </form>
+            </div>
+            @if (Model.Areas.Count == 0)
+            {
+                <div class="empty">@Icons.Get("map-pin")<h3>No areas here yet</h3><p>Add the first one beside this list.</p></div>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead><tr><th>Area</th><th>Zone</th><th>City</th><th>Hub</th><th class="num">Parcels</th><th></th></tr></thead>
+                        <tbody>
+                            @foreach (var a in Model.Areas)
+                            {
+                                <tr style="@(a.Active ? "" : "opacity:.55")">
+                                    <td><div class="cell-main">@a.Name @if (!a.Active) { <span class="badge badge-cancel">Off the map</span> }</div></td>
+                                    <td>@a.Zone</td>
+                                    <td>@a.City</td>
+                                    <td>@a.Hub</td>
+                                    <td class="num">@a.Parcels</td>
+                                    <td class="text-right nowrap">
+                                        <a class="btn btn-ghost btn-sm" asp-route-tab="Areas" asp-route-zoneId="@Model.ZoneId" asp-route-edit="@a.Id">Edit</a>
+                                        <form method="post" asp-page-handler="AreaActive" asp-route-id="@a.Id" asp-route-active="@(!a.Active)" asp-route-tab="Areas" asp-route-zoneId="@Model.ZoneId" class="inline-form">
+                                            <button class="btn btn-ghost btn-sm" type="submit" data-confirm="@(a.Active ? $"{a.Name} leaves the address lists and the API. The parcels already sent there keep it." : $"Merchants can book to {a.Name} again.")" data-confirm-title="@(a.Active ? "Take this area off the map?" : "Put this area back?")" data-confirm-ok="@(a.Active ? "Take it off" : "Put it back")" data-confirm-tone="@(a.Active ? "danger" : "calm")">@(a.Active ? "Take off" : "Put back")</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                @if (Model.Edit == a.Id)
+                                {
+                                    <tr>
+                                        <td colspan="6" style="background:var(--brand-tint)">
+                                            <form method="post" asp-page-handler="EditArea" asp-route-id="@a.Id" asp-route-tab="Areas" asp-route-zoneId="@Model.ZoneId" class="gap">
+                                                <input type="text" name="name" value="@a.Name" required maxlength="200" style="max-width:240px" aria-label="Name" />
+                                                @* An area off the map may sit in a zone that has since gone too, so its own zone is always listed *@
+                                                <select name="zoneId" style="max-width:260px" aria-label="Zone">
+                                                    @foreach (var zone in Model.Zones.Where(z => z.Active || z.Id == a.ZoneId))
+                                                    {
+                                                        <option value="@zone.Id" selected="@(zone.Id == a.ZoneId)">@zone.Name (@zone.City)</option>
+                                                    }
+                                                </select>
+                                                <button class="btn btn-primary btn-sm" type="submit">Save</button>
+                                                <a class="btn btn-ghost btn-sm" asp-route-tab="Areas" asp-route-zoneId="@Model.ZoneId">Cancel</a>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            <div class="card-foot muted">An area stays where it is while parcels are on their way there or a merchant collects from it.</div>
+        </div>
+
+        <div class="card" style="align-self:start">
+            <div class="card-head"><h2>@Icons.Get("plus") Add an area</h2></div>
+            <div class="card-body">
+                <form method="post" asp-page-handler="AddArea" asp-route-tab="Areas" asp-route-zoneId="@Model.ZoneId">
+                    <div class="field"><label for="area-name">Name</label><input type="text" id="area-name" name="name" maxlength="200" required placeholder="Mirpur 10" /><span class="hint">As a recipient would write it. Names are unique across the courier.</span></div>
+                    <div class="field">
+                        <label for="area-zone">Zone</label>
+                        <select id="area-zone" name="zoneId" required>
+                            <option value="">Choose a zone</option>
+                            @foreach (var zone in openZones)
+                            {
+                                <option value="@zone.Id" selected="@(zone.Id == Model.ZoneId)">@zone.Name (@zone.City)</option>
+                            }
+                        </select>
+                    </div>
+                    <button class="btn btn-primary btn-block" type="submit">Add area</button>
+                </form>
+            </div>
+        </div>
+    </div>
+}

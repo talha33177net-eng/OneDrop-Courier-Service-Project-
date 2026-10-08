@@ -1,0 +1,61 @@
+@page
+@using Application.Parcels.Browse
+@model Web.Pages.Merchant.ExportModel
+@{
+    ViewData["Title"] = "Export";
+    (ParcelTab Tab, string Name)[] tabs =
+    [
+        (ParcelTab.All, "Every parcel"), (ParcelTab.Pending, "Pending pickup"), (ParcelTab.InTransit, "In transit"),
+        (ParcelTab.OutForDelivery, "Out for delivery"), (ParcelTab.OnHold, "On hold"), (ParcelTab.Delivered, "Delivered"),
+        (ParcelTab.PartlyDelivered, "Partly delivered"), (ParcelTab.Returns, "Returns"), (ParcelTab.Cancelled, "Cancelled"),
+        (ParcelTab.InReview, "In review"), (ParcelTab.Exceptional, "Exceptional")
+    ];
+}
+
+<div class="page-head">
+    <div>
+        <h1>Export</h1>
+        <p>Your parcels as a spreadsheet (CSV, opens in Excel or Google Sheets): choose which, and the file downloads at once.</p>
+    </div>
+</div>
+
+<div class="grid grid-main">
+    <form method="get" class="card">
+        <input type="hidden" name="handler" value="Csv" />
+        <div class="card-head"><div><h2>@Icons.Get("download") Which parcels</h2><p>Up to @ParcelListHandler.MaxExport.ToString("N0") in one file, newest first</p></div></div>
+        <div class="card-body">
+            <div class="form-grid">
+                <div class="field">
+                    <label for="tab">Stage</label>
+                    <select id="tab" name="tab">
+                        @foreach (var (tab, name) in tabs)
+                        {
+                            <option value="@tab" selected="@(tab == Model.Tab)">@name</option>
+                        }
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="search">Only these (optional)</label>
+                    <input type="search" id="search" name="search" value="@Model.Search" placeholder="Tracking code, invoice, recipient name or phone" />
+                </div>
+                <div class="field">
+                    <label for="from">Booked from</label>
+                    <input type="date" id="from" name="from" value="@Model.From?.ToString("yyyy-MM-dd")" />
+                </div>
+                <div class="field">
+                    <label for="to">to</label>
+                    <input type="date" id="to" name="to" value="@Model.To?.ToString("yyyy-MM-dd")" />
+                </div>
+            </div>
+            <label class="check mb"><input type="checkbox" name="late" value="true" checked="@Model.Late" /> Late parcels only</label>
+            <button class="btn btn-primary" type="submit">@Icons.Get("download") Download CSV</button>
+        </div>
+    </form>
+    <div class="card">
+        <div class="card-head"><h2>What the file holds</h2></div>
+        <div class="card-body">
+            <p class="muted mt-0">One line a parcel: tracking code, your invoice, recipient, phone, address and area, stage and any problem flagged, the cash on delivery and what was collected, the delivery, COD and total charges, the weight charged, when it was booked and finished, and the day it is due.</p>
+            <p class="muted mb-0">Leave the days empty for every parcel you have booked. The parcel list's Export button gives the parcels it shows.</p>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,69 @@
+@page
+@model Web.Pages.Admin.RequestsModel
+@{
+    ViewData["Title"] = "Requests";
+}
+
+<div class="page-head">
+    <div>
+        <h1>Requests</h1>
+        <p>Merchants asking to cancel a parcel on its way, which brings it back as a return, or to change its cash on delivery. Approving changes the parcel at once; a refusal needs a reason the merchant reads.</p>
+    </div>
+</div>
+
+<partial name="_Alerts" />
+
+<h2 class="section-title">To answer · @Model.Open.Count</h2>
+@if (Model.Open.Count == 0)
+{
+    <div class="card mb"><div class="empty">@Icons.Get("check-circle")<h3>Nothing to answer</h3><p>Merchants' requests show up here as they come in.</p></div></div>
+}
+@foreach (var r in Model.Open)
+{
+    <div class="card mb">
+        <div class="card-head">
+            <div>
+                <h3><a class="code-link" asp-page="/Hub/Parcel" asp-route-code="@r.TrackingCode">@r.TrackingCode</a> · @r.Merchant</h3>
+                <p>@Statuses.Asked(r.Kind, r.CodAmount, r.NewCodAmount): "@r.Reason" · asked @r.Asked.ToString("d MMM, h:mm tt")</p>
+            </div>
+            @Statuses.Badge(r.ParcelStatus)
+        </div>
+        <div class="card-body stack">
+            <form method="post" asp-page-handler="Approve" asp-route-code="@r.TrackingCode" class="gap">
+                <input type="text" name="answer" maxlength="200" placeholder="A note for the merchant (optional)" style="max-width:360px" />
+                <button class="btn btn-primary" type="submit" data-confirm="@(r.Kind == ParcelRequestKind.Cancel ? "The parcel comes back to its merchant, who pays the delivery and return charges." : "The rider collects the new amount, and the COD charge follows it.")" data-confirm-title="Approve this request?" data-confirm-ok="Approve">@Icons.Get("check") Approve</button>
+            </form>
+            <form method="post" asp-page-handler="Refuse" asp-route-code="@r.TrackingCode" class="gap">
+                <input type="text" name="answer" maxlength="200" placeholder="Why not" style="max-width:360px" required />
+                <button class="btn btn-outline" type="submit">@Icons.Get("x") Refuse</button>
+            </form>
+        </div>
+    </div>
+}
+
+<div class="card mt-lg">
+    <div class="card-head"><div><h2>Answered lately</h2><p>The last two weeks</p></div></div>
+    @if (Model.Answered.Count == 0)
+    {
+        <div class="card-body muted">Nothing answered in the last two weeks.</div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table compact">
+                <thead><tr><th>Parcel</th><th>Asked</th><th>Why</th><th>Answer</th></tr></thead>
+                <tbody>
+                    @foreach (var r in Model.Answered)
+                    {
+                        <tr>
+                            <td><a class="code-link" asp-page="/Hub/Parcel" asp-route-code="@r.TrackingCode">@r.TrackingCode</a><div class="cell-sub">@r.Merchant</div></td>
+                            <td>@Statuses.Asked(r.Kind, r.CodAmount, r.NewCodAmount)</td>
+                            <td>@r.Reason</td>
+                            <td>@Statuses.Badge(r.Status) @(r.Answer ?? "")<div class="cell-sub">@r.AnsweredOn?.ToString("d MMM, h:mm tt")</div></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

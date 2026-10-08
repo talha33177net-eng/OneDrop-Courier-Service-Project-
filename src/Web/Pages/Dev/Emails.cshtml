@@ -1,0 +1,61 @@
+@page
+@model Web.Pages.Dev.EmailsModel
+@{
+    ViewData["Title"] = "Email outbox";
+}
+
+<div class="page-head">
+    <div>
+        <h1>Email outbox</h1>
+        <p>
+            Development only. The last 50 emails to merchants.
+            @if (Model.Live)
+            {
+                <strong>A mail server is configured, so these were really sent.</strong>
+            }
+            else
+            {
+                <text>No mail server is configured, so they were kept here instead of being sent.</text>
+            }
+        </p>
+    </div>
+</div>
+
+@if (Model.Done is not null)
+{
+    <div class="alert alert-success" role="status">@Icons.Get("check-circle")<div>@Model.Done</div></div>
+}
+@if (Model.Problem is not null)
+{
+    <div class="alert alert-error" role="alert">@Icons.Get("alert")<div>The mail server refused it: @Model.Problem</div></div>
+}
+
+<form method="post" asp-page-handler="Test" class="mb">
+    <button type="submit" class="btn btn-primary">@Icons.Get("message") Send a test email@(Model.MailServer is { Length: > 0 } host ? " through " + host : "")</button>
+</form>
+
+<div class="card">
+    @if (Model.Messages.Count == 0)
+    {
+        <div class="empty">@Icons.Get("message")<h3>No emails yet</h3><p>Merchants are emailed when a payout is sent to their account.</p></div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Sent (UTC)</th><th>To</th><th>Subject</th><th>Message</th></tr></thead>
+                <tbody>
+                    @foreach (var message in Model.Messages)
+                    {
+                        <tr>
+                            <td class="nowrap">@message.On.ToString("HH:mm:ss")</td>
+                            <td class="nowrap">@message.To</td>
+                            <td class="cell-main">@message.Subject</td>
+                            <td style="white-space:pre-line">@message.Text</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

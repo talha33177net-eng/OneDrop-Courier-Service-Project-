@@ -11,12 +11,43 @@ public class CurrentUser(IHttpContextAccessor accessor) : ICurrentUser
 {
     public long? UserId => Read(ClaimTypes.NameIdentifier);
 
-    public long? MerchantId => Read(AppClaims.MerchantId);
+    /// <summary>
+    /// The business cookie, when it names one of the login's own businesses (listed on its sign-in, so a forged cookie
+    /// changes nothing); otherwise the account's main profile.
+    /// </summary>
+    public long? MerchantId
+    {
+        get
+        {
+            var account = Read(AppClaims.MerchantId);
+            var user = accessor.HttpContext?.User;
+            if (account is null || user is null ||
+                accessor.HttpContext!.Request.Cookies[BusinessCookie.Name(user)] is not { } chosen)
+            {
+                return account;
+            }
+
+            var mine = user.FindFirstValue(AppClaims.Businesses)?.Split(' ') ?? [];
+
+            return mine.Contains(chosen) ? long.Parse(chosen, CultureInfo.InvariantCulture) : account;
+        }
+    }
+
+    public long? AccountId => UserId is null ? null : Read(AppClaims.MerchantId);
 
     private long? Read(string claimType)
     {
         var value = accessor.HttpContext?.User.FindFirstValue(claimType);
 
         return long.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var id) ? id : null;
+    }
+}
+
+/// <summary>The cookie that remembers which business a merchant login is working in, one per login.</summary>
+public static class BusinessCookie
+{
+    public static string Name(ClaimsPrincipal user)
+    {
+        return $"business-{user.FindFirstValue(ClaimTypes.NameIdentifier)}";
     }
 }

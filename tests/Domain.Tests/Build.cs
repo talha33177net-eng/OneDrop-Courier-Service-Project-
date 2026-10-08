@@ -61,11 +61,12 @@ internal static class Build
         decimal cod = 1250,
         int grams = 500,
         ServiceArea area = ServiceArea.InsideCity,
-        long id = 100)
+        long id = 100,
+        long pickupPoint = 1)
     {
         var parcel = Domain.Parcels.Parcel.Create(new NewParcel(
             7,
-            1,
+            pickupPoint,
             pickupHub,
             new ParcelDetails(
                 1,
@@ -93,6 +94,26 @@ internal static class Build
         parcel.ClearDomainEvents();
 
         return parcel;
+    }
+
+    /// <summary>A parcel refused at the door and back at Mirpur, the hub that collected it, waiting to go back to merchant 7.</summary>
+    public static Parcel Returning(long id = 100, long pickupPoint = 1, long pickupHub = Mirpur)
+    {
+        var parcel = Parcel(pickupHub: pickupHub, id: id, pickupPoint: pickupPoint);
+        parcel.PickUp(Build.Today);
+        parcel.ReceiveAt(Mirpur, Build.Today);
+        parcel.AssignTo(5, Mirpur);
+        parcel.Refuse("Customer was not at home");
+        parcel.ReceiveAt(Mirpur, Build.Today);
+        parcel.ClearDomainEvents();
+
+        return parcel;
+    }
+
+    /// <summary>An active rider of <paramref name="hub"/> with an id, as if saved.</summary>
+    public static Rider Rider(long hub = Mirpur, long id = 5)
+    {
+        return WithId(Domain.Delivery.Rider.Create(hub, "Rafiq Hasan", "01722000001", Vehicle.Motorbike, null).Value, id);
     }
 
     public static T WithId<T>(T entity, long id)

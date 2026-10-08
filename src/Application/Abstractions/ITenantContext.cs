@@ -10,7 +10,8 @@ public sealed record TenantInfo(
     string SmsSenderName,
     string SupportPhone,
     int MaxDeliveryAttempts,
-    TimeOnly? RiderReturnTime);
+    TimeOnly? RiderReturnTime,
+    int? MaxBusinessesPerAccount);
 
 /// <summary>
 /// The tenant the current request or job runs for. Resolved once per request from the subdomain or the merchant's API

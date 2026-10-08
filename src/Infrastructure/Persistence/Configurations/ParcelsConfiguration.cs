@@ -4,6 +4,7 @@ using Domain.Delivery;
 using Domain.Merchants;
 using Domain.Network;
 using Domain.Parcels;
+using Infrastructure.Identity;
 
 namespace Infrastructure.Persistence.Configurations;
 
@@ -28,14 +29,18 @@ public class ParcelConfiguration : IEntityTypeConfiguration<Parcel>
         builder.Property(p => p.Note).HasMaxLength(500);
         builder.Property(p => p.CodAmount).IsMoney();
         builder.Property(p => p.DeliveryCharge).HasPrecision(10, 2);
+        builder.Property(p => p.BaseCharge).HasPrecision(10, 2);
+        builder.Property(p => p.ExtraKgCharge).HasPrecision(10, 2);
         builder.Property(p => p.CodChargePercent).HasPrecision(5, 2);
         builder.Property(p => p.ReturnCharge).HasPrecision(10, 2);
         builder.Property(p => p.HoldReason).HasMaxLength(200);
         builder.Property(p => p.ReturnReason).HasMaxLength(200);
+        builder.Property(p => p.IssueNote).HasMaxLength(200);
         builder.Property(p => p.CollectedAmount).HasPrecision(12, 2);
         builder.Property(p => p.CodCharge).HasPrecision(10, 2);
         builder.Property(p => p.RowVersion).IsRowVersion();
         builder.Ignore(p => p.Charges);
+        builder.Ignore(p => p.BilledWeightGrams);
         builder.Ignore(p => p.IsFinal);
         builder.Ignore(p => p.TotalCharge);
 
@@ -56,6 +61,27 @@ public class ParcelConfiguration : IEntityTypeConfiguration<Parcel>
             .IsUnique()
             .HasFilter("[IdempotencyKey] IS NOT NULL")
             .HasDatabaseName("UX_Parcel_Merchant_IdempotencyKey");
+    }
+}
+
+public class ParcelRequestConfiguration : IEntityTypeConfiguration<ParcelRequest>
+{
+    public void Configure(EntityTypeBuilder<ParcelRequest> builder)
+    {
+        builder.MapTenantOwned(Schemas.Parcels);
+        builder.Property(r => r.CodAmount).IsMoney();
+        builder.Property(r => r.NewCodAmount).HasPrecision(12, 2);
+        builder.Property(r => r.Reason).HasMaxLength(200);
+        builder.Property(r => r.Answer).HasMaxLength(200);
+        builder.Property(r => r.RowVersion).IsRowVersion();
+        builder.HasOne<Merchant>().WithMany().HasForeignKey(r => r.MerchantId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Parcel>().WithMany().HasForeignKey(r => r.ParcelId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<AppUser>().WithMany().HasForeignKey(r => r.RequestedById).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<AppUser>().WithMany().HasForeignKey(r => r.AnsweredById).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(r => r.ParcelId)
+            .IsUnique()
+            .HasFilter("[Status] = 1")
+            .HasDatabaseName("UX_ParcelRequest_Parcel_Open");
     }
 }
 

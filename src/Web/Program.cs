@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Mvc;
 using Application;
 using Hangfire;
 using Infrastructure;
@@ -70,6 +71,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IOperationsFeed, OperationsFeed>();
 builder.Services.AddSingleton<ReceivedWebhooks>();
+builder.Services.AddScoped<MerchantPermissionFilter>();
 builder.Services.AddRazorPages(options =>
 {
     options.Conventions.AuthorizeFolder("/Merchant", Policies.MerchantPortal);
@@ -77,6 +79,9 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizeFolder("/Hub", Policies.Operations);
     options.Conventions.AuthorizeFolder("/Admin", Policies.OperatorAdmin);
     options.Conventions.AddFolderApplicationModelConvention("/Hub", model => model.Filters.Add(new RememberHub()));
+    options.Conventions.AddFolderApplicationModelConvention(
+        "/Merchant",
+        model => model.Filters.Add(new ServiceFilterAttribute(typeof(MerchantPermissionFilter))));
     options.Conventions.AuthorizeFolder("/Rider", Policies.Rider);
 });
 

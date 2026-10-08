@@ -1,6 +1,11 @@
 @using System.Security.Claims
 @inject ITenantContext TenantContext
 @inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Environment
+@inject ICurrentUser CurrentUser
+@inject Application.Merchants.Businesses.MerchantBusinessesHandler Businesses
+@inject Application.Notifications.Bell.MerchantBellHandler BellHandler
+@inject Application.Notifications.Bell.AdminBellHandler AdminBell
+@inject Application.Notifications.Bell.MenuWorkHandler MenuWork
 @{
     var tenant = TenantContext.Tenant;
     var user = Context.User;
@@ -12,17 +17,53 @@
     var isHub = user.IsInRole(Roles.HubStaff);
     var isRider = user.IsInRole(Roles.Rider);
     var isPlatform = user.IsInRole(Roles.PlatformAdmin);
+    var rights = Context.Items[MerchantPages.RightsKey] as MerchantRights;
     var panel = isMerchant ? "Merchant panel" : isAdmin ? "Admin panel" : isHub ? "Hub panel" : isRider ? "Rider app" : isPlatform ? "Platform" : "";
-    var role = isMerchant ? "Merchant" : isAdmin ? "Admin" : isHub ? "Hub staff" : isRider ? "Rider" : isPlatform ? "Platform admin" : "";
+    var role = isMerchant && rights is { IsOwner: false } ? "Moderator" : isMerchant ? "Merchant" : isAdmin ? "Admin" : isHub ? "Hub staff" : isRider ? "Rider" : isPlatform ? "Platform admin" : "";
+    var email = user.Identity?.Name ?? "";
+    var menu = Menu.For(user, rights);
+    var hasFavourites = Menu.HasFavourites(user);
+    var favourites = hasFavourites ? Menu.Favourites(user, Context.Request.Cookies, rights) : [];
+    var businesses = isMerchant && CurrentUser.AccountId is not null ? await Businesses.NamesAsync() : [];
+    var currentBusiness = businesses.FirstOrDefault(business => business.Id == CurrentUser.MerchantId);
+    var currentPicture = currentBusiness is null ? null : Pictures.Url(currentBusiness.Id, currentBusiness.Picture);
 
-    string Active(params string[] pages) => pages.Any(p => page == p || (p.EndsWith('*') && page.StartsWith(p.TrimEnd('*')))) ? "nav-link active" : "nav-link";
+    // What happened to the merchant's parcels and money, or what waits for the admin, since the bell was last opened (a
+    // cookie per login, like favourites)
+    var bellCookie = $"bell-{user.FindFirstValue(ClaimTypes.NameIdentifier)}";
+    DateTime? bellSeen = Context.Request.Cookies.TryGetValue(bellCookie, out var seenTicks) && long.TryParse(seenTicks, out var ticks)
+        ? new DateTime(ticks, DateTimeKind.Utc)
+        : null;
+    var bell = isMerchant && CurrentUser.MerchantId is not null
+        ? await BellHandler.ForAsync(
+            rights is null || rights.May(Domain.Merchants.MerchantPermissions.Parcels),
+            rights is null || rights.May(Domain.Merchants.MerchantPermissions.Payments),
+            bellSeen)
+        : isAdmin && tenant is not null
+            ? await AdminBell.ForAsync(bellSeen)
+            : null;
+    // The menu places where work waits for this person, marked like the bell
+    IReadOnlySet<string> work = tenant is null ? new HashSet<string>()
+        : isAdmin ? await MenuWork.AdminAsync()
+        : isMerchant && CurrentUser.MerchantId is not null ? await MenuWork.MerchantAsync()
+        : isRider ? await MenuWork.RiderAsync()
+        : new HashSet<string>();
+    var workShown = menu.SelectMany(group => group.Items).Any(item => work.Contains(item.Href));
+    string Ago(DateTime at)
+    {
+        var gone = DateTime.UtcNow - at;
+        return gone.TotalMinutes < 1 ? "just now"
+            : gone.TotalHours < 1 ? $"{(int)gone.TotalMinutes} min ago"
+            : gone.TotalDays < 1 ? $"{(int)gone.TotalHours} h ago"
+            : (tenant is null ? at : tenant.Local(at)).ToString("ddd d MMM, h:mm tt");
+    }
 }
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#141820" />
+    <meta name="theme-color" content="#ffffff" />
     <title>@ViewData["Title"] · @(tenant?.Name ?? "OneDrop")</title>
     <link rel="icon" href="~/icons/icon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -30,6 +71,10 @@
     <partial name="_Fonts" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     @await RenderSectionAsync("Head", required: false)
+    <script>
+        // Read before the first paint, so a hidden amount is never shown for a moment first.
+        try { if (localStorage.getItem("amounts-hidden") === "1") { document.documentElement.classList.add("amounts-hidden"); } } catch { }
+    </script>
 </head>
 <body>
     <div class="app">
@@ -43,89 +88,48 @@
                 </span>
             </a>
 
-            @if (isMerchant)
-            {
-                <nav class="nav-section">
-                    <a class="@Active("/Merchant/Index")" asp-page="/Merchant/Index">@Icons.Get("dashboard") Dashboard</a>
-                </nav>
-                <nav class="nav-section">
-                    <div class="nav-label">Parcels</div>
-                    <a class="@Active("/Merchant/NewParcel")" asp-page="/Merchant/NewParcel">@Icons.Get("plus") Book a parcel</a>
-                    <a class="@Active("/Merchant/Parcels", "/Merchant/Parcel", "/Merchant/EditParcel")" asp-page="/Merchant/Parcels">@Icons.Get("package") All parcels</a>
-                    <a class="@Active("/Merchant/BulkUpload")" asp-page="/Merchant/BulkUpload">@Icons.Get("upload") Bulk upload</a>
-                    <a class="@Active("/Merchant/Pickups")" asp-page="/Merchant/Pickups">@Icons.Get("truck") Pickup requests</a>
-                    <a class="@Active("/Merchant/Labels")" asp-page="/Merchant/Labels">@Icons.Get("printer") Print labels</a>
-                </nav>
-                <nav class="nav-section">
-                    <div class="nav-label">Money and tools</div>
-                    <a class="@Active("/Merchant/Payments", "/Merchant/Payment")" asp-page="/Merchant/Payments">@Icons.Get("wallet") Payments</a>
-                    <a class="@Active("/Merchant/FraudCheck")" asp-page="/Merchant/FraudCheck">@Icons.Get("shield") Fraud check</a>
-                    <a class="@Active("/Merchant/Pricing")" asp-page="/Merchant/Pricing">@Icons.Get("tag") Rates and calculator</a>
-                </nav>
-                <nav class="nav-section">
-                    <div class="nav-label">Account</div>
-                    <a class="@Active("/Merchant/Settings")" asp-page="/Merchant/Settings">@Icons.Get("settings") Settings</a>
-                    <a class="@Active("/Merchant/ApiKeys")" asp-page="/Merchant/ApiKeys">@Icons.Get("key") API keys</a>
-                    <a class="@Active("/Merchant/Webhook")" asp-page="/Merchant/Webhook">@Icons.Get("zap") Webhooks</a>
-                </nav>
-            }
+            @* Who is signed in, at the top of the menu where it is looked for; a merchant also sees the business it works in *@
+            <div class="account-block">
+                <div class="account-card">
+                    <span class="avatar">@if (currentPicture is not null) {<img src="@currentPicture" alt="" />} else {@initials}</span>
+                    <span class="account-card-text">
+                        <span class="account-card-name">@name</span>
+                        <span class="account-card-role">@role</span>
+                    </span>
+                </div>
+                @if (currentBusiness is not null)
+                {
+                    <details class="business-switch" data-popover>
+                        <summary>
+                            <span class="business-option-icon">@if (Pictures.Url(currentBusiness.Id, currentBusiness.Picture) is { } mark) {<img src="@mark" alt="" />} else {@Icons.Get("store")}</span>
+                            <span class="business-option-text">@currentBusiness.Name<small>@(currentBusiness.IsMain ? "Main profile" : "Business")</small></span>
+                            @Icons.Get("chevron-down")
+                        </summary>
+                        <div class="business-switch-panel">
+                            <partial name="_BusinessSwitch" model="(businesses, currentBusiness.Id)" />
+                        </div>
+                    </details>
+                }
+            </div>
 
-            @if (isAdmin)
+            @foreach (var group in menu)
             {
                 <nav class="nav-section">
-                    <a class="@Active("/Admin/Index")" asp-page="/Admin/Index">@Icons.Get("dashboard") Dashboard</a>
-                </nav>
-                <nav class="nav-section">
-                    <div class="nav-label">Operations</div>
-                    <a class="@Active("/Hub/Parcels", "/Hub/Parcel")" asp-page="/Hub/Parcels">@Icons.Get("package") Parcels</a>
-                    <a class="@Active("/Hub/Index", "/Hub/Scan", "/Hub/Assign", "/Hub/Runs", "/Hub/Pickups")" asp-page="/Hub/Index">@Icons.Get("warehouse") Hub operations</a>
-                </nav>
-                <nav class="nav-section">
-                    <div class="nav-label">People</div>
-                    <a class="@Active("/Admin/Merchants", "/Admin/Merchant", "/Admin/NewMerchant")" asp-page="/Admin/Merchants">@Icons.Get("store") Merchants</a>
-                    <a class="@Active("/Admin/Riders", "/Admin/Rider")" asp-page="/Admin/Riders">@Icons.Get("bike") Riders</a>
-                </nav>
-                <nav class="nav-section">
-                    <div class="nav-label">Money</div>
-                    <a class="@Active("/Admin/Payouts", "/Admin/Payout")" asp-page="/Admin/Payouts">@Icons.Get("wallet") Merchant payouts</a>
-                </nav>
-                <nav class="nav-section">
-                    <div class="nav-label">Setup</div>
-                    <a class="@Active("/Admin/Rates")" asp-page="/Admin/Rates">@Icons.Get("tag") Delivery rates</a>
-                    <a class="@Active("/Admin/Vehicles")" asp-page="/Admin/Vehicles">@Icons.Get("truck") Vehicles</a>
-                    <a class="@Active("/Admin/Coverage")"asp-page="/Admin/Coverage">@Icons.Get("globe") Coverage</a>
-                    <a class="@Active("/Admin/Messages")" asp-page="/Admin/Messages">@Icons.Get("message") Failed messages</a>
-                </nav>
-            }
-            else if (isHub)
-            {
-                <nav class="nav-section">
-                    <div class="nav-label">Hub</div>
-                    <a class="@Active("/Hub/Index")" asp-page="/Hub/Index">@Icons.Get("dashboard") Hub board</a>
-                    <a class="@Active("/Hub/Scan")" asp-page="/Hub/Scan">@Icons.Get("scan") Scan parcels</a>
-                    <a class="@Active("/Hub/Pickups")" asp-page="/Hub/Pickups">@Icons.Get("truck") Pickup requests</a>
-                    <a class="@Active("/Hub/Assign")" asp-page="/Hub/Assign">@Icons.Get("send") Assign to riders</a>
-                    <a class="@Active("/Hub/Runs")" asp-page="/Hub/Runs">@Icons.Get("cash") Rider closing</a>
-                </nav>
-                <nav class="nav-section">
-                    <div class="nav-label">Find</div>
-                    <a class="@Active("/Hub/Parcels", "/Hub/Parcel")" asp-page="/Hub/Parcels">@Icons.Get("search") Parcels</a>
-                </nav>
-            }
-
-            @if (isRider)
-            {
-                <nav class="nav-section">
-                    <a class="@Active("/Rider/Index", "/Rider/Delivery")" asp-page="/Rider/Index">@Icons.Get("bike") My deliveries</a>
-                    <a class="@Active("/Rider/Pickups", "/Rider/Pickup")" asp-page="/Rider/Pickups">@Icons.Get("truck") My pickups</a>
-                </nav>
-            }
-
-            @if (isPlatform)
-            {
-                <nav class="nav-section">
-                    <a class="@Active("/Platform/Tenants")" asp-page="/Platform/Tenants">@Icons.Get("layers") Couriers</a>
-                    <a class="nav-link" href="/jobs">@Icons.Get("clock") Background jobs</a>
+                    @if (group.Label is not null)
+                    {
+                        <div class="nav-label">@group.Label</div>
+                    }
+                    @foreach (var item in group.Items)
+                    {
+                        var pinned = favourites.Contains(item);
+                        <div class="nav-item">
+                            <a class="nav-link @(Menu.IsCurrent(item, page) ? "active" : "")" href="@item.Href">@Icons.Get(item.Icon) @item.Label@if (work.Contains(item.Href)) {<span class="nav-work" title="Work waiting here">!</span><span class="sr-only">, work waiting</span>}</a>
+                            @if (hasFavourites)
+                            {
+                                <button type="button" class="nav-star no-print" data-fav="@item.Href" aria-pressed="@(pinned ? "true" : "false")" title="@(pinned ? "Remove from favourites" : "Add to favourites")">@Icons.Get("star")<span class="sr-only">Favourite @item.Label</span></button>
+                            }
+                        </div>
+                    }
                 </nav>
             }
 
@@ -158,7 +162,7 @@
                     <a class="nav-link" asp-page="/Track">@Icons.Get("search") Track a parcel</a>
                 }
                 <form method="post" asp-page="/Account/Logout">
-                    <button type="submit" class="nav-link">@Icons.Get("logout") Sign out</button>
+                    <button type="submit" class="nav-link sign-out">@Icons.Get("logout") Sign out</button>
                 </form>
             </div>
         </aside>
@@ -166,15 +170,18 @@
 
         <div class="main">
             <header class="topbar">
-                <label for="nav-open" class="menu-toggle" title="Menu">@Icons.Get("menu")</label>
-                <div class="topbar-company">
-                    @(tenant?.Name ?? "OneDrop platform")
-                    @if (tenant is not null)
-                    {
-                        <small>Hotline @tenant.SupportPhone</small>
-                    }
-                </div>
+                <label for="nav-open" class="menu-toggle" title="Menu">@Icons.Get("menu")@if (workShown) {<span class="nav-work" aria-hidden="true">!</span>}</label>
+                <div class="topbar-title">@ViewData["Title"]</div>
                 <div class="topbar-actions">
+                    @if (isMerchant)
+                    {
+                        @* The check a shop makes before sending any parcel cash on delivery, so it is on every page. *@
+                        <form class="topbar-check no-print" method="get" asp-page="/Merchant/FraudCheck">
+                            @Icons.Get("shield")
+                            <input type="tel" name="phone" placeholder="Customer phone" title="Check how often this number has taken parcels before you send cash on delivery" aria-label="Check a customer's phone number" inputmode="numeric" />
+                            <button type="submit">Check</button>
+                        </form>
+                    }
                     @if (isAdmin || isHub || isMerchant)
                     {
                         <form class="topbar-search no-print" method="get" action="@(isMerchant ? "/Merchant/Parcels" : "/Hub/Parcels")" role="search">
@@ -182,22 +189,134 @@
                             <input type="search" name="search" placeholder="Tracking code, phone or name" aria-label="Search parcels" />
                             <kbd title="Press / to search">/</kbd>
                         </form>
+                        <button type="button" class="icon-btn no-print" data-hide-amounts title="Hide the amounts on screen" aria-pressed="false">
+                            <span class="when-shown">@Icons.Get("eye")</span>
+                            <span class="when-hidden">@Icons.Get("eye-off")</span>
+                            <span class="sr-only">Hide the amounts on screen</span>
+                        </button>
                     }
-                    <div class="user-chip">
-                        <span class="avatar">@initials</span>
-                        <span class="user-chip-text">
-                            <span class="user-chip-name">@name</span>
-                            <span class="user-chip-role">@role</span>
-                        </span>
-                    </div>
+                    @if (bell is not null)
+                    {
+                        <details class="bell no-print" data-popover data-bell data-bell-cookie="@bellCookie" data-bell-latest="@bell.Latest">
+                            <summary class="icon-btn" title="What happened">
+                                @Icons.Get("bell")
+                                @if (bell.Unread > 0)
+                                {
+                                    <span class="bell-count" data-bell-count>@(bell.Unread > 9 ? "9+" : bell.Unread.ToString())</span>
+                                }
+                                <span class="sr-only">What happened@(bell.Unread > 0 ? $", {bell.Unread} new" : "")</span>
+                            </summary>
+                            <div class="bell-panel">
+                                @if (isMerchant)
+                                {
+                                    <div class="bell-head">What happened <span class="muted">in the last @Application.Notifications.Bell.MerchantBellHandler.Days days</span></div>
+                                }
+                                else
+                                {
+                                    <div class="bell-head">Waiting for you</div>
+                                }
+                                @if (bell.Notices.Count == 0)
+                                {
+                                    <div class="bell-empty">@(isMerchant ? "Nothing yet. Deliveries, returns, answers and payouts show up here." : "Nothing is waiting for you. Sign-ups, requests, flagged parcels and payout problems show up here.")</div>
+                                }
+                                else
+                                {
+                                    <ul class="bell-list">
+                                        @foreach (var notice in bell.Notices)
+                                        {
+                                            <li class="@(bellSeen is null || notice.At > bellSeen ? "unread" : "")">
+                                                <a href="@notice.Link">
+                                                    <span class="bell-icon bell-@notice.Tone.ToString().ToLowerInvariant()">@Icons.Get(notice.Icon)</span>
+                                                    <span class="bell-text">@notice.Text<small>@Ago(notice.At)</small></span>
+                                                </a>
+                                            </li>
+                                        }
+                                    </ul>
+                                }
+                            </div>
+                        </details>
+                    }
+                    @if (tenant is not null)
+                    {
+                        <a class="topbar-hotline no-print" href="tel:@tenant.SupportPhone" title="Call @tenant.Name on @tenant.SupportPhone">
+                            <span class="topbar-hotline-icon">@Icons.Get("phone")</span>
+                            <span class="topbar-hotline-text"><small>Hotline</small>@tenant.SupportPhone</span>
+                        </a>
+                    }
+                    <details class="user-menu no-print" data-popover>
+                        <summary title="Your account">
+                            <span class="avatar">@if (currentPicture is not null) {<img src="@currentPicture" alt="" />} else {@initials}</span>
+                            @Icons.Get("chevron-down")
+                            <span class="sr-only">Your account</span>
+                        </summary>
+                        <div class="user-menu-panel">
+                            <div class="account-card">
+                                <span class="avatar">@if (currentPicture is not null) {<img src="@currentPicture" alt="" />} else {@initials}</span>
+                                <span class="account-card-text">
+                                    <span class="account-card-name">@name</span>
+                                    <span class="account-card-role">@email</span>
+                                    <span class="badge plain">@role</span>
+                                </span>
+                            </div>
+                            @if (currentBusiness is not null)
+                            {
+                                <div class="merchant-id" title="Give this number when you call the hotline">
+                                    <span>Merchant ID <strong class="mono">@currentBusiness.Id</strong></span>
+                                    <button type="button" class="btn btn-ghost btn-sm" data-copy="@currentBusiness.Id" title="Copy the merchant ID" aria-label="Copy the merchant ID">@Icons.Get("copy")</button>
+                                </div>
+                                <partial name="_BusinessSwitch" model="(businesses, currentBusiness.Id)" />
+                            }
+                            <nav class="user-menu-links">
+                                @if (isMerchant)
+                                {
+                                    <a href="/Merchant/Settings">@Icons.Get("store") Business profile</a>
+                                    <a href="/Merchant/Settings#payout">@Icons.Get("wallet") Payout account</a>
+                                    <a href="/Merchant/ApiKeys">@Icons.Get("key") API keys</a>
+                                    <a href="/Merchant/Webhook">@Icons.Get("zap") Webhooks</a>
+                                }
+                                <a href="/Account/Password">@Icons.Get("lock") Change password</a>
+                            </nav>
+                            <form method="post" asp-page="/Account/Logout" class="user-menu-links">
+                                <button type="submit" class="sign-out">@Icons.Get("logout") Sign out</button>
+                            </form>
+                        </div>
+                    </details>
                 </div>
             </header>
+            @if (hasFavourites)
+            {
+                @* Shortcuts a person chooses with the stars in the menu; up to eight, on every page *@
+                <nav class="favbar no-print" aria-label="Favourites" data-favbar data-fav-cookie="@Menu.CookieName(user)" data-fav-max="@Menu.MaxFavourites">
+                    <span class="favbar-label">@Icons.Get("star") Favourites</span>
+                    <div class="favbar-items" data-fav-items>
+                        @foreach (var item in favourites)
+                        {
+                            <a class="fav-chip @(Menu.IsCurrent(item, page) ? "active" : "")" href="@item.Href" data-fav-chip="@item.Href">@Icons.Get(item.Icon) @item.Label@if (work.Contains(item.Href)) {<span class="nav-work" title="Work waiting here">!</span><span class="sr-only">, work waiting</span>}</a>
+                        }
+                        <span class="favbar-empty" @(favourites.Count > 0 ? "hidden" : "")>Press a star in the menu to keep a page here.</span>
+                    </div>
+                    <details class="fav-add" data-popover>
+                        <summary>@Icons.Get("plus") Add <span class="fav-count" data-fav-count>@favourites.Count/@Menu.MaxFavourites</span></summary>
+                        <div class="fav-panel">
+                            <div class="fav-panel-head">Pin up to @Menu.MaxFavourites pages</div>
+                            @foreach (var item in menu.SelectMany(g => g.Items).DistinctBy(item => item.Href))
+                            {
+                                var pinned = favourites.Contains(item);
+                                <button type="button" class="fav-option" data-fav="@item.Href" aria-pressed="@(pinned ? "true" : "false")">
+                                    @Icons.Get(item.Icon)<span class="fav-option-label">@item.Label</span>@Icons.Get("check", "fav-option-check")
+                                </button>
+                            }
+                        </div>
+                    </details>
+                </nav>
+            }
             @if (Environment.IsDevelopment())
             {
                 <div class="demo-strip no-print">
                     <strong>Demo mode</strong>
                     <span>No real SMS or money leaves this computer.</span>
                     <a asp-page="/Dev/Sms">SMS inbox</a>
+                    <a asp-page="/Dev/Emails">Email outbox</a>
                     <a asp-page="/Dev/Payouts">Payouts sent</a>
                     <a asp-page="/Dev/Webhooks">Webhooks received</a>
                 </div>
@@ -206,7 +325,7 @@
                 @RenderBody()
             </main>
             <footer class="app-credit no-print">
-                Developed and designed by <a class="credit-link" href="https://talha.portfolio.bdcorex.com/" target="_blank" rel="noopener">Talha</a>
+                Developed and designed by <a class="credit-link" href="https://talha.portfolio.bdcorex.com/" target="_blank" rel="noopener">Talha</a> from <a class="credit-link" href="https://octopi-digital.com/" target="_blank" rel="noopener">Octopi Digital</a>
             </footer>
         </div>
     </div>

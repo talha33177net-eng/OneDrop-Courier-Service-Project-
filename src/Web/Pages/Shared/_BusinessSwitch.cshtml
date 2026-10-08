@@ -1,0 +1,24 @@
+@using Application.Merchants.Businesses
+@model (IReadOnlyList<BusinessItem> Businesses, long Current)
+@* The businesses of a merchant's account: the one being worked in is ticked; opening another starts on its dashboard *@
+<div class="business-switch-list">
+    <div class="business-switch-label">Switch business</div>
+    @foreach (var business in Model.Businesses)
+    {
+        var current = business.Id == Model.Current;
+        <form method="post" asp-page="/Merchant/Businesses" asp-page-handler="Open" asp-route-id="@business.Id">
+            <button type="submit" class="business-option @(current ? "current" : "")" aria-current="@(current ? "true" : null)">
+                <span class="business-option-icon">@if (Pictures.Url(business.Id, business.Picture) is { } mark) {<img src="@mark" alt="" />} else {@Icons.Get("store")}</span>
+                <span class="business-option-text">@business.Name<small>@(business.IsMain ? "Main profile" : "Business")</small></span>
+                @if (current)
+                {
+                    @Icons.Get("check")
+                }
+            </button>
+        </form>
+    }
+    <div class="business-switch-links">
+        <a href="/Merchant/NewBusiness">@Icons.Get("plus") Add business</a>
+        <a href="/Merchant/Businesses">@Icons.Get("layers") Manage businesses</a>
+    </div>
+</div>

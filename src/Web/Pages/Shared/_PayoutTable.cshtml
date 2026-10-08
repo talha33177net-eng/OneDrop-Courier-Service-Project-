@@ -29,7 +29,7 @@ else
                 @foreach (var row in Model.Rows)
                 {
                     <tr>
-                        <td><a class="code-link" href="@(Model.Link + row.Number)">@row.Number</a><div class="cell-sub">@row.Created.ToString("d MMM yyyy")</div></td>
+                        <td class="nowrap"><a class="code-link" href="@(Model.Link + row.Number)">@row.Number</a><div class="cell-sub">@row.Created.ToString("d MMM yyyy")</div></td>
                         @if (Model.ShowMerchant)
                         {
                             <td>@row.Merchant</td>
@@ -38,9 +38,9 @@ else
                         <td class="num">@row.Parcels</td>
                         <td class="num">@Money.Taka(row.CodTotal)</td>
                         <td class="num negative">@Money.Taka(-row.ChargesTotal)</td>
-                        <td class="num strong">@Money.Taka(row.Amount)</td>
+                        <td class="num strong">@Money.Taka(row.Amount)@if (row.AdjustmentsTotal != 0) { <div class="cell-sub">@Money.Taka(row.AdjustmentsTotal) adjusted</div> }</td>
                         <td>@row.Method.DisplayName()<div class="cell-sub">@row.Account</div></td>
-                        <td>@Statuses.Badge(row.Status)</td>
+                        <td>@Statuses.Badge(row.Status, row.IsStuck)</td>
                     </tr>
                 }
             </tbody>

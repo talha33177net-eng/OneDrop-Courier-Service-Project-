@@ -18,6 +18,69 @@
 
 <partial name="_Alerts" />
 
+@if (Model.OpenRequest is { } request)
+{
+    <div class="alert alert-info">@Icons.Get("message")<div><strong>The merchant asked:</strong> @Statuses.Asked(request.Kind, request.CodAmount, request.NewCodAmount). "@request.Reason" An admin answers it under <a asp-page="/Admin/Requests">Requests</a>.</div></div>
+}
+
+@if (p.CanReweigh)
+{
+    <div class="card mb">
+        <div class="card-head">
+            <div>
+                <h2>@Icons.Get("package") Weigh this parcel</h2>
+                <p>
+                    The merchant booked it as @Money.Kg(p.WeightGrams)@(p.MeasuredWeightGrams is null ? "" : $", and it was weighed at {Money.Kg(p.MeasuredWeightGrams.Value)}").
+                    What the scale says is what the merchant pays, at the rates the parcel was booked under.
+                </p>
+            </div>
+        </div>
+        <div class="card-body">
+            <form method="post" asp-page-handler="Reweigh" asp-route-code="@p.TrackingCode" class="gap">
+                <div class="input-group" style="max-width:200px">
+                    <input type="number" name="weightKg" step="0.01" min="0.01" max="30" value="@((p.BilledWeightGrams / 1000m).ToString("0.##"))" aria-label="Weight in kilograms" required />
+                    <span class="suffix">kg</span>
+                </div>
+                <button class="btn btn-primary" type="submit" data-confirm="The delivery charge is worked out again on this weight, and the merchant sees the change on the parcel." data-confirm-title="Charge on this weight?" data-confirm-ok="Save the weight">Save the weight</button>
+            </form>
+        </div>
+    </div>
+}
+
+@if (p.Issue is not null)
+{
+    <div class="card mb">
+        <div class="card-head">
+            <div>
+                <h2>@Icons.Get("flag") Clear the flag</h2>
+                <p>Once the problem below is settled, clear the flag so the parcel can go out to a rider again. The merchant sees what you write.</p>
+            </div>
+        </div>
+        <div class="card-body">
+            <form method="post" asp-page-handler="ClearFlag" asp-route-code="@p.TrackingCode" class="gap">
+                <input type="text" name="note" maxlength="200" placeholder="What was done" style="max-width:420px" />
+                <button class="btn btn-primary" type="submit">@Icons.Get("check") Clear the flag</button>
+            </form>
+        </div>
+    </div>
+}
+else if (p.CanFlag)
+{
+    <div class="card mb">
+        <div class="card-body">
+            <form method="post" asp-page-handler="Flag" asp-route-code="@p.TrackingCode" class="gap">
+                <select name="issue" aria-label="Kind of problem" style="max-width:170px">
+                    <option value="InReview">In review</option>
+                    <option value="Exceptional">Exceptional</option>
+                </select>
+                <input type="text" name="note" maxlength="200" placeholder="What the problem is" style="max-width:360px" required />
+                <button class="btn btn-outline" type="submit">@Icons.Get("flag") Flag a problem</button>
+            </form>
+            <p class="hint mb-0">In review: something to check, such as the address or the contents. Exceptional: something went wrong, such as damage. Either keeps the parcel off riders' runs until it is cleared, and the merchant sees it.</p>
+        </div>
+    </div>
+}
+
 @if (p.CanRequestReturn)
 {
     <div class="card mb">

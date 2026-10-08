@@ -103,7 +103,22 @@ public partial class PortalPagesTests(WebAppFactory factory) : AppTests(factory)
         Assert.Contains("art-paid", page);
         Assert.Matches(Landing(), page);
         Assert.Contains("Inside city", page);
-        Assert.DoesNotMatch(Landing(), await Visit("").PageAsync("/"));
+    }
+
+    [Fact]
+    public async Task The_bare_domain_sends_visitors_to_the_home_courier_and_platform_staff_still_sign_in_there()
+    {
+        WebAppFactory.RequireDatabase();
+
+        var visitor = await Visit("").GetAsync("/");
+        Assert.Equal(HttpStatusCode.Redirect, visitor.StatusCode);
+        Assert.Equal("http://onedrop.localhost/", visitor.Headers.Location!.ToString());
+
+        Assert.Equal(HttpStatusCode.OK, (await Visit("").GetAsync("/Account/Login")).StatusCode);
+        var staff = await SignInAsync("", "admin@platform.test");
+        var home = await staff.GetAsync("/");
+        Assert.Equal("/Platform/Tenants", home.Headers.Location!.ToString());
+        Assert.Contains("onedrop", await staff.PageAsync("/Platform/Tenants"));
     }
 
     [Fact]

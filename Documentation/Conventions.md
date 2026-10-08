@@ -27,10 +27,10 @@ dotnet test --project tests/Integration.Tests
 ```
 
 - Tests run on Microsoft.Testing.Platform (`global.json`), so use `dotnet test --project <path>`.
-- The integration suite runs against `OneDrop-Test` on 10.50.0.1, named in the git-ignored
+- The integration suite runs against `OneDrop-Test` on ras-x2, named in the git-ignored
   `tests/Integration.Tests/testsettings.Local.json` (`INTEGRATION_TEST_DB` overrides it). With no database
   configured it skips itself, and a green run with everything skipped means nothing ran. After a schema change,
-  update it with `./tools/db/publish.ps1 -Database OneDrop-Test`. Ask before creating any other database on 10.50.0.1.
+  update it with `./tools/db/publish.ps1 -Database OneDrop-Test`. Ask before creating any other database on ras-x2.
 - Never point integration tests at the dev database `OneDrop`.
 - Connection strings (they contain the password) live only in git-ignored `*.Local.json` files. Never commit one.
 - No product-name prefix in code: projects, folders and namespaces are `Domain`, `Application`, `Infrastructure`,

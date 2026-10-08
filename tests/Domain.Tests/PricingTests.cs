@@ -6,11 +6,11 @@ namespace Domain.Tests;
 /// <summary>What a parcel costs: the service area between two zones, the rate by weight, the COD charge.</summary>
 public class PricingTests
 {
-    private static readonly Zone Mirpur = new("MIR", "Mirpur", 1, "Dhaka", isSuburb: false);
-    private static readonly Zone Gulshan = new("GUL", "Gulshan", 2, "Dhaka", isSuburb: false);
-    private static readonly Zone Savar = new("SAV", "Savar", 3, "Dhaka", isSuburb: true);
-    private static readonly Zone Sylhet = new("SYL", "Sylhet", 4, "Sylhet", isSuburb: false);
-    private static readonly Zone Agrabad = new("CTG", "Chattogram", 5, "Chattogram", isSuburb: false);
+    private static readonly Zone Mirpur = Zone.Create("MIR", "Mirpur", 1, "Dhaka", isSuburb: false).Value;
+    private static readonly Zone Gulshan = Zone.Create("GUL", "Gulshan", 2, "Dhaka", isSuburb: false).Value;
+    private static readonly Zone Savar = Zone.Create("SAV", "Savar", 3, "Dhaka", isSuburb: true).Value;
+    private static readonly Zone Sylhet = Zone.Create("SYL", "Sylhet", 4, "Sylhet", isSuburb: false).Value;
+    private static readonly Zone Agrabad = Zone.Create("CTG", "Chattogram", 5, "Chattogram", isSuburb: false).Value;
 
     [Fact]
     public void The_service_area_is_the_same_city_a_suburb_of_it_or_another_city()

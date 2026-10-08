@@ -1,0 +1,51 @@
+using Microsoft.EntityFrameworkCore;
+using Application.Abstractions;
+using Domain.Merchants;
+
+namespace Application.Merchants.Moderators;
+
+/// <summary>What the signed-in merchant login may do, and whether it is the account's owner or a moderator.</summary>
+public sealed record MerchantRights(bool IsOwner, bool IsStopped, MerchantPermissions Permissions, string? Name)
+{
+    /// <summary>The owner of the account: everything, including the moderators themselves.</summary>
+    public static readonly MerchantRights Owner = new(true, false, MerchantPermissions.All, null);
+
+    public bool May(MerchantPermissions permission)
+    {
+        return !IsStopped && (permission == MerchantPermissions.None || Permissions.HasFlag(permission));
+    }
+
+    /// <summary>Only the owner adds moderators, changes what they may do and stops them.</summary>
+    public bool MayManageModerators => IsOwner;
+}
+
+/// <summary>
+/// Reads the signed-in login's rights in the merchant account. A login with no moderator row is the account's owner
+/// and may do everything; a moderator may do what the owner ticked, and nothing at all once stopped. Scoped, so the
+/// row is read once per request however many times a page asks.
+/// </summary>
+public class MerchantAccess(IAppDbContext db, ICurrentUser currentUser)
+{
+    private MerchantRights? rights;
+
+    public async Task<MerchantRights> CurrentAsync(CancellationToken cancellationToken = default)
+    {
+        if (rights is not null)
+        {
+            return rights;
+        }
+
+        if (currentUser.UserId is not { } userId)
+        {
+            return rights = MerchantRights.Owner;
+        }
+
+        var moderator = await db.Moderators
+            .AsNoTracking()
+            .SingleOrDefaultAsync(m => m.UserId == userId, cancellationToken);
+
+        return rights = moderator is null
+            ? MerchantRights.Owner
+            : new MerchantRights(false, moderator.Archived, moderator.Permissions, moderator.Name);
+    }
+}

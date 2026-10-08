@@ -41,7 +41,14 @@
                     @foreach (var run in Model.Runs)
                     {
                         <tr>
-                            <td><div class="cell-main">@run.Rider</div><div class="cell-sub">@Money.Phone(run.RiderPhone)</div></td>
+                            <td>
+                                <div class="cell-main">@run.Rider</div>
+                                <div class="cell-sub">@Money.Phone(run.RiderPhone)</div>
+                                @if (run.WithoutOutcome > 0)
+                                {
+                                    <a class="cell-sub" asp-page="/Hub/RunSheet" asp-route-id="@run.Id" asp-route-hub="@Model.Hub?.Code">@Icons.Get("printer") Run sheet</a>
+                                }
+                            </td>
                             <td class="nowrap">
                                 @run.Date.ToString("ddd d MMM")
                                 @if (run.Status == RunStatus.Open && run.DueBack is { } due)

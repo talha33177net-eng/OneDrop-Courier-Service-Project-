@@ -1,0 +1,154 @@
+@page
+@model Web.Pages.Merchant.ModeratorsModel
+@using Domain.Merchants
+@{
+    ViewData["Title"] = "Moderators";
+}
+
+<div class="page-head">
+    <div>
+        <h1>Moderators</h1>
+        <p>People who can work in your account with their own sign-in. You choose what each of them can see and do.</p>
+    </div>
+</div>
+
+@if (Model.FirstPassword is not null)
+{
+    <div class="alert alert-success" role="status">
+        @Icons.Get("key")
+        <div>
+            <strong>Their first password.</strong> Give it to @(Model.PasswordFor ?? "them") now: we will not show it again.
+            They sign in at <code>/Account/Login</code> and can change it on their account page.
+            <p class="mt" style="margin-bottom:0"><code style="font-size:16px;letter-spacing:1px">@Model.FirstPassword</code></p>
+        </div>
+    </div>
+}
+@if (Model.Done is not null)
+{
+    <div class="alert alert-success" role="status">@Icons.Get("check-circle")<div>@Model.Done</div></div>
+}
+@if (Model.Problem is not null)
+{
+    <div class="alert alert-error" role="alert">@Icons.Get("alert")<div>@Model.Problem</div></div>
+}
+
+<div class="grid grid-side">
+    <div class="card">
+        <div class="card-head"><h2>Your people</h2></div>
+        @if (Model.Moderators.Count == 0)
+        {
+            <div class="empty">
+                @Icons.Get("users")
+                <h3>No moderators yet</h3>
+                <p>Add someone to let them book parcels or check payments without sharing your password.</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Name</th><th>Signs in with</th><th>May do</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var person in Model.Moderators)
+                        {
+                            <tr>
+                                <td class="cell-main">
+                                    @person.Name
+                                    @if (person.Stopped)
+                                    {
+                                        <span class="badge badge-cancel">Stopped</span>
+                                    }
+                                    @if (person.Phone is { } phone)
+                                    {
+                                        <div class="hint">@phone</div>
+                                    }
+                                </td>
+                                <td>@person.Email<div class="hint">Added @person.Added.ToString("d MMM yyyy")</div></td>
+                                <td>
+                                    <form method="post" asp-page-handler="Permissions" asp-route-id="@person.Id">
+                                        <div class="tick-list">
+                                            @foreach (var (permission, label, what) in Web.Pages.Merchant.ModeratorsModel.Choices)
+                                            {
+                                                <label class="check" title="@what">
+                                                    <input type="checkbox" name="Permissions" value="@permission"
+                                                           checked="@person.Permissions.HasFlag(permission)"
+                                                           disabled="@person.Stopped" />
+                                                    <span>@label</span>
+                                                </label>
+                                            }
+                                        </div>
+                                        @if (!person.Stopped)
+                                        {
+                                            <button type="submit" class="btn btn-sm mt">Save</button>
+                                        }
+                                    </form>
+                                </td>
+                                <td class="text-right">
+                                    @if (person.Stopped)
+                                    {
+                                        <form method="post" asp-page-handler="LetBackIn" asp-route-id="@person.Id" class="inline-form">
+                                            <button type="submit" class="btn btn-sm">Let back in</button>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        <form method="post" asp-page-handler="Reset" asp-route-id="@person.Id" class="inline-form">
+                                            <button type="submit" class="btn btn-sm" data-confirm="Their old password stops working at once. You will be shown a new one to give them." data-confirm-title="New password for @person.Name?" data-confirm-ok="New password">New password</button>
+                                        </form>
+                                        <form method="post" asp-page-handler="Stop" asp-route-id="@person.Id" class="inline-form">
+                                            <button type="submit" class="btn btn-danger btn-sm" data-confirm="They cannot sign in until you let them back in. Their work stays in the account." data-confirm-title="Stop @person.Name?" data-confirm-ok="Stop them">Stop</button>
+                                        </form>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+
+    <div class="stack">
+        <div class="card">
+            <div class="card-head"><h2>@Icons.Get("plus") Add a moderator</h2></div>
+            <div class="card-body">
+                <form method="post" asp-page-handler="Add">
+                    <div class="field">
+                        <label asp-for="Name">Their name</label>
+                        <input asp-for="Name" maxlength="@Moderator.MaxNameLength" required />
+                    </div>
+                    <div class="field">
+                        <label asp-for="Email">The email they sign in with</label>
+                        <input asp-for="Email" type="email" maxlength="256" placeholder="name@example.com" required />
+                    </div>
+                    <div class="field">
+                        <label asp-for="Phone">Their mobile number (if you want it here)</label>
+                        <input asp-for="Phone" inputmode="tel" placeholder="01XXXXXXXXX" />
+                    </div>
+                    <div class="field">
+                        <label>What they may do</label>
+                        <div class="tick-list">
+                            @foreach (var (permission, label, what) in Web.Pages.Merchant.ModeratorsModel.Choices)
+                            {
+                                <label class="check">
+                                    <input type="checkbox" name="Permissions" value="@permission"
+                                           checked="@MerchantPermissions.Default.HasFlag(permission)" />
+                                    <span>@label<small class="hint">@what</small></span>
+                                </label>
+                            }
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">Add moderator</button>
+                    <p class="hint mt">We show their first password once, on this page, for you to pass on. They change it themselves on their account page.</p>
+                </form>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-head"><h2>@Icons.Get("shield") What stays yours</h2></div>
+            <div class="card-body">
+                <p>Only you, the account's owner, add people here, change what they may do and stop them. A moderator never sees this page.</p>
+                <p class="hint">Whatever you tick, a moderator works in every business of your account and sees only this account's parcels, pickups and money.</p>
+            </div>
+        </div>
+    </div>
+</div>

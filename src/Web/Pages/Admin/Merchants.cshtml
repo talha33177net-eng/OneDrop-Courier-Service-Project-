@@ -28,7 +28,7 @@
         <input type="hidden" name="status" value="@Model.Status" />
         <div class="field grow">
             <label for="search" class="sr-only">Search</label>
-            <input type="search" id="search" name="search" value="@Model.Search" placeholder="Business, owner or phone" />
+            <input type="search" id="search" name="search" value="@Model.Search" placeholder="Business, owner, phone or merchant ID" />
         </div>
         <button class="btn btn-outline" type="submit">@Icons.Get("search") Search</button>
     </form>
@@ -45,7 +45,7 @@
                     @foreach (var m in Model.Rows)
                     {
                         <tr>
-                            <td><a class="cell-main" asp-page="/Admin/Merchant" asp-route-id="@m.Id">@m.Name</a><div class="cell-sub">@m.OwnerName</div></td>
+                            <td><a class="cell-main" asp-page="/Admin/Merchant" asp-route-id="@m.Id">@m.Name</a><div class="cell-sub">@m.OwnerName@(m.Account is null ? "" : $" · a business of {m.Account}")</div></td>
                             <td>@Money.Phone(m.Phone)</td>
                             <td>@Statuses.Badge(m.Status)</td>
                             <td class="num">@m.Parcels</td>

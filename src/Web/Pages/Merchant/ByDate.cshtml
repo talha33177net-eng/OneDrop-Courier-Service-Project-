@@ -1,0 +1,65 @@
+@page
+@using Domain.Common
+@model Web.Pages.Merchant.ByDateModel
+@{
+    ViewData["Title"] = "By date";
+    var d = Model.Days;
+}
+
+<div class="page-head">
+    <div>
+        <h1>Parcels by date</h1>
+        <p>How many parcels you booked each day, and where they stand now. Open a day to see its parcels.</p>
+    </div>
+</div>
+
+@await Html.PartialAsync("_PeriodPicker", (Model.Kind, Model.Kind == PeriodKind.Custom ? Model.From : d?.Period.From, Model.Kind == PeriodKind.Custom ? Model.To : d?.Period.To))
+
+@if (Model.Problem is not null)
+{
+    <div class="alert alert-error" role="alert">@Icons.Get("alert")<div>@Model.Problem</div></div>
+}
+
+@if (d is not null)
+{
+    <div class="card">
+        <div class="card-head"><div><h2>@d.Period.From.ToString("d MMM") to @d.Period.To.ToString("d MMM yyyy")</h2><p>@d.Days.Sum(day => day.Booked).ToString("N0") parcels booked, newest day first</p></div></div>
+        @if (d.Days.All(day => day.Booked == 0))
+        {
+            <div class="empty">
+                @Icons.Get("calendar")
+                <h3>No parcels were booked in these days</h3>
+                <p>Choose a longer period, or book a parcel and it shows up on its day.</p>
+                <a class="btn btn-primary" asp-page="/Merchant/NewParcel">@Icons.Get("plus") Book a parcel</a>
+            </div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Day</th><th class="num">Booked</th><th class="num">Cash on delivery</th><th class="num">Delivered</th><th class="num">Returned</th><th class="num">Cancelled</th><th class="num">On the way</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var day in d.Days)
+                        {
+                            <tr class="@(day.Booked == 0 ? "faint" : "")">
+                                <td class="nowrap">@day.Day.ToString("ddd d MMM")</td>
+                                <td class="num strong">@day.Booked</td>
+                                <td class="num">@Money.Taka(day.Cod)</td>
+                                <td class="num">@day.Delivered</td>
+                                <td class="num">@day.Returned</td>
+                                <td class="num">@day.Cancelled</td>
+                                <td class="num">@day.OnTheWay</td>
+                                <td class="text-right">
+                                    @if (day.Booked > 0)
+                                    {
+                                        <a class="btn btn-ghost btn-sm" href="/Merchant/Parcels?from=@day.Day.ToString("yyyy-MM-dd")&to=@day.Day.ToString("yyyy-MM-dd")">See them @Icons.Get("arrow-right")</a>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+}

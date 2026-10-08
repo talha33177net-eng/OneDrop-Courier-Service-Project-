@@ -56,11 +56,19 @@ public class AppDbContext(
 
     public DbSet<MerchantApiKey> MerchantApiKeys => Set<MerchantApiKey>();
 
+    public DbSet<MerchantPicture> MerchantPictures => Set<MerchantPicture>();
+
+    public DbSet<Moderator> Moderators => Set<Moderator>();
+
+    public DbSet<MerchantPayoutAccount> MerchantPayoutAccounts => Set<MerchantPayoutAccount>();
+
     public DbSet<PickupPoint> PickupPoints => Set<PickupPoint>();
 
     public DbSet<Parcel> Parcels => Set<Parcel>();
 
     public DbSet<ParcelEvent> ParcelEvents => Set<ParcelEvent>();
+
+    public DbSet<ParcelRequest> ParcelRequests => Set<ParcelRequest>();
 
     public DbSet<Rider> Riders => Set<Rider>();
 
@@ -72,9 +80,15 @@ public class AppDbContext(
 
     public DbSet<VehicleCapacity> VehicleCapacities => Set<VehicleCapacity>();
 
+    public DbSet<ReturnList> ReturnLists => Set<ReturnList>();
+
+    public DbSet<ReturnListParcel> ReturnListParcels => Set<ReturnListParcel>();
+
     public DbSet<LedgerEntry> LedgerEntries => Set<LedgerEntry>();
 
     public DbSet<Payout> Payouts => Set<Payout>();
+
+    public DbSet<OnlinePayment> OnlinePayments => Set<OnlinePayment>();
 
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 

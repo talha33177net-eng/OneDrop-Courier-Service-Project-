@@ -1,0 +1,30 @@
+@using Domain.Common
+@model (PeriodKind Kind, DateOnly? From, DateOnly? To)
+@* The period a merchant reads its parcels over: four named ones, or its own days in the form beside them. The days
+   shown in the form are the period's, so changing one end keeps the other *@
+@{
+    (PeriodKind Kind, string Name)[] periods =
+    [
+        (PeriodKind.Last7Days, "Last 7 days"), (PeriodKind.Last30Days, "Last 30 days"),
+        (PeriodKind.ThisMonth, "This month"), (PeriodKind.LastMonth, "Last month")
+    ];
+}
+<div class="card mb">
+    <div class="card-body spread">
+        <nav class="segmented" aria-label="Period">
+            @foreach (var (kind, name) in periods)
+            {
+                <a class="@(Model.Kind == kind ? "active" : "")" href="@(Context.Request.Path)?period=@kind">@name</a>
+            }
+        </nav>
+        <form method="get" class="gap">
+            <input type="hidden" name="period" value="Custom" />
+            <label class="sr-only" for="from">From</label>
+            <input type="date" id="from" name="from" value="@Model.From?.ToString("yyyy-MM-dd")" style="width:170px" required />
+            <span class="muted">to</span>
+            <label class="sr-only" for="to">To</label>
+            <input type="date" id="to" name="to" value="@Model.To?.ToString("yyyy-MM-dd")" style="width:170px" required />
+            <button class="btn @(Model.Kind == PeriodKind.Custom ? "btn-primary" : "btn-outline")" type="submit">@Icons.Get("calendar") Show these days</button>
+        </form>
+    </div>
+</div>

@@ -36,6 +36,18 @@
         </div>
     }
 
+    @if (d.OpenRequests > 0)
+    {
+        <div class="next-step">
+            <span class="stat-icon">@Icons.Get("message")</span>
+            <div class="next-step-text">
+                <strong>@d.OpenRequests merchant request@(d.OpenRequests == 1 ? "" : "s") to answer</strong>
+                <span>To cancel a parcel on its way, or to change its cash on delivery.</span>
+            </div>
+            <a class="btn btn-primary" asp-page="/Admin/Requests">Answer them @Icons.Get("arrow-right")</a>
+        </div>
+    }
+
     <div class="stats">
         <div class="stat"><div class="stat-icon blue">@Icons.Get("plus")</div><div><div class="stat-label">Booked today</div><div class="stat-value">@d.BookedToday</div></div></div>
         <div class="stat"><div class="stat-icon amber">@Icons.Get("truck")</div><div><div class="stat-label">Picked up today</div><div class="stat-value">@d.PickedUpToday</div></div></div>
@@ -49,14 +61,16 @@
             <div class="card-body"><partial name="_WeekChart" model="d.Week" /></div>
         </div>
         <div class="card">
-            <div class="card-head"><h2>Parcels in progress</h2></div>
+            <div class="card-head"><div><h2>Parcels in progress</h2><p>@Money.Taka(d.Cod.OnTheWay) of cash on delivery still to come in</p></div></div>
             <div class="card-body">
                 <div class="money-list">
-                    <div><span>@Statuses.Badge(ParcelStatus.Pending)</span><a asp-page="/Hub/Parcels" asp-route-tab="Pending" class="strong">@s.Pending</a></div>
-                    <div><span>@Statuses.Badge(ParcelStatus.InTransit)</span><a asp-page="/Hub/Parcels" asp-route-tab="InTransit" class="strong">@s.InTransit</a></div>
-                    <div><span>@Statuses.Badge(ParcelStatus.OutForDelivery)</span><a asp-page="/Hub/Parcels" asp-route-tab="OutForDelivery" class="strong">@s.OutForDelivery</a></div>
-                    <div><span>@Statuses.Badge(ParcelStatus.OnHold)</span><a asp-page="/Hub/Parcels" asp-route-tab="OnHold" class="strong">@s.OnHold</a></div>
-                    <div><span>@Statuses.Badge(ParcelStatus.Returning)</span><a asp-page="/Hub/Parcels" asp-route-tab="Returns" class="strong">@s.Returns</a></div>
+                    <div><span>@Statuses.Badge(ParcelStatus.Pending)</span><span class="count-cash"><span class="muted">@Money.Taka(d.Cod.Pending)</span><a asp-page="/Hub/Parcels" asp-route-tab="Pending" class="strong">@s.Pending</a></span></div>
+                    <div><span>@Statuses.Badge(ParcelStatus.InTransit)</span><span class="count-cash"><span class="muted">@Money.Taka(d.Cod.InTransit)</span><a asp-page="/Hub/Parcels" asp-route-tab="InTransit" class="strong">@s.InTransit</a></span></div>
+                    <div><span>@Statuses.Badge(ParcelStatus.OutForDelivery)</span><span class="count-cash"><span class="muted">@Money.Taka(d.Cod.OutForDelivery)</span><a asp-page="/Hub/Parcels" asp-route-tab="OutForDelivery" class="strong">@s.OutForDelivery</a></span></div>
+                    <div><span>@Statuses.Badge(ParcelStatus.OnHold)</span><span class="count-cash"><span class="muted">@Money.Taka(d.Cod.OnHold)</span><a asp-page="/Hub/Parcels" asp-route-tab="OnHold" class="strong">@s.OnHold</a></span></div>
+                    <div><span>@Statuses.Badge(ParcelStatus.Returning)</span><span class="count-cash"><a asp-page="/Hub/Parcels" asp-route-tab="Returns" class="strong">@s.Returns</a></span></div>
+                    <div><span>@Statuses.Badge(ParcelIssue.InReview)</span><span class="count-cash"><span class="muted">flagged to look at</span><a asp-page="/Hub/Parcels" asp-route-tab="InReview" class="strong">@d.Issues.InReview</a></span></div>
+                    <div><span>@Statuses.Badge(ParcelIssue.Exceptional)</span><span class="count-cash"><span class="muted">flagged to settle</span><a asp-page="/Hub/Parcels" asp-route-tab="Exceptional" class="strong">@d.Issues.Exceptional</a></span></div>
                 </div>
                 <hr />
                 <div class="spread">

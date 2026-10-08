@@ -73,7 +73,9 @@ Every file in the SQL project and in DbUp starts with this block (label `TABLE`,
 Every table except `Platform.*` and the Identity join tables carries `[TenantId] BIGINT NOT NULL` with
 `FK_Table_Tenant` to `Platform.Tenant`, and an index that leads with `TenantId` (a unique index starting with it
 counts). Merchant-owned tables also carry `[MerchantId]` - copy it onto child rows so the merchant filter needs
-no join.
+no join. A row that belongs to a merchant *account* rather than to one of its businesses carries `[AccountId]`
+(the main profile) instead and is not merchant-filtered; say so in the table's header, as `Merchants.Moderator` and
+`Merchants.MerchantPayoutAccount` do. Every query on such a table names the account itself.
 
 A new table with a `TenantId` is added to the security policy `Platform/Security Policies/TenantIsolation.sql`: one
 filter predicate and two block predicates (`AFTER INSERT`, `AFTER UPDATE`) with `[Platform].[TenantAccess]([TenantId])`.

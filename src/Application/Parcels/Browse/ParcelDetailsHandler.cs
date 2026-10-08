@@ -52,7 +52,14 @@ public sealed record ParcelView
 
     public string? ItemDescription { get; init; }
 
+    /// <summary>What the merchant said it weighs.</summary>
     public int WeightGrams { get; init; }
+
+    /// <summary>What a hub's scale said, when one has weighed it.</summary>
+    public int? MeasuredWeightGrams { get; init; }
+
+    /// <summary>The weight the charge is worked out on.</summary>
+    public int BilledWeightGrams => MeasuredWeightGrams ?? WeightGrams;
 
     public string? Note { get; init; }
 
@@ -96,6 +103,13 @@ public sealed record ParcelView
 
     public string? ReturnReason { get; init; }
 
+    /// <summary>A problem a hub flagged for the courier to look at, if any, with its words and when it was flagged.</summary>
+    public ParcelIssue? Issue { get; init; }
+
+    public string? IssueNote { get; init; }
+
+    public DateTime? IssueRaisedOn { get; init; }
+
     public DateTime Booked { get; init; }
 
     public DateTime? Closed { get; init; }
@@ -113,6 +127,15 @@ public sealed record ParcelView
 
     public bool CanRequestReturn =>
         Status is ParcelStatus.PickedUp or ParcelStatus.AtHub or ParcelStatus.InTransit or ParcelStatus.OnHold;
+
+    /// <summary>A hub can put it on the scale while the courier still has it to deliver.</summary>
+    public bool CanReweigh => ParcelStatuses.ToDeliver.Contains(Status);
+
+    /// <summary>A hub can flag a problem while the courier has the parcel.</summary>
+    public bool CanFlag => ParcelStatuses.InProgress.Contains(Status);
+
+    /// <summary>The merchant can ask the courier to cancel it or change its cash while it is on its way.</summary>
+    public bool CanAsk => ParcelStatuses.ToDeliver.Contains(Status);
 }
 
 /// <summary>
@@ -203,6 +226,7 @@ public class ParcelDetailsHandler(IAppDbContext db, ITenantContext tenantContext
             DeliveryHub = found.DeliveryHub,
             ItemDescription = p.ItemDescription,
             WeightGrams = p.WeightGrams,
+            MeasuredWeightGrams = p.MeasuredWeightGrams,
             Note = p.Note,
             Status = p.Status,
             Location = found.Here is not null ? $"At {found.Here}"
@@ -225,6 +249,9 @@ public class ParcelDetailsHandler(IAppDbContext db, ITenantContext tenantContext
             DueOn = p.DueOn,
             Late = p.IsLate(tenant.Today(time.GetUtcNow().UtcDateTime)),
             ReturnReason = p.ReturnReason,
+            Issue = p.Issue,
+            IssueNote = p.IssueNote,
+            IssueRaisedOn = p.IssueRaisedOn is { } raised ? tenant.Local(raised) : null,
             Booked = tenant.Local(p.Created),
             Closed = p.ClosedOn is { } closed ? tenant.Local(closed) : null,
             PayoutNumber = payout,

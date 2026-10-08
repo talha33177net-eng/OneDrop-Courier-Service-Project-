@@ -64,8 +64,17 @@
                             @foreach (var p in shown)
                             {
                                 var later = p.HoldUntil is { } day && day > today;
-                                <tr class="@(later ? "later" : "")">
-                                    <td class="check-col"><input type="checkbox" name="codes" value="@p.TrackingCode" aria-label="Select @p.TrackingCode" data-later="@(later ? "true" : null)" data-grams="@p.WeightGrams" /></td>
+                                <tr class="@(later || p.Issue is not null ? "later" : "")">
+                                    <td class="check-col">
+                                        @if (p.Issue is null)
+                                        {
+                                            <input type="checkbox" name="codes" value="@p.TrackingCode" aria-label="Select @p.TrackingCode" data-later="@(later ? "true" : null)" data-grams="@p.WeightGrams" />
+                                        }
+                                        else
+                                        {
+                                            <span title="Flagged: clear it on the parcel's page first">@Icons.Get("flag")</span>
+                                        }
+                                    </td>
                                     <td><a class="code-link" asp-page="/Hub/Parcel" asp-route-code="@p.TrackingCode">@p.TrackingCode</a><div class="cell-sub">@p.Merchant</div></td>
                                     <td>@p.RecipientName</td>
                                     <td>@p.Area</td>
@@ -75,7 +84,11 @@
                                         {
                                             <div class="cell-sub">@p.Attempts attempt@(p.Attempts == 1 ? "" : "s")@(p.Reason is null ? "" : $": {p.Reason}")</div>
                                         }
-                                        @if (later)
+                                        @if (p.Issue is { } issue)
+                                        {
+                                            <div class="row-note">@Statuses.Badge(issue) @p.IssueNote: stays here until the flag is cleared</div>
+                                        }
+                                        else if (later)
                                         {
                                             <div class="row-note">@Icons.Get("calendar") Customer asked for @p.HoldUntil!.Value.ToString("ddd d MMM")</div>
                                         }

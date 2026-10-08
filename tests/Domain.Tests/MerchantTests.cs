@@ -76,4 +76,56 @@ public class MerchantTests
         point.MakeDefault(false);
         Assert.False(point.IsDefault);
     }
+
+    [Fact]
+    public void A_business_added_to_an_account_takes_the_account_s_owner_approval_and_payout_account()
+    {
+        var main = Merchant.Add(Profile).Value;
+        main.SetPayoutAccount(PayoutMethod.Bkash, "01711000003", "Tanvir Ahmed");
+
+        var business = Merchant.AddBusiness(main, new MerchantProfile("Gadget BD Kids", "Someone else", "01711000004", null, "Shop 14, Dhanmondi"), 0, 10).Value;
+
+        Assert.False(business.IsMainProfile);
+        Assert.Equal(main.Id, business.AccountId);
+        Assert.Equal("Tanvir Ahmed", business.OwnerName);
+        Assert.True(business.CanBook);
+        Assert.Equal(PayoutMethod.Bkash, business.PayoutMethod);
+        Assert.Equal("+8801711000003", business.PayoutAccount);
+        Assert.Equal("+8801711000004", business.ContactPhone);
+    }
+
+    [Fact]
+    public void A_business_of_an_account_waiting_for_approval_waits_too_and_follows_the_approval()
+    {
+        var main = Merchant.SignUp(Profile).Value;
+        var business = Merchant.AddBusiness(main, Profile with { Name = "Gadget BD Kids" }, 0, 10).Value;
+        Assert.False(business.CanBook);
+
+        main.Approve();
+        business.FollowAccount(main);
+
+        Assert.True(business.CanBook);
+    }
+
+    [Fact]
+    public void No_business_is_added_to_a_suspended_account_or_under_another_business()
+    {
+        var main = Merchant.Add(Profile).Value;
+        var business = Merchant.AddBusiness(main, Profile with { Name = "Gadget BD Kids" }, 0, 10).Value;
+
+        Assert.Equal("merchant.business.main", Merchant.AddBusiness(business, Profile with { Name = "Third" }, 1, 10).Error?.Code);
+        main.Suspend();
+        Assert.Equal("merchant.business.suspended", Merchant.AddBusiness(main, Profile with { Name = "Third" }, 1, 10).Error?.Code);
+    }
+
+    [Fact]
+    public void An_account_adds_businesses_up_to_the_courier_s_most_besides_its_main_profile()
+    {
+        var main = Merchant.Add(Profile).Value;
+        var kids = Profile with { Name = "Gadget BD Kids" };
+
+        Assert.True(Merchant.AddBusiness(main, kids, 9, 10).IsSuccess);
+        Assert.Equal("merchant.business.limit", Merchant.AddBusiness(main, kids, 10, 10).Error?.Code);
+        Assert.True(Merchant.AddBusiness(main, kids, 50, null).IsSuccess);
+    }
 }

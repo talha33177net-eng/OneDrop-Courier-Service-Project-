@@ -1,6 +1,7 @@
 @using Application.Parcels.Browse
 @model IReadOnlyDictionary<ParcelTab, int>
-@* The tabs above a parcel list; each keeps the search and filters and starts again at the first page *@
+@* The tabs above a parcel list; each keeps the search and filters and starts again at the first page. The tabs of
+   flagged problems come last and show only while they hold a parcel, or are open *@
 @{
     var current = Context.Request.Query["tab"].ToString();
     string Url(ParcelTab tab)
@@ -17,13 +18,26 @@
     [
         (ParcelTab.All, "All"), (ParcelTab.Pending, "Pending pickup"), (ParcelTab.InTransit, "In transit"),
         (ParcelTab.OutForDelivery, "Out for delivery"), (ParcelTab.OnHold, "On hold"), (ParcelTab.Delivered, "Delivered"),
-        (ParcelTab.Returns, "Returns"), (ParcelTab.Cancelled, "Cancelled")
+        (ParcelTab.PartlyDelivered, "Partly delivered"), (ParcelTab.Returns, "Returns"), (ParcelTab.Cancelled, "Cancelled"),
+        (ParcelTab.InReview, "In review"), (ParcelTab.Exceptional, "Exceptional")
     ];
 }
 <nav class="tabs" aria-label="Parcel status">
     @foreach (var (tab, name) in tabs)
     {
         var active = current.Equals(tab.ToString(), StringComparison.OrdinalIgnoreCase) || (current.Length == 0 && tab == ParcelTab.All);
-        <a class="tab @(active ? "active" : "")" href="@Url(tab)">@name <span class="tab-count">@Model[tab].ToString("N0")</span></a>
+        var flag = ParcelListHandler.IssueOf(tab);
+        if (flag is not null && Model[tab] == 0 && !active)
+        {
+            continue;
+        }
+
+        <a class="tab @(active ? "active" : "") @(flag is null ? "" : "tab-flag")" href="@Url(tab)">
+            @if (flag is not null)
+            {
+                @Icons.Get("flag")
+            }
+            @name <span class="tab-count @(flag is { } issue && Model[tab] > 0 ? issue == Domain.Parcels.ParcelIssue.InReview ? "count-review" : "count-exception" : "")">@Model[tab].ToString("N0")</span>
+        </a>
     }
 </nav>

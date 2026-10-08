@@ -3,6 +3,8 @@
 @{
     ViewData["Title"] = $"Parcel {Model.Parcel.TrackingCode}";
     var p = Model.Parcel;
+    var open = Model.Requests.FirstOrDefault(r => r.Status == ParcelRequestStatus.Open);
+    var answered = Model.Requests.FirstOrDefault(r => r.Status != ParcelRequestStatus.Open);
 }
 
 <div class="page-head">
@@ -22,26 +24,57 @@
 
 <partial name="_Alerts" />
 
-@if (p.CanCancel || p.CanRequestReturn)
+@if (p.CanCancel)
 {
     <div class="card mb">
         <div class="card-body">
-            @if (p.CanCancel)
-            {
-                <form method="post" asp-page-handler="Cancel" asp-route-code="@p.TrackingCode" class="gap">
-                    <input type="text" name="reason" maxlength="200" placeholder="Why cancel? (optional)" style="max-width:360px" />
-                    <button class="btn btn-danger" type="submit" data-confirm="The parcel will not be picked up or delivered, and nothing is charged." data-confirm-title="Cancel this parcel?" data-confirm-ok="Cancel parcel">@Icons.Get("x-circle") Cancel parcel</button>
-                    <span class="muted">Possible until a rider picks it up.</span>
-                </form>
-            }
-            @if (p.CanRequestReturn)
-            {
-                <form method="post" asp-page-handler="Return" asp-route-code="@p.TrackingCode" class="gap">
-                    <input type="text" name="reason" maxlength="200" placeholder="Why do you want it back?" style="max-width:360px" />
-                    <button class="btn btn-danger" type="submit" data-confirm="It comes back to your pickup hub. The delivery and return charges apply." data-confirm-title="Ask for this parcel back?" data-confirm-ok="Ask for it back">@Icons.Get("return") Ask for it back</button>
-                    <span class="muted">The delivery and return charges apply.</span>
-                </form>
-            }
+            <form method="post" asp-page-handler="Cancel" asp-route-code="@p.TrackingCode" class="gap">
+                <input type="text" name="reason" maxlength="200" placeholder="Why cancel? (optional)" style="max-width:360px" />
+                <button class="btn btn-danger" type="submit" data-confirm="The parcel will not be picked up or delivered, and nothing is charged." data-confirm-title="Cancel this parcel?" data-confirm-ok="Cancel parcel">@Icons.Get("x-circle") Cancel parcel</button>
+                <span class="muted">Possible until a rider picks it up.</span>
+            </form>
+        </div>
+    </div>
+}
+
+@if (open is not null)
+{
+    <div class="alert alert-info">@Icons.Get("message")<div><strong>You asked the courier on @open.Asked.ToString("d MMM, h:mm tt"):</strong> @Statuses.Asked(open.Kind, open.CodAmount, open.NewCodAmount). "@open.Reason" The answer shows here.</div></div>
+}
+else if (p.CanAsk)
+{
+    <div class="card mb">
+        <div class="card-head">
+            <div>
+                <h2>@Icons.Get("message") Ask the courier</h2>
+                <p>The parcel is on its way, so a change needs the courier's yes. You see the answer here and under Requests.</p>
+            </div>
+        </div>
+        <div class="card-body stack">
+            <form method="post" asp-page-handler="Request" asp-route-code="@p.TrackingCode" class="gap">
+                <input type="hidden" name="kind" value="ChangeCod" />
+                <div class="input-group" style="max-width:180px">
+                    <span class="prefix">৳</span>
+                    <input type="number" name="amount" min="0" step="1" value="@p.CodAmount.ToString("0")" aria-label="New cash on delivery" required />
+                </div>
+                <input type="text" name="reason" maxlength="200" placeholder="Why, such as a discount for the customer" style="max-width:320px" required />
+                <button class="btn btn-outline" type="submit">@Icons.Get("cash") Ask to change the cash</button>
+            </form>
+            <form method="post" asp-page-handler="Request" asp-route-code="@p.TrackingCode" class="gap">
+                <input type="hidden" name="kind" value="Cancel" />
+                <input type="text" name="reason" maxlength="200" placeholder="Why cancel it now" style="max-width:360px" required />
+                <button class="btn btn-danger" type="submit" data-confirm="If the courier agrees, the parcel comes back to you and you pay the delivery and return charges." data-confirm-title="Ask to cancel this parcel?" data-confirm-ok="Ask to cancel">@Icons.Get("x-circle") Ask to cancel</button>
+            </form>
+        </div>
+    </div>
+}
+
+@if (answered is not null)
+{
+    <div class="alert @(answered.Status == ParcelRequestStatus.Approved ? "alert-success" : "alert-warning")">
+        @Icons.Get(answered.Status == ParcelRequestStatus.Approved ? "check-circle" : "alert")
+        <div>
+            <strong>The courier @(answered.Status == ParcelRequestStatus.Approved ? "approved" : "refused") your request</strong> (@Statuses.Asked(answered.Kind, answered.CodAmount, answered.NewCodAmount)) on @answered.AnsweredOn?.ToString("d MMM, h:mm tt").@(answered.Answer is null ? "" : $" \"{answered.Answer}\"")
         </div>
     </div>
 }

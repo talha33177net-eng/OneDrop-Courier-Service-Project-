@@ -19,7 +19,11 @@ public sealed record MerchantRow(
     int Delivered,
     int Returned,
     decimal Unpaid,
-    DateTime Joined);
+    DateTime Joined)
+{
+    /// <summary>For a business added under another merchant's account: the name of its main profile.</summary>
+    public string? Account { get; init; }
+}
 
 public sealed record PickupPointView(long Id, string Name, string Address, string Area, long AreaId, string ContactPhone, bool IsDefault);
 
@@ -36,7 +40,22 @@ public sealed record MerchantView(
     int Delivered,
     int Returned,
     decimal Unpaid,
-    DateTime Joined);
+    DateTime Joined)
+{
+    /// <summary>For a business added under another merchant's account: that account's main profile.</summary>
+    public AccountLink? Account { get; init; }
+
+    /// <summary>Why the courier holds the account's payouts; null while they go out.</summary>
+    public string? PayoutHold { get; init; }
+
+    /// <summary>The adjustments the courier wrote on this business, newest first.</summary>
+    public IReadOnlyList<AdjustmentRow> Adjustments { get; init; } = [];
+}
+
+public sealed record AccountLink(long Id, string Name);
+
+/// <summary>An adjustment on a merchant's balance; <see cref="Payout"/> is the invoice that paid it, once paid.</summary>
+public sealed record AdjustmentRow(DateOnly Date, decimal Amount, string Note, string? Payout);
 
 /// <summary>
 /// The courier's merchants: list and search them, add one (active at once), approve a sign-up, suspend or reactivate,
@@ -46,7 +65,8 @@ public class AdminMerchantsHandler(
     IAppDbContext db,
     ITenantContext tenantContext,
     MerchantOnboarding onboarding,
-    IUserAccounts accounts)
+    IUserAccounts accounts,
+    TimeProvider time)
 {
     public static readonly Error NotFound = Error.NotFound("merchant.notFound", "That merchant was not found.");
 
@@ -65,9 +85,11 @@ public class AdminMerchantsHandler(
         var text = search?.Trim();
         if (!string.IsNullOrEmpty(text))
         {
+            // The merchant ID a merchant reads out from its panel, its phone, or part of its name or owner's
             var phone = PhoneNumber.Parse(text);
             var value = phone.IsSuccess ? phone.Value.Value : text;
-            merchants = merchants.Where(m => m.Name.Contains(text) || m.OwnerName.Contains(text) || m.ContactPhone == value);
+            long? id = long.TryParse(text.TrimStart('#'), out var number) ? number : null;
+            merchants = merchants.Where(m => m.Id == id || m.Name.Contains(text) || m.OwnerName.Contains(text) || m.ContactPhone == value);
         }
 
         var rows = await merchants
@@ -83,7 +105,10 @@ public class AdminMerchantsHandler(
                 db.Parcels.Count(p => p.MerchantId == m.Id && (p.Status == ParcelStatus.Delivered || p.Status == ParcelStatus.PartlyDelivered)),
                 db.Parcels.Count(p => p.MerchantId == m.Id && p.Status == ParcelStatus.Returned),
                 db.LedgerEntries.Where(e => e.MerchantId == m.Id && e.PayoutId == null).Sum(e => (decimal?)e.Amount) ?? 0,
-                m.Created))
+                m.Created)
+            {
+                Account = db.Merchants.Where(a => a.Id == m.MainMerchantId).Select(a => a.Name).FirstOrDefault()
+            })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
@@ -123,13 +148,29 @@ public class AdminMerchantsHandler(
             merchant.PayoutMethod,
             merchant.PayoutAccount,
             merchant.PayoutAccountName,
-            await accounts.MerchantEmailAsync(id, cancellationToken),
+            await accounts.MerchantEmailAsync(merchant.AccountId, cancellationToken),
             points,
             counts.Values.Sum(),
             counts.GetValueOrDefault(ParcelStatus.Delivered) + counts.GetValueOrDefault(ParcelStatus.PartlyDelivered),
             counts.GetValueOrDefault(ParcelStatus.Returned),
             unpaid,
-            tenant.Local(merchant.Created));
+            tenant.Local(merchant.Created))
+        {
+            Account = merchant.MainMerchantId is { } main
+                ? await db.Merchants.Where(a => a.Id == main).Select(a => new AccountLink(a.Id, a.Name)).SingleAsync(cancellationToken)
+                : null,
+            PayoutHold = merchant.PayoutHold,
+            Adjustments = await (
+                from line in db.LedgerEntries
+                join payout in db.Payouts on line.PayoutId equals (long?)payout.Id into paid
+                from payout in paid.DefaultIfEmpty()
+                where line.MerchantId == id && line.Kind == LedgerEntryKind.Adjustment
+                orderby line.Id descending
+                select new AdjustmentRow(line.EntryDate, line.Amount, line.Note!, payout == null ? null : payout.Number))
+                .Take(20)
+                .AsNoTracking()
+                .ToListAsync(cancellationToken)
+        };
     }
 
     public Task<Result<long>> AddAsync(NewMerchant spec, CancellationToken cancellationToken = default)
@@ -144,25 +185,87 @@ public class AdminMerchantsHandler(
 
     public Task<Result> ApproveAsync(long id, CancellationToken cancellationToken = default)
     {
-        return ChangeAsync(id, merchant => merchant.Approve(), cancellationToken);
+        return ChangeAccountAsync(id, merchant => merchant.Approve(), cancellationToken);
     }
 
     public Task<Result> SuspendAsync(long id, CancellationToken cancellationToken = default)
     {
-        return ChangeAsync(id, merchant => merchant.Suspend(), cancellationToken);
+        return ChangeAccountAsync(id, merchant => merchant.Suspend(), cancellationToken);
     }
 
     public Task<Result> ReactivateAsync(long id, CancellationToken cancellationToken = default)
     {
-        return ChangeAsync(id, merchant => merchant.Reactivate(), cancellationToken);
+        return ChangeAccountAsync(id, merchant => merchant.Reactivate(), cancellationToken);
     }
 
-    public Task<Result> SetPayoutAsync(long id, PayoutMethod method, string? account, string? name, CancellationToken cancellationToken = default)
+    /// <summary>Stops the account's payouts, every business of it, with why; its lines keep counting.</summary>
+    public Task<Result> HoldPayoutsAsync(long id, string? reason, CancellationToken cancellationToken = default)
     {
-        return ChangeAsync(id, merchant => merchant.SetPayoutAccount(method, account, name), cancellationToken);
+        return ChangeAccountAsync(id, merchant => merchant.HoldPayouts(reason), cancellationToken);
     }
 
-    private async Task<Result> ChangeAsync(long id, Func<Merchant, Result> change, CancellationToken cancellationToken)
+    public Task<Result> ReleasePayoutsAsync(long id, CancellationToken cancellationToken = default)
+    {
+        return ChangeAccountAsync(id, merchant => merchant.ReleasePayouts(), cancellationToken);
+    }
+
+    /// <summary>
+    /// Writes an adjustment on the merchant's balance, dated today: positive credits it (it paid what it owed, or is
+    /// compensated), negative charges it. It goes out with the next payout like any other line.
+    /// </summary>
+    public async Task<Result> AdjustAsync(long id, decimal amount, string? note, CancellationToken cancellationToken = default)
+    {
+        if (!await db.Merchants.AnyAsync(m => m.Id == id, cancellationToken))
+        {
+            return NotFound;
+        }
+
+        var line = LedgerEntry.Adjust(id, amount, note, tenantContext.Require().Today(time.GetUtcNow().UtcDateTime));
+        if (line.IsFailure)
+        {
+            return line.Error!;
+        }
+
+        db.LedgerEntries.Add(line.Value);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Result.Success();
+    }
+
+    /// <summary>Sets where the account's payouts go, and keeps the account among its saved ones.</summary>
+    public async Task<Result> SetPayoutAsync(long id, PayoutMethod method, string? account, string? name, CancellationToken cancellationToken = default)
+    {
+        var changed = await ChangeAccountAsync(id, merchant => merchant.SetPayoutAccount(method, account, name), cancellationToken);
+        if (changed.IsFailure)
+        {
+            return changed;
+        }
+
+        var accountId = await db.Merchants.Where(m => m.Id == id).Select(m => m.MainMerchantId ?? m.Id).SingleAsync(cancellationToken);
+        var kept = MerchantPayoutAccount.Create(accountId, method, account, name).Value;
+        if (!await db.MerchantPayoutAccounts.AnyAsync(
+                a => a.AccountId == accountId && !a.Archived && a.Method == kept.Method && a.Number == kept.Number,
+                cancellationToken))
+        {
+            db.MerchantPayoutAccounts.Add(kept);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// Approval and the payout account belong to the merchant's account: the change is made on its main profile, from
+    /// whichever business it was asked on, and every business of the account follows.
+    /// </summary>
+    private async Task<Result> ChangeAccountAsync(long id, Func<Merchant, Result> change, CancellationToken cancellationToken)
+    {
+        var account = await db.Merchants.Where(m => m.Id == id).Select(m => m.MainMerchantId ?? m.Id).SingleOrDefaultAsync(cancellationToken);
+
+        return await ChangeAsync(account, change, cancellationToken, follow: true);
+    }
+
+    private async Task<Result> ChangeAsync(long id, Func<Merchant, Result> change, CancellationToken cancellationToken, bool follow = false)
     {
         var merchant = await db.Merchants.SingleOrDefaultAsync(m => m.Id == id, cancellationToken);
         if (merchant is null)
@@ -174,6 +277,12 @@ public class AdminMerchantsHandler(
         if (changed.IsFailure)
         {
             return changed;
+        }
+
+        if (follow)
+        {
+            var businesses = await db.Merchants.Where(m => m.MainMerchantId == merchant.Id).ToListAsync(cancellationToken);
+            businesses.ForEach(business => business.FollowAccount(merchant));
         }
 
         try

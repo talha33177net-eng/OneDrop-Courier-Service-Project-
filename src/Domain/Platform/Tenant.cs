@@ -41,5 +41,8 @@ public class Tenant : AuditedEntity, IArchivable
     /// </summary>
     public TimeOnly? RiderReturnTime { get; private set; }
 
+    /// <summary>How many businesses a merchant account may add besides its main profile. Null when the courier sets no limit.</summary>
+    public int? MaxBusinessesPerAccount { get; private set; }
+
     public bool Archived { get; private set; }
 }

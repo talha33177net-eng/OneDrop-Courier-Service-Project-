@@ -13,14 +13,40 @@ namespace Application.Dashboards;
 public sealed record DayCount(DateOnly Day, int Booked, int Delivered, int Returned);
 
 /// <summary>How many parcels are in each stage of their life.</summary>
-public sealed record StageCounts(int Pending, int InTransit, int OutForDelivery, int OnHold, int Delivered, int Returns, int Cancelled)
+public sealed record StageCounts(
+    int Pending,
+    int InTransit,
+    int OutForDelivery,
+    int OnHold,
+    int Delivered,
+    int PartlyDelivered,
+    int Returns,
+    int Cancelled)
 {
-    public int Total => Pending + InTransit + OutForDelivery + OnHold + Delivered + Returns + Cancelled;
+    public int Total => Pending + InTransit + OutForDelivery + OnHold + Delivered + PartlyDelivered + Returns + Cancelled;
 
     public int Active => Pending + InTransit + OutForDelivery + OnHold;
 
-    /// <summary>Delivered out of the parcels that have ended (delivered or returned), as a whole per cent.</summary>
-    public int? SuccessRate => Delivered + Returns == 0 ? null : (int)Math.Round(100m * Delivered / (Delivered + Returns));
+    /// <summary>Handed over at the door, in full or in part, out of the parcels that have ended, as a whole per cent.</summary>
+    public int? SuccessRate => Delivered + PartlyDelivered + Returns == 0
+        ? null
+        : (int)Math.Round(100m * (Delivered + PartlyDelivered) / (Delivered + PartlyDelivered + Returns));
+}
+
+/// <summary>
+/// The cash riding on the parcels in each stage: what is still expected from the recipient while a parcel is on its
+/// way, and what was collected once it arrived. A returned parcel collects nothing, so it has no line of its own.
+/// </summary>
+public sealed record StageCod(
+    decimal Pending,
+    decimal InTransit,
+    decimal OutForDelivery,
+    decimal OnHold,
+    decimal Delivered,
+    decimal PartlyDelivered)
+{
+    /// <summary>Cash still to come in: every parcel that has not finished.</summary>
+    public decimal OnTheWay => Pending + InTransit + OutForDelivery + OnHold;
 }
 
 public sealed record MerchantDashboard(
@@ -42,7 +68,32 @@ public sealed record MerchantDashboard(
 
     /// <summary>Parcels still on their way after the day they were due.</summary>
     public int Late { get; init; }
+
+    /// <summary>The cash sitting in each stage, shown beside its count.</summary>
+    public StageCod Cod { get; init; } = new(0, 0, 0, 0, 0, 0);
+
+    /// <summary>The problems hubs have flagged on the merchant's parcels, still to be cleared.</summary>
+    public IssueCounts Issues { get; init; } = new(0, 0);
+
+    /// <summary>Return lists a rider handed over that the merchant has still to confirm it received.</summary>
+    public int ReturnsToConfirm { get; init; }
+
+    /// <summary>Parcels booked today, yesterday and in the last 30 days (today included), by the courier's day.</summary>
+    public BookedCounts Booked { get; init; } = new(0, 0, 0);
+
+    /// <summary>The latest payout that reached the merchant, if any. Its time is the tenant's.</summary>
+    public LastPayout? LastPayout { get; init; }
 }
+
+public sealed record BookedCounts(int Today, int Yesterday, int Last30Days);
+
+/// <summary>Parcels flagged in review and exceptional, still to be cleared.</summary>
+public sealed record IssueCounts(int InReview, int Exceptional)
+{
+    public int Total => InReview + Exceptional;
+}
+
+public sealed record LastPayout(string Number, decimal Amount, DateTime PaidOn);
 
 public sealed record HubRow(string Code, string Name, int AtHub, int ToAssign, int Incoming, int WithRiders);
 
@@ -64,6 +115,15 @@ public sealed record AdminDashboard(
 {
     /// <summary>Parcels still on their way after the day they were due.</summary>
     public int Late { get; init; }
+
+    /// <summary>The cash sitting in each stage, shown beside its count.</summary>
+    public StageCod Cod { get; init; } = new(0, 0, 0, 0, 0, 0);
+
+    /// <summary>The problems hubs have flagged for the courier to look at.</summary>
+    public IssueCounts Issues { get; init; } = new(0, 0);
+
+    /// <summary>Merchants' requests about parcels on their way, still to be answered.</summary>
+    public int OpenRequests { get; init; }
 }
 
 /// <summary>
@@ -95,10 +155,23 @@ public class DashboardHandler(
         var paid = await db.Payouts
             .Where(p => p.Status == PayoutStatus.Paid && p.PaidOn >= monthStart)
             .SumAsync(p => (decimal?)p.Amount, cancellationToken) ?? 0;
+        var stages = await StagesAsync(cancellationToken);
         var recent = await parcels.ListAsync(new ParcelQuery { PageSize = 8 }, cancellationToken);
         var pickupOpen = await db.PickupRequests.AnyAsync(
             r => r.Status == PickupStatus.Requested || r.Status == PickupStatus.Assigned,
             cancellationToken);
+        var todayStart = tenant.StartUtc(today);
+        var yesterdayStart = tenant.StartUtc(today.AddDays(-1));
+        var booked = new BookedCounts(
+            await db.Parcels.CountAsync(p => p.Created >= todayStart, cancellationToken),
+            await db.Parcels.CountAsync(p => p.Created >= yesterdayStart && p.Created < todayStart, cancellationToken),
+            await db.Parcels.CountAsync(p => p.Created >= since30, cancellationToken));
+        var lastPayout = await db.Payouts
+            .Where(p => p.Status == PayoutStatus.Paid)
+            .OrderByDescending(p => p.PaidOn)
+            .Select(p => new LastPayout(p.Number, p.Amount, p.PaidOn!.Value))
+            .AsNoTracking()
+            .FirstOrDefaultAsync(cancellationToken);
         var handedOver = pickupOpen ||
             await db.PickupRequests.AnyAsync(cancellationToken) ||
             await db.Parcels.AnyAsync(p => p.Status != ParcelStatus.Pending && p.Status != ParcelStatus.Cancelled, cancellationToken);
@@ -107,7 +180,7 @@ public class DashboardHandler(
             merchant.Name,
             merchant.Status,
             merchant.HasPayoutAccount,
-            await StagesAsync(cancellationToken),
+            stages.Counts,
             collected,
             unpaid,
             paid,
@@ -116,7 +189,12 @@ public class DashboardHandler(
         {
             PickupOpen = pickupOpen,
             HandedOver = handedOver,
-            Late = await LateAsync(today, cancellationToken)
+            Late = await LateAsync(today, cancellationToken),
+            Cod = stages.Cod,
+            Issues = await IssuesAsync(cancellationToken),
+            ReturnsToConfirm = await db.ReturnLists.CountAsync(l => l.Status == ReturnListStatus.HandedOver, cancellationToken),
+            Booked = booked,
+            LastPayout = lastPayout is null ? null : lastPayout with { PaidOn = tenant.Local(lastPayout.PaidOn) }
         };
     }
 
@@ -165,6 +243,7 @@ public class DashboardHandler(
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
+        var stages = await StagesAsync(cancellationToken);
         var monthStart = tenant.StartUtc(new DateOnly(today.Year, today.Month, 1));
         var busiest = await db.Parcels
             .Where(parcel => parcel.Created >= monthStart)
@@ -189,7 +268,7 @@ public class DashboardHandler(
             pickedToday,
             deliveredToday,
             returnedToday,
-            await StagesAsync(cancellationToken),
+            stages.Counts,
             pendingMerchants,
             openPickups,
             cash,
@@ -198,7 +277,10 @@ public class DashboardHandler(
             hubs.Where(h => h.AtHub + h.Incoming + h.WithRiders > 0).ToList() is { Count: > 0 } busy ? busy : hubs.Take(6).ToList(),
             top)
         {
-            Late = await LateAsync(today, cancellationToken)
+            Late = await LateAsync(today, cancellationToken),
+            Cod = stages.Cod,
+            Issues = await IssuesAsync(cancellationToken),
+            OpenRequests = await db.ParcelRequests.CountAsync(r => r.Status == ParcelRequestStatus.Open, cancellationToken)
         };
     }
 
@@ -207,26 +289,65 @@ public class DashboardHandler(
         return await db.Parcels.CountAsync(p => p.DueOn < today && ParcelStatuses.ToDeliver.Contains(p.Status), cancellationToken);
     }
 
-    private async Task<StageCounts> StagesAsync(CancellationToken cancellationToken)
+    private async Task<IssueCounts> IssuesAsync(CancellationToken cancellationToken)
+    {
+        var flagged = await db.Parcels
+            .Where(p => p.Issue != null)
+            .GroupBy(p => p.Issue)
+            .Select(g => new { Issue = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.Issue!.Value, g => g.Count, cancellationToken);
+
+        return new IssueCounts(flagged.GetValueOrDefault(ParcelIssue.InReview), flagged.GetValueOrDefault(ParcelIssue.Exceptional));
+    }
+
+    private async Task<(StageCounts Counts, StageCod Cod)> StagesAsync(CancellationToken cancellationToken)
     {
         var byStatus = await db.Parcels
             .GroupBy(p => p.Status)
-            .Select(g => new { Status = g.Key, Count = g.Count() })
-            .ToDictionaryAsync(g => g.Status, g => g.Count, cancellationToken);
+            .Select(g => new
+            {
+                Status = g.Key,
+                Count = g.Count(),
+                Cod = g.Sum(p => p.CodAmount),
+                Collected = g.Sum(p => (decimal?)p.CollectedAmount) ?? 0
+            })
+            .ToDictionaryAsync(g => g.Status, g => g, cancellationToken);
 
         int Count(ParcelTab tab)
         {
-            return ParcelListHandler.StatusesOf(tab).Sum(status => byStatus.GetValueOrDefault(status));
+            return ParcelListHandler.StatusesOf(tab).Sum(status => byStatus.GetValueOrDefault(status)?.Count ?? 0);
         }
 
-        return new StageCounts(
+        // On the way the cash is what the recipient still owes; once delivered it is what the rider actually took.
+        decimal Expected(ParcelTab tab)
+        {
+            return ParcelListHandler.StatusesOf(tab).Sum(status => byStatus.GetValueOrDefault(status)?.Cod ?? 0);
+        }
+
+        decimal Collected(ParcelTab tab)
+        {
+            return ParcelListHandler.StatusesOf(tab).Sum(status => byStatus.GetValueOrDefault(status)?.Collected ?? 0);
+        }
+
+        var counts = new StageCounts(
             Count(ParcelTab.Pending),
             Count(ParcelTab.InTransit),
             Count(ParcelTab.OutForDelivery),
             Count(ParcelTab.OnHold),
             Count(ParcelTab.Delivered),
+            Count(ParcelTab.PartlyDelivered),
             Count(ParcelTab.Returns),
             Count(ParcelTab.Cancelled));
+
+        var cod = new StageCod(
+            Expected(ParcelTab.Pending),
+            Expected(ParcelTab.InTransit),
+            Expected(ParcelTab.OutForDelivery),
+            Expected(ParcelTab.OnHold),
+            Collected(ParcelTab.Delivered),
+            Collected(ParcelTab.PartlyDelivered));
+
+        return (counts, cod);
     }
 
     private async Task<IReadOnlyList<DayCount>> WeekAsync(TenantInfo tenant, DateOnly today, CancellationToken cancellationToken)

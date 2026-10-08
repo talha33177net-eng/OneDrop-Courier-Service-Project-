@@ -113,7 +113,7 @@ public class RowLevelSecurityTests(WebAppFactory factory)
         var touched = await db.Database.ExecuteSqlAsync(
             $"UPDATE Network.Zone SET [Name] = [Name] WHERE TenantId = {onedrop.Id}", Cancel);
         var inserted = await Assert.ThrowsAsync<SqlException>(() => db.Database.ExecuteSqlAsync(
-            $"INSERT INTO Delivery.Rider (TenantId, HubId, Phone, Name) VALUES ({onedrop.Id}, {hubId}, {rider.Phone}, N'Planted')", Cancel));
+            $"INSERT INTO Delivery.Rider (TenantId, HubId, Phone, Name, Vehicle) VALUES ({onedrop.Id}, {hubId}, {rider.Phone}, N'Planted', {(byte)Vehicle.Motorbike})", Cancel));
         var moved = await Assert.ThrowsAsync<SqlException>(() => db.Riders
             .Where(c => c.Id == rider.Id)
             .ExecuteUpdateAsync(set => set.SetProperty(c => c.TenantId, onedrop.Id), Cancel));

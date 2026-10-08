@@ -1,7 +1,7 @@
 @using Application.Payments.MerchantPayments
 @using Domain.Payments
 @model (IReadOnlyList<StatementLine> Lines, string Link)
-@* Ledger lines grouped by parcel: cash collected and each charge, with the parcel's net *@
+@* Ledger lines grouped by parcel: cash collected and each charge, with the parcel's net; the courier's adjustments after them, each with why *@
 @if (Model.Lines.Count == 0)
 {
     <div class="empty">@Icons.Get("inbox")<h3>Nothing here</h3><p>Lines appear when a parcel is delivered or returned.</p></div>
@@ -14,7 +14,7 @@ else
                 <tr><th>Parcel</th><th>Day</th><th class="num">Cash collected</th><th class="num">Delivery</th><th class="num">COD charge</th><th class="num">Return</th><th class="num">Net</th></tr>
             </thead>
             <tbody>
-                @foreach (var parcel in Model.Lines.GroupBy(l => l.TrackingCode))
+                @foreach (var parcel in Model.Lines.Where(l => l.TrackingCode is not null).GroupBy(l => l.TrackingCode!))
                 {
                     decimal Of(LedgerEntryKind kind) => parcel.Where(l => l.Kind == kind).Sum(l => l.Amount);
                     <tr>
@@ -25,6 +25,15 @@ else
                         <td class="num">@Money.Taka(Of(LedgerEntryKind.CodCharge))</td>
                         <td class="num">@Money.Taka(Of(LedgerEntryKind.ReturnCharge))</td>
                         <td class="num strong">@Money.Taka(parcel.Sum(l => l.Amount))</td>
+                    </tr>
+                }
+                @foreach (var adjustment in Model.Lines.Where(l => l.Kind == LedgerEntryKind.Adjustment))
+                {
+                    <tr>
+                        <td><span class="badge badge-brand plain">@(adjustment.PaidOnline ? "Paid online" : "Adjustment")</span></td>
+                        <td class="nowrap">@adjustment.Date.ToString("d MMM")</td>
+                        <td colspan="4">@adjustment.Note</td>
+                        <td class="num strong @(adjustment.Amount < 0 ? "negative" : "")">@Money.Taka(adjustment.Amount)</td>
                     </tr>
                 }
                 <tr class="total">

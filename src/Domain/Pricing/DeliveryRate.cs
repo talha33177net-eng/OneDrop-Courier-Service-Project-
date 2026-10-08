@@ -11,8 +11,26 @@ public sealed record ParcelCharges(
     decimal DeliveryCharge,
     decimal CodChargePercent,
     decimal ReturnCharge,
-    int? DeliveryDays)
+    int? DeliveryDays,
+    int IncludedWeightGrams,
+    decimal BaseCharge,
+    decimal ExtraKgCharge)
 {
+    /// <summary>The delivery charge these rates give a parcel weighing <paramref name="weightGrams"/>.</summary>
+    public decimal DeliveryChargeFor(int weightGrams)
+    {
+        var extraGrams = Math.Max(0, weightGrams - IncludedWeightGrams);
+        var extraKg = (extraGrams + 999) / 1000;
+
+        return BaseCharge + extraKg * ExtraKgCharge;
+    }
+
+    /// <summary>The same rates applied to a corrected weight, so a reweigh never reaches today's rate card.</summary>
+    public ParcelCharges ForWeight(int weightGrams)
+    {
+        return this with { DeliveryCharge = DeliveryChargeFor(weightGrams) };
+    }
+
     /// <summary>The COD charge on <paramref name="collected"/>, rounded to the whole taka.</summary>
     public decimal CodChargeOn(decimal collected)
     {
@@ -108,16 +126,16 @@ public class DeliveryRate : TenantEntity
     /// <summary>The delivery charge for a parcel weighing <paramref name="weightGrams"/>.</summary>
     public decimal DeliveryChargeFor(int weightGrams)
     {
-        var extraGrams = Math.Max(0, weightGrams - IncludedWeightGrams);
-        var extraKg = (extraGrams + 999) / 1000;
-
-        return BaseCharge + extraKg * ExtraKgCharge;
+        return ChargesFor(weightGrams).DeliveryCharge;
     }
 
     /// <summary>The charges a parcel weighing <paramref name="weightGrams"/> is booked at.</summary>
     public ParcelCharges ChargesFor(int weightGrams)
     {
-        return new ParcelCharges(ServiceArea, DeliveryChargeFor(weightGrams), CodChargePercent, ReturnCharge, DeliveryDays);
+        var charges = new ParcelCharges(
+            ServiceArea, 0, CodChargePercent, ReturnCharge, DeliveryDays, IncludedWeightGrams, BaseCharge, ExtraKgCharge);
+
+        return charges.ForWeight(weightGrams);
     }
 }
 

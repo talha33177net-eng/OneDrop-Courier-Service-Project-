@@ -33,7 +33,8 @@ public sealed record NewParcel(long MerchantId, long PickupPointId, long PickupH
 /// in three fields: <see cref="CurrentHubId"/> while at a hub, <see cref="TransferToHubId"/> while travelling between
 /// hubs and <see cref="RiderId"/> while a rider has it; at most one is set. Its charges and delivery time are worked
 /// out from the rate card when it is booked and never change after it is picked up; the day it is due
-/// (<see cref="DueOn"/>) is counted from the day the courier takes it.
+/// (<see cref="DueOn"/>) is counted from the day the courier takes it. A hub can flag a problem on it
+/// (<see cref="Issue"/>) for the courier to look at.
 /// </summary>
 public class Parcel : TenantEntity, IMerchantOwned
 {
@@ -83,7 +84,14 @@ public class Parcel : TenantEntity, IMerchantOwned
 
     public string? ItemDescription { get; private set; }
 
+    /// <summary>What the merchant said the parcel weighs when booking it.</summary>
     public int WeightGrams { get; private set; }
+
+    /// <summary>What a hub's scale said, once one has weighed it. The charge follows this when it is set.</summary>
+    public int? MeasuredWeightGrams { get; private set; }
+
+    /// <summary>The weight the parcel is charged on: the hub's measurement when there is one, else the merchant's word.</summary>
+    public int BilledWeightGrams => MeasuredWeightGrams ?? WeightGrams;
 
     /// <summary>Cash the rider collects for the merchant. Zero when the recipient has already paid.</summary>
     public decimal CodAmount { get; private set; }
@@ -127,6 +135,15 @@ public class Parcel : TenantEntity, IMerchantOwned
     /// <summary>Why the parcel is going back to the merchant.</summary>
     public string? ReturnReason { get; private set; }
 
+    /// <summary>A problem a hub flagged for the courier to look at; null while there is none.</summary>
+    public ParcelIssue? Issue { get; private set; }
+
+    /// <summary>What the problem is, in the words of the hub that flagged it.</summary>
+    public string? IssueNote { get; private set; }
+
+    /// <summary>When the problem was first flagged (UTC).</summary>
+    public DateTime? IssueRaisedOn { get; private set; }
+
     /// <summary>The cash collected at the door; set once delivered.</summary>
     public decimal? CollectedAmount { get; private set; }
 
@@ -140,9 +157,24 @@ public class Parcel : TenantEntity, IMerchantOwned
 
     public IReadOnlyList<ParcelEvent> Events => events;
 
-    public ParcelCharges Charges => new(ServiceArea, DeliveryCharge, CodChargePercent, ReturnCharge, DeliveryDays);
+    /// <summary>The first <see cref="IncludedWeightGrams"/> cost <see cref="BaseCharge"/>, each started kilogram above it <see cref="ExtraKgCharge"/>.</summary>
+    public int IncludedWeightGrams { get; private set; }
+
+    public decimal BaseCharge { get; private set; }
+
+    public decimal ExtraKgCharge { get; private set; }
+
+    /// <summary>
+    /// The rates this parcel was booked at, kept on the parcel so a reweigh prices it the way it was sold and never
+    /// reaches a rate card that has changed since.
+    /// </summary>
+    public ParcelCharges Charges => new(
+        ServiceArea, DeliveryCharge, CodChargePercent, ReturnCharge, DeliveryDays, IncludedWeightGrams, BaseCharge, ExtraKgCharge);
 
     public bool IsFinal => Status.IsFinal();
+
+    /// <summary>The courier has the parcel and it is still on its way: the merchant can ask to cancel it or change its cash.</summary>
+    public bool CanBeAskedAbout => ParcelStatuses.ToDeliver.Contains(Status);
 
     /// <summary>Still to be delivered after the day it was due. A parcel going back to the merchant is not late.</summary>
     public bool IsLate(DateOnly today)
@@ -368,6 +400,13 @@ public class Parcel : TenantEntity, IMerchantOwned
                 $"{TrackingCode} is delivered from another hub. Send it there first.");
         }
 
+        if (Issue is { } issue)
+        {
+            return Error.Conflict(
+                "parcel.assign.flagged",
+                $"{TrackingCode} is {issue.DisplayName().ToLowerInvariant()} ({IssueNote}). Clear the flag on its page before it goes out.");
+        }
+
         CurrentHubId = null;
         RiderId = riderId;
         HoldReason = null;
@@ -507,6 +546,202 @@ public class Parcel : TenantEntity, IMerchantOwned
         return Result.Success();
     }
 
+    /// <summary>
+    /// A hub put the parcel on its scale. Merchants routinely under-declare, so the charge follows the measurement,
+    /// priced at the rates the parcel was booked under. The merchant's own figure is kept, and the change is written
+    /// to the history where the merchant can see both.
+    /// </summary>
+    public Result Reweigh(int measuredGrams, long? hubId)
+    {
+        if (!ParcelStatuses.ToDeliver.Contains(Status))
+        {
+            return Error.Conflict(
+                "parcel.reweigh",
+                Status == ParcelStatus.Pending
+                    ? $"{TrackingCode} has not been picked up yet, so there is nothing to weigh."
+                    : $"{TrackingCode} is {Status.DisplayName().ToLowerInvariant()} and its charge is settled.");
+        }
+
+        if (measuredGrams is < 1 or > MaxWeightGrams)
+        {
+            return Error.Validation("parcel.reweigh.weight", $"The weight must be between 1 g and {MaxWeightGrams / 1000} kg.");
+        }
+
+        var was = BilledWeightGrams;
+        var charged = DeliveryCharge;
+        MeasuredWeightGrams = measuredGrams;
+        DeliveryCharge = Charges.ForWeight(measuredGrams).DeliveryCharge;
+
+        var note = measuredGrams == was && DeliveryCharge == charged
+            ? $"Weighed at the hub: {Weight.Kg(measuredGrams)}, as booked"
+            : $"Weighed at the hub: {Weight.Kg(was)} booked, {Weight.Kg(measuredGrams)} measured; " +
+              $"delivery charge {charged:N0} to {DeliveryCharge:N0}";
+        events.Add(new ParcelEvent(this, Status, note, hubId ?? CurrentHubId));
+
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// A hub flags a problem for the courier to look at: <see cref="ParcelIssue.InReview"/> while something is checked,
+    /// <see cref="ParcelIssue.Exceptional"/> when something has gone wrong. Only while the courier has the parcel.
+    /// Flagging it again changes the kind or the words and keeps the time it was first flagged. Until the flag is
+    /// cleared the parcel is not handed to a rider.
+    /// </summary>
+    public Result Flag(ParcelIssue issue, string? note, long? hubId, DateTime now)
+    {
+        if (!ParcelStatuses.InProgress.Contains(Status))
+        {
+            return Error.Conflict(
+                "parcel.flag",
+                Status == ParcelStatus.Pending
+                    ? $"{TrackingCode} has not been picked up yet, so there is nothing for the courier to look at."
+                    : $"{TrackingCode} is {Status.DisplayName().ToLowerInvariant()}; there is nothing left to flag.");
+        }
+
+        if (!Enum.IsDefined(issue))
+        {
+            return Error.Validation("parcel.flag.kind", "Choose whether the parcel is in review or exceptional.");
+        }
+
+        var why = note.NullIfBlank();
+        if (why is null || why.Length > 200)
+        {
+            return Error.Validation("parcel.flag.note", "Say what the problem is, at most 200 characters.");
+        }
+
+        IssueRaisedOn ??= now;
+        Issue = issue;
+        IssueNote = why;
+        events.Add(new ParcelEvent(this, Status, $"{issue.DisplayName()}: {why}", hubId ?? CurrentHubId));
+
+        return Result.Success();
+    }
+
+    /// <summary>The courier has looked at the problem and the parcel can go on; <paramref name="note"/> says what was done.</summary>
+    public Result ClearFlag(string? note, long? hubId)
+    {
+        if (Issue is not { } issue)
+        {
+            return Error.Conflict("parcel.flag.none", $"{TrackingCode} has no problem flagged.");
+        }
+
+        var done = note.NullIfBlank();
+        if (done?.Length > 200)
+        {
+            return Error.Validation("parcel.flag.note", "Say what was done in at most 200 characters.");
+        }
+
+        Issue = null;
+        IssueNote = null;
+        IssueRaisedOn = null;
+        var settled = issue == ParcelIssue.InReview ? "Review finished" : "Exception settled";
+        events.Add(new ParcelEvent(this, Status, done is null ? settled : $"{settled}: {done}", hubId ?? CurrentHubId));
+
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// The cash on delivery becomes <paramref name="amount"/>, at the merchant's request and with the courier's
+    /// approval: the rider collects the new amount and the COD charge follows it. Only while the parcel is on its way.
+    /// </summary>
+    public Result ChangeCod(decimal amount, string reason)
+    {
+        if (!CanBeAskedAbout)
+        {
+            return Error.Conflict(
+                "parcel.cod.change",
+                $"{TrackingCode} is {Status.DisplayName().ToLowerInvariant()}; its cash on delivery can no longer change.");
+        }
+
+        if (amount is < 0 or > MaxCodAmount)
+        {
+            return Error.Validation("parcel.cod", $"The cash on delivery must be between ৳0 and ৳{MaxCodAmount:N0}.");
+        }
+
+        var was = CodAmount;
+        CodAmount = amount;
+        events.Add(new ParcelEvent(this, Status, $"Cash on delivery changed from ৳{was:N0} to ৳{amount:N0}: {reason}", CurrentHubId));
+
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// Whether the parcel can go back to its merchant with a rider from <paramref name="hubId"/>: returning, waiting at
+    /// that hub, which is the one that collected it, and with no problem flagged.
+    /// </summary>
+    public Result CanGoBackFrom(long hubId)
+    {
+        if (Status != ParcelStatus.Returning || CurrentHubId != hubId)
+        {
+            return Error.Conflict(
+                "parcel.sendBack.notHere",
+                $"{TrackingCode} is not waiting at this hub to go back to its merchant.");
+        }
+
+        if (PickupHubId != hubId)
+        {
+            return Error.Conflict(
+                "parcel.sendBack.otherHub",
+                $"{TrackingCode} goes back to its merchant from another hub. Send it there first.");
+        }
+
+        if (Issue is { } issue)
+        {
+            return Error.Conflict(
+                "parcel.sendBack.flagged",
+                $"{TrackingCode} is {issue.DisplayName().ToLowerInvariant()} ({IssueNote}). Clear the flag on its page before it goes out.");
+        }
+
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// The hub that collected a returning parcel sends it back to the merchant with rider <paramref name="riderId"/>, on
+    /// a return list, instead of handing it over at its counter. It stays returning until the rider hands it over.
+    /// </summary>
+    public Result SendBack(long riderId, long hubId)
+    {
+        var allowed = CanGoBackFrom(hubId);
+        if (allowed.IsFailure)
+        {
+            return allowed;
+        }
+
+        CurrentHubId = null;
+        RiderId = riderId;
+        events.Add(new ParcelEvent(this, Status, "Out to the merchant with the rider", hubId));
+
+        return Result.Success();
+    }
+
+    /// <summary>The rider of a return list handed the parcel back to its merchant at the merchant's door. Final.</summary>
+    public Result HandBackAtDoor(long riderId, DateTime now)
+    {
+        if (Status != ParcelStatus.Returning || RiderId != riderId)
+        {
+            return NotWithRiderToHandBack();
+        }
+
+        RiderId = null;
+        ClosedOn = now;
+        MoveTo(ParcelStatus.Returned, "Handed back to the merchant by the rider");
+
+        return Result.Success();
+    }
+
+    /// <summary>The rider could not hand the parcel back; it stays with them until the hub scans it in again.</summary>
+    public Result MissHandBack(long riderId, string reason)
+    {
+        if (Status != ParcelStatus.Returning || RiderId != riderId)
+        {
+            return NotWithRiderToHandBack();
+        }
+
+        events.Add(new ParcelEvent(this, Status, $"Not handed back to the merchant: {reason}", null));
+
+        return Result.Success();
+    }
+
     /// <summary>The hub that collected a returning parcel handed it back to the merchant. Final.</summary>
     public Result<ScanOutcome> ReturnToMerchant(long hubId, DateTime now)
     {
@@ -584,6 +819,9 @@ public class Parcel : TenantEntity, IMerchantOwned
         CodChargePercent = details.Charges.CodChargePercent;
         ReturnCharge = details.Charges.ReturnCharge;
         DeliveryDays = details.Charges.DeliveryDays;
+        IncludedWeightGrams = details.Charges.IncludedWeightGrams;
+        BaseCharge = details.Charges.BaseCharge;
+        ExtraKgCharge = details.Charges.ExtraKgCharge;
 
         return Result.Success();
     }
@@ -600,6 +838,11 @@ public class Parcel : TenantEntity, IMerchantOwned
         Status = status;
         events.Add(new ParcelEvent(this, status, note, hubId));
         Raise(new ParcelStatusChanged(this, status));
+    }
+
+    private Error NotWithRiderToHandBack()
+    {
+        return Error.Conflict("parcel.handBack.notWithRider", $"{TrackingCode} is not with this rider to hand back.");
     }
 
     private Error NotOutForDelivery()

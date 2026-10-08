@@ -5,21 +5,13 @@ namespace Domain.Network;
 /// <summary>
 /// A part of the coverage map served by one hub: a city area (Mirpur), a suburb of a city (Savar) or a district
 /// (Sylhet). <see cref="City"/> and <see cref="IsSuburb"/> decide the service area a parcel is charged at
-/// (<see cref="Pricing.ServiceAreas.Between"/>). A hub can serve several zones.
+/// (<see cref="Pricing.ServiceAreas.Between"/>). A hub can serve several zones. A zone the courier stops covering is
+/// archived, never deleted: the parcels priced by it keep their charges.
 /// </summary>
 public class Zone : TenantEntity, IArchivable
 {
     private Zone()
     {
-    }
-
-    public Zone(string code, string name, long hubId, string city, bool isSuburb)
-    {
-        Code = code.ToUpperInvariant();
-        Name = name;
-        HubId = hubId;
-        City = city.Trim();
-        IsSuburb = isSuburb;
     }
 
     public string Code { get; private set; } = "";
@@ -37,4 +29,52 @@ public class Zone : TenantEntity, IArchivable
     public bool IsSuburb { get; private set; }
 
     public bool Archived { get; private set; }
+
+    public static Result<Zone> Create(string? code, string? name, long hubId, string? city, bool isSuburb)
+    {
+        var zone = new Zone();
+        var changed = zone.Change(code, name, hubId, city, isSuburb);
+
+        return changed.IsSuccess ? zone : changed.Error!;
+    }
+
+    public Result Change(string? code, string? name, long hubId, string? city, bool isSuburb)
+    {
+        var shortCode = Codes.Read(code, "zone.code", "Give the zone a short code, such as MIR: letters and digits, at most 20.");
+        if (shortCode.IsFailure)
+        {
+            return shortCode.Error!;
+        }
+
+        var trimmed = name.NullIfBlank();
+        if (trimmed is null || trimmed.Length > 200)
+        {
+            return Error.Validation("zone.name", "Name the zone, such as \"Mirpur\", at most 200 characters.");
+        }
+
+        var town = city.NullIfBlank();
+        if (town is null || town.Length > 60)
+        {
+            return Error.Validation("zone.city", "Name the city or district the zone belongs to, at most 60 characters.");
+        }
+
+        Code = shortCode.Value;
+        Name = trimmed;
+        HubId = hubId;
+        City = town;
+        IsSuburb = isSuburb;
+
+        return Result.Success();
+    }
+
+    /// <summary>The courier stops covering the zone: nothing new is booked to its areas, its history stays.</summary>
+    public void Archive()
+    {
+        Archived = true;
+    }
+
+    public void Restore()
+    {
+        Archived = false;
+    }
 }

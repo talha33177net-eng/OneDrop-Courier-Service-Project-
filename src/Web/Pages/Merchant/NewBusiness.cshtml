@@ -1,0 +1,54 @@
+@page
+@model Web.Pages.Merchant.NewBusinessModel
+@{
+    ViewData["Title"] = "Add business";
+}
+
+<div class="page-head">
+    <div>
+        <div class="breadcrumb"><a asp-page="/Merchant/Businesses">Businesses</a> <span>/</span> <span>Add</span></div>
+        <h1>New business</h1>
+        <p>Each business has its own parcels, pickups, payments, balance and figures. Approval and the payout account are shared from your account, and you sign in once for all of them.</p>
+    </div>
+</div>
+
+@if (Model.Problem is not null)
+{
+    <div class="alert alert-error">@Icons.Get("alert")<div>@Model.Problem</div></div>
+}
+
+@if (Model.Room.Full)
+{
+    <div class="alert alert-info spread">
+        <div class="alert-text">@Icons.Get("info")<div><strong>Your account has all the businesses it can.</strong> It can add @Model.Room.Limit besides its main profile. Call the hotline if you need more.</div></div>
+        <a class="btn btn-outline btn-sm" asp-page="/Merchant/Businesses">See your businesses</a>
+    </div>
+}
+else
+{
+    @if (Model.Room.Limit is { } most)
+    {
+        <p class="muted">@Model.Room.Added of @most businesses added so far.</p>
+    }
+
+<form method="post" class="card">
+    <div class="card-body">
+        <h4 class="mb">Business</h4>
+        <div class="form-grid">
+            <div class="field"><label asp-for="Input.Name">Business name</label><input asp-for="Input.Name" /><span asp-validation-for="Input.Name" class="field-error"></span></div>
+            <div class="field"><label asp-for="Input.Phone">Mobile number</label><input asp-for="Input.Phone" type="tel" placeholder="01XXXXXXXXX" /><span class="hint">An 11-digit mobile number for this business, like 01712345678.</span><span asp-validation-for="Input.Phone" class="field-error"></span></div>
+            <div class="field"><label asp-for="Input.Email">Email (optional)</label><input asp-for="Input.Email" type="email" /><span asp-validation-for="Input.Email" class="field-error"></span></div>
+            <div class="field"><label asp-for="Input.Address">Business address</label><input asp-for="Input.Address" /><span asp-validation-for="Input.Address" class="field-error"></span></div>
+        </div>
+        <h4 class="mb mt">Pickup point</h4>
+        <div class="form-grid">
+            <div class="field"><label for="Input_PickupAreaId">Area</label>@await Html.PartialAsync("_AreaSelect", ("Input.PickupAreaId", Model.Input.PickupAreaId, Model.Areas))<span asp-validation-for="Input.PickupAreaId" class="field-error"></span></div>
+            <div class="field"><label asp-for="Input.PickupAddress">Pickup address</label><input asp-for="Input.PickupAddress" /><span class="hint">Where riders collect this business's parcels. Add more points later in Settings.</span><span asp-validation-for="Input.PickupAddress" class="field-error"></span></div>
+        </div>
+    </div>
+    <div class="card-foot gap">
+        <button class="btn btn-primary" type="submit">@Icons.Get("plus") Add business</button>
+        <a class="btn btn-ghost" asp-page="/Merchant/Businesses">Cancel</a>
+    </div>
+</form>
+}

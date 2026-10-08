@@ -45,7 +45,7 @@
             ("Send to other hubs", b.ToDispatchCount, "Scan out in Send mode", "/Hub/Scan", "Dispatch"),
             ("Waiting for a rider", b.ToAssign.Count, b.LateToAssign > 0 ? $"{b.LateToAssign} late: hand them out first" : "Hand them to riders", "/Hub/Assign", null),
             ("Out with riders", b.WithRiders, b.LateRuns > 0 ? $"{b.LateRuns} rider{(b.LateRuns == 1 ? " is" : "s are")} late back" : $"{b.OpenRuns} run{(b.OpenRuns == 1 ? "" : "s")} to close", "/Hub/Runs", null),
-            ("Hand back", b.ToHandBackCount, "Returns for their merchants", "/Hub/Scan", "HandBack")
+            ("Hand back", b.ToHandBackCount, "Send them with a rider, or hand over here", "/Hub/Returns", null)
         ];
     }
     <nav class="flow" style="--steps:@flow.Length" aria-label="The hub's day">
@@ -87,6 +87,10 @@
                                     <td>@p.Merchant</td>
                                     <td>
                                         @Statuses.Badge(p.Status)
+                                        @if (p.Issue is { } issue)
+                                        {
+                                            <div class="mt-xs">@Statuses.Badge(issue)</div>
+                                        }
                                         @if (p.HoldUntil is { } until)
                                         {
                                             <div class="@(later ? "row-note" : "cell-sub")">@if (later) { @Icons.Get("calendar") }Customer asked for @until.ToString("ddd d MMM")</div>

@@ -2,13 +2,21 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Application.Parcels.Browse;
 using Application.Parcels.ParcelActions;
+using Application.Parcels.Requests;
+using Domain.Parcels;
 
 namespace Web.Pages.Merchant;
 
-/// <summary>One of the merchant's parcels, with what it can still do: edit or cancel before pickup, ask for it back later.</summary>
-public class ParcelModel(ParcelDetailsHandler details, ParcelActionsHandler actions) : PageModel
+/// <summary>
+/// One of the merchant's parcels, with what it can still do: edit or cancel it before pickup; once it is on its way, ask
+/// the courier to cancel it or to change its cash on delivery, and see the answer.
+/// </summary>
+public class ParcelModel(ParcelDetailsHandler details, ParcelActionsHandler actions, ParcelRequestsHandler requests) : PageModel
 {
     public ParcelView Parcel { get; private set; } = null!;
+
+    /// <summary>The merchant's requests about this parcel, newest first.</summary>
+    public IReadOnlyList<RequestRow> Requests { get; private set; } = [];
 
     public async Task<IActionResult> OnGetAsync(string code, CancellationToken cancellationToken)
     {
@@ -19,6 +27,7 @@ public class ParcelModel(ParcelDetailsHandler details, ParcelActionsHandler acti
         }
 
         Parcel = found.Value;
+        Requests = await requests.ForParcelAsync(code, cancellationToken);
 
         return Page();
     }
@@ -30,11 +39,16 @@ public class ParcelModel(ParcelDetailsHandler details, ParcelActionsHandler acti
         return Answer(cancelled, code, $"{code} is cancelled.");
     }
 
-    public async Task<IActionResult> OnPostReturnAsync(string code, string? reason, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostRequestAsync(
+        string code,
+        ParcelRequestKind kind,
+        decimal? amount,
+        string? reason,
+        CancellationToken cancellationToken)
     {
-        var returned = await actions.RequestReturnAsync(code, reason, cancellationToken);
+        var asked = await requests.AskAsync(code, kind, amount, reason, cancellationToken);
 
-        return Answer(returned, code, $"We will bring {code} back to you.");
+        return Answer(asked, code, $"We asked the courier about {code}. The answer shows here.");
     }
 
     private IActionResult Answer(Domain.Common.Result result, string code, string done)

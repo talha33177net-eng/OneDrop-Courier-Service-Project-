@@ -1,0 +1,51 @@
+@page "{transactionId}"
+@model Web.Pages.Dev.PayModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Test payment page";
+    var session = Model.Charge!.Session;
+}
+
+<section class="site-section" style="max-width:560px;padding-top:48px;padding-bottom:64px">
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h1 style="font-size:24px">Test payment page</h1>
+                <p>Development only. It stands in for SSLCommerz's payment page: nothing is charged.</p>
+            </div>
+        </div>
+        <div class="card-body">
+            <dl class="adds-up">
+                <div><dt>For</dt><dd>@session.Description</dd></div>
+                <div><dt>Payer</dt><dd>@session.Payer.Name, @session.Payer.Email</dd></div>
+                <div class="total"><dt>Amount</dt><dd>@Money.Taka(session.Amount)</dd></div>
+            </dl>
+            @if (Model.BackTo is { } back)
+            {
+                <form method="post" action="@back" id="back-to-courier" class="mt">
+                    @foreach (var (name, value) in Model.BackWith)
+                    {
+                        <input type="hidden" name="@name" value="@value" />
+                    }
+                    <p class="muted">Taking you back to the courier…</p>
+                    <button class="btn btn-primary" type="submit">Back to the courier</button>
+                </form>
+                <script>document.getElementById('back-to-courier').submit();</script>
+            }
+            else if (Model.Charge.State != GatewayState.Pending)
+            {
+                <div class="alert alert-warning mt">@Icons.Get("info")<div>This payment was already @(Model.Charge.State == GatewayState.Paid ? "paid" : "closed") here.</div></div>
+            }
+            else
+            {
+                <form method="post" class="gap mt">
+                    <button class="btn btn-primary" type="submit" name="choice" value="bkash">Pay with bKash</button>
+                    <button class="btn btn-outline" type="submit" name="choice" value="card">Pay by card</button>
+                    <button class="btn btn-outline" type="submit" name="choice" value="risky">Pay, marked risky</button>
+                    <button class="btn btn-ghost" type="submit" name="choice" value="fail">Fail</button>
+                    <button class="btn btn-ghost" type="submit" name="choice" value="cancel">Cancel</button>
+                </form>
+            }
+        </div>
+    </div>
+</section>

@@ -11,7 +11,8 @@ namespace Web.Pages;
 
 /// <summary>
 /// The front page. A signed-in user goes to their own panel; a visitor to a courier's site sees what it offers, its
-/// prices and a box to track a parcel; the bare platform domain lists the couriers.
+/// prices and a box to track a parcel. A visitor to the bare platform domain is sent to the home courier's site
+/// (<see cref="TenancyOptions.HomeCourier"/>), or, with none, sees the list of couriers.
 /// </summary>
 public class IndexModel(
     ITenantContext tenantContext,
@@ -47,6 +48,11 @@ public class IndexModel(
 
         if (Tenant is null)
         {
+            if (tenancy.Value.HomeCourier is { Length: > 0 } slug && await catalog.FindBySlugAsync(slug, cancellationToken) is not null)
+            {
+                return Redirect(tenancy.Value.TenantUrl(Request, slug));
+            }
+
             var tenants = await catalog.ListAsync(cancellationToken);
             Couriers = [.. tenants.Select(t => (t, tenancy.Value.TenantUrl(Request, t.Slug)))];
 

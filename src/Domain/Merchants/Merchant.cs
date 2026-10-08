@@ -39,6 +39,8 @@ public class Merchant : TenantEntity, IArchivable
 {
     public const int MaxWebhookUrlLength = 500;
 
+    public const int MaxPayoutHoldLength = 200;
+
     private Merchant()
     {
     }
@@ -74,12 +76,32 @@ public class Merchant : TenantEntity, IArchivable
     /// </summary>
     public string? WebhookSecret { get; private set; }
 
+    /// <summary>
+    /// Why the courier holds the account's payouts; null while they go out as usual. Held lines keep counting and are
+    /// paid once the hold is lifted.
+    /// </summary>
+    public string? PayoutHold { get; private set; }
+
     public bool Archived { get; private set; }
+
+    /// <summary>
+    /// Set on a business added under another merchant's account: the account's main profile. Its logins work in every
+    /// business of the account; approval and the payout account are the account's, kept in step (<see cref="FollowAccount"/>).
+    /// Null on a main profile.
+    /// </summary>
+    public long? MainMerchantId { get; private set; }
+
+    public bool IsMainProfile => MainMerchantId is null;
+
+    /// <summary>The account this merchant belongs to: its main profile.</summary>
+    public long AccountId => MainMerchantId ?? Id;
 
     /// <summary>Only an active merchant books parcels and asks for pickups.</summary>
     public bool CanBook => Status == MerchantStatus.Active && !Archived;
 
     public bool HasPayoutAccount => PayoutMethod is not null && PayoutAccount is not null;
+
+    public bool ArePayoutsHeld => PayoutHold is not null;
 
     /// <summary>A shop that signed up itself: it waits for the courier to approve it.</summary>
     public static Result<Merchant> SignUp(MerchantProfile profile)
@@ -91,6 +113,62 @@ public class Merchant : TenantEntity, IArchivable
     public static Result<Merchant> Add(MerchantProfile profile)
     {
         return New(profile, MerchantStatus.Active);
+    }
+
+    /// <summary>
+    /// Another business under <paramref name="main"/>'s account, with its own parcels, pickups, payments and balance.
+    /// It starts with the account's approval and payout account, and the account's owner. <paramref name="businesses"/> is
+    /// how many the account has added already; <paramref name="limit"/> the courier's most (null for no limit).
+    /// </summary>
+    public static Result<Merchant> AddBusiness(Merchant main, MerchantProfile profile, int businesses, int? limit)
+    {
+        if (!main.IsMainProfile)
+        {
+            return Error.Validation("merchant.business.main", "Add a business from the account's main profile.");
+        }
+
+        if (limit is { } most && businesses >= most)
+        {
+            return Error.Conflict(
+                "merchant.business.limit",
+                $"An account can have {most} businesses besides its main profile, and yours has them all.");
+        }
+
+        if (main.Archived || main.Status == MerchantStatus.Suspended)
+        {
+            return Error.Conflict(
+                "merchant.business.suspended",
+                "Your account is suspended, so no business can be added to it. Call the hotline to sort it out.");
+        }
+
+        var business = New(profile with { OwnerName = main.OwnerName }, main.Status);
+        if (business.IsFailure)
+        {
+            return business;
+        }
+
+        business.Value.MainMerchantId = main.Id;
+        business.Value.FollowAccount(main);
+
+        return business;
+    }
+
+    /// <summary>
+    /// Takes the account's decisions from its main profile: whether the courier approved or suspended it, and where its
+    /// payouts go. Called for every business of an account when its main profile changes either.
+    /// </summary>
+    public void FollowAccount(Merchant main)
+    {
+        if (main.Id != AccountId)
+        {
+            throw new InvalidOperationException($"{Name} is not a business of {main.Name}'s account.");
+        }
+
+        Status = main.Status;
+        PayoutMethod = main.PayoutMethod;
+        PayoutAccount = main.PayoutAccount;
+        PayoutAccountName = main.PayoutAccountName;
+        PayoutHold = main.PayoutHold;
     }
 
     public Result Edit(MerchantProfile profile)
@@ -167,52 +245,47 @@ public class Merchant : TenantEntity, IArchivable
         return Result.Success();
     }
 
+    /// <summary>The courier stops paying the account out, with why (the merchant reads it on its Payments page).</summary>
+    public Result HoldPayouts(string? reason)
+    {
+        var why = reason?.Trim();
+        if (string.IsNullOrEmpty(why) || why.Length > MaxPayoutHoldLength)
+        {
+            return Error.Validation("merchant.hold", $"Say why the payouts are held, in at most {MaxPayoutHoldLength} characters.");
+        }
+
+        PayoutHold = why;
+
+        return Result.Success();
+    }
+
+    public Result ReleasePayouts()
+    {
+        if (PayoutHold is null)
+        {
+            return Error.Conflict("merchant.release", $"{Name}'s payouts are not held.");
+        }
+
+        PayoutHold = null;
+
+        return Result.Success();
+    }
+
     /// <summary>
     /// Where payouts go: a bKash or Nagad mobile number, or a bank account with the bank and branch in
     /// <paramref name="accountName"/>.
     /// </summary>
     public Result SetPayoutAccount(PayoutMethod method, string? account, string? accountName)
     {
-        if (!Enum.IsDefined(method))
+        var read = PayoutAccounts.Read(method, account, accountName);
+        if (read.IsFailure)
         {
-            return Error.Validation("merchant.payout.method", "Choose bKash, Nagad or a bank account.");
-        }
-
-        var name = accountName.NullIfBlank();
-        if (name is null || name.Length > 200)
-        {
-            return Error.Validation(
-                "merchant.payout.name",
-                method == Merchants.PayoutMethod.Bank
-                    ? "Enter the account name, bank and branch, at most 200 characters."
-                    : "Enter the name on the account, at most 200 characters.");
-        }
-
-        string number;
-        if (method == Merchants.PayoutMethod.Bank)
-        {
-            var digits = account.NullIfBlank();
-            if (digits is null || digits.Length is < 6 or > 30 || !digits.All(c => char.IsAsciiDigit(c) || c is '-' or ' '))
-            {
-                return Error.Validation("merchant.payout.account", "Enter the bank account number.");
-            }
-
-            number = digits;
-        }
-        else
-        {
-            var phone = PhoneNumber.Parse(account);
-            if (phone.IsFailure)
-            {
-                return Error.Validation("merchant.payout.account", "Enter the bKash or Nagad number, such as 01712345678.");
-            }
-
-            number = phone.Value.Value;
+            return read.Error!;
         }
 
         PayoutMethod = method;
-        PayoutAccount = number;
-        PayoutAccountName = name;
+        PayoutAccount = read.Value.Number;
+        PayoutAccountName = read.Value.Name;
 
         return Result.Success();
     }

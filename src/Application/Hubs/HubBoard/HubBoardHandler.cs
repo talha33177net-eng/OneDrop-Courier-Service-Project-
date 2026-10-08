@@ -6,7 +6,7 @@ using Domain.Parcels;
 
 namespace Application.Hubs.HubBoard;
 
-/// <summary>A parcel as the hub's lists show it.</summary>
+/// <summary>A parcel as the hub's lists show it, with any problem flagged on it (which keeps it from a rider).</summary>
 public sealed record BoardParcel(
     string TrackingCode,
     string Merchant,
@@ -18,7 +18,9 @@ public sealed record BoardParcel(
     DateOnly? HoldUntil,
     string? Reason,
     DateOnly? DueOn,
-    int WeightGrams);
+    int WeightGrams,
+    ParcelIssue? Issue,
+    string? IssueNote);
 
 /// <summary>Parcels at the hub that leave for one other hub: forward ones, or returns going back.</summary>
 public sealed record DispatchGroup(string HubCode, string HubName, bool Returns, IReadOnlyList<BoardParcel> Parcels);
@@ -85,7 +87,9 @@ public class HubBoardHandler(IAppDbContext db, ITenantContext tenantContext, Hub
                     parcel.HoldUntil,
                     parcel.Status == ParcelStatus.Returning ? parcel.ReturnReason : parcel.HoldReason,
                     parcel.DueOn,
-                    parcel.WeightGrams)
+                    parcel.WeightGrams,
+                    parcel.Issue,
+                    parcel.IssueNote)
             })
             .AsNoTracking()
             .ToListAsync(cancellationToken);

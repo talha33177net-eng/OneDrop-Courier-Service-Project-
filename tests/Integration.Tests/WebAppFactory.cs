@@ -110,7 +110,13 @@ public sealed class WebAppFactory : WebApplicationFactory<Program>, IAsyncLifeti
             // No job server: jobs are run by the tests themselves, with a fake clock
             ["Jobs:Server"] = "false",
             ["Seed:DemoActivity"] = "false",
-            ["Seed:Password"] = Password
+            ["Seed:Password"] = Password,
+            // Never a real mail server in tests, whatever appsettings.Local.json holds: the fake keeps them in memory
+            ["Email:Host"] = "",
+            ["Email:From"] = "",
+            // Never the real payment gateway either: without a store, Development uses the test gateway (/Dev/Pay)
+            ["Sslcommerz:StoreId"] = "",
+            ["Sslcommerz:StorePassword"] = ""
         };
 
         builder.UseEnvironment("Development");

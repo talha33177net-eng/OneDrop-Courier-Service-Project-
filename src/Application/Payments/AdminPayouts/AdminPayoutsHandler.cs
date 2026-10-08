@@ -2,38 +2,63 @@ using Microsoft.EntityFrameworkCore;
 using Application.Abstractions;
 using Application.Common;
 using Application.Payments.MerchantPayments;
+using Application.Payments.RunPayouts;
 using Domain.Payments;
 
 namespace Application.Payments.AdminPayouts;
 
 /// <summary>
 /// A merchant's balance not yet paid out. <see cref="Payable"/> is the part the next run pays: the lines up to yesterday.
-/// The rest belongs to today's parcels and is paid from tomorrow.
+/// The rest belongs to today's parcels and is paid from tomorrow. <see cref="Adjustments"/> are the lines the courier
+/// wrote by hand; <see cref="Hold"/> says why its payouts are held, when they are.
 /// </summary>
 public sealed record MerchantBalance(long MerchantId, string Merchant, decimal Cod, decimal Charges, bool HasPayoutAccount, decimal Payable)
 {
-    public decimal Net => Cod - Charges;
+    public decimal Adjustments { get; init; }
+
+    public string? Hold { get; init; }
+
+    public decimal Net => Cod - Charges + Adjustments;
 
     public decimal DueTomorrow => Net - Payable;
+
+    /// <summary>The next run pays it: money up to yesterday, somewhere to send it, and no hold.</summary>
+    public bool IsPaidNext => Payable > 0 && HasPayoutAccount && Hold is null;
+
+    /// <summary>The merchant owes the courier: its charges come to more than its cash.</summary>
+    public bool OwesCourier => Net < 0;
 }
 
 public sealed record PayoutsOverview(
     IReadOnlyList<MerchantBalance> Owed,
     IReadOnlyList<PayoutRow> Payouts,
+    IReadOnlyList<PayoutRow> Stuck,
     decimal PaidThisMonth,
-    decimal PendingTotal)
+    decimal PendingTotal,
+    ScheduledTimes Schedule)
 {
-    /// <summary>What the next run sends: each merchant with a payout account whose lines up to yesterday come to more than ৳0.</summary>
-    public decimal PayableNow => Owed.Where(m => m.HasPayoutAccount && m.Payable > 0).Sum(m => m.Payable);
+    /// <summary>The hourly run has not run for over two hours, or never: the scheduler, or the app, is not running.</summary>
+    public bool RunIsLate { get; init; }
+
+    /// <summary>What the next run sends: each merchant it pays, its lines up to yesterday.</summary>
+    public decimal PayableNow => Owed.Where(m => m.IsPaidNext).Sum(m => m.Payable);
+
+    /// <summary>Merchants the courier owes money to, now or from tomorrow.</summary>
+    public IEnumerable<MerchantBalance> ToPay => Owed.Where(m => m.Net > 0);
+
+    /// <summary>Merchants whose charges are more than their cash: nothing is paid until their cash or an adjustment covers it.</summary>
+    public IEnumerable<MerchantBalance> OwingCourier => Owed.Where(m => m.OwesCourier).OrderBy(m => m.Net);
 }
 
 /// <summary>
-/// The courier's payouts: what it owes each merchant now, and the payouts made, newest first. Courier admins only.
+/// The courier's payouts: what it owes each merchant now and who owes it, payouts the gateway keeps refusing, the
+/// payouts made (newest first) and when the hourly run last ran. Courier admins only.
 /// </summary>
 public class AdminPayoutsHandler(
     IAppDbContext db,
     ITenantContext tenantContext,
     MerchantPaymentsHandler payments,
+    IJobSchedule schedule,
     TimeProvider time)
 {
     public async Task<PayoutsOverview> GetAsync(PayoutStatus? status, CancellationToken cancellationToken = default)
@@ -47,18 +72,23 @@ public class AdminPayoutsHandler(
             {
                 MerchantId = lines.Key,
                 Cod = lines.Sum(l => l.Kind == LedgerEntryKind.Cod ? l.Amount : 0),
-                Charges = -lines.Sum(l => l.Kind != LedgerEntryKind.Cod ? l.Amount : 0),
+                Charges = -lines.Sum(l => l.Kind != LedgerEntryKind.Cod && l.Kind != LedgerEntryKind.Adjustment ? l.Amount : 0),
+                Adjustments = lines.Sum(l => l.Kind == LedgerEntryKind.Adjustment ? l.Amount : 0),
                 Payable = lines.Sum(l => l.EntryDate <= upTo ? l.Amount : 0)
             })
             .ToListAsync(cancellationToken);
         var merchantIds = balances.Select(b => b.MerchantId).ToList();
         var merchants = await db.Merchants
             .Where(m => merchantIds.Contains(m.Id))
-            .Select(m => new { m.Id, m.Name, HasAccount = m.PayoutMethod != null })
+            .Select(m => new { m.Id, m.Name, HasAccount = m.PayoutMethod != null, m.PayoutHold })
             .ToDictionaryAsync(m => m.Id, cancellationToken);
         var owed = balances
-            .Select(b =>
-                new MerchantBalance(b.MerchantId, merchants[b.MerchantId].Name, b.Cod, b.Charges, merchants[b.MerchantId].HasAccount, b.Payable))
+            .Select(b => new MerchantBalance(b.MerchantId, merchants[b.MerchantId].Name, b.Cod, b.Charges, merchants[b.MerchantId].HasAccount, b.Payable)
+            {
+                Adjustments = b.Adjustments,
+                Hold = merchants[b.MerchantId].PayoutHold
+            })
+            .Where(b => b.Net != 0)
             .ToList();
 
         var payouts = db.Payouts.AsQueryable();
@@ -75,11 +105,22 @@ public class AdminPayoutsHandler(
         var pending = await db.Payouts
             .Where(p => p.Status == PayoutStatus.Pending)
             .SumAsync(p => (decimal?)p.Amount, cancellationToken) ?? 0;
+        var times = await schedule.TimesAsync(PayoutsJob.RecurringId, cancellationToken);
 
         return new PayoutsOverview(
             [.. owed.OrderByDescending(m => m.Net)],
             await payments.RowsAsync(payouts.OrderByDescending(p => p.Id).Take(100), tenant, cancellationToken),
+            await payments.RowsAsync(
+                db.Payouts.Where(p => p.Status == PayoutStatus.Pending && p.FailedAttempts > 0).OrderBy(p => p.Id),
+                tenant,
+                cancellationToken),
             paidThisMonth,
-            pending);
+            pending,
+            new ScheduledTimes(
+                times.LastRun is { } last ? tenant.Local(last) : null,
+                times.NextRun is { } next ? tenant.Local(next) : null))
+        {
+            RunIsLate = times.LastRun is not { } ran || time.GetUtcNow().UtcDateTime - ran > TimeSpan.FromHours(2)
+        };
     }
 }

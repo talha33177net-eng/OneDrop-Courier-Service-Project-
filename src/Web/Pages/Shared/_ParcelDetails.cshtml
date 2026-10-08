@@ -37,6 +37,16 @@
                 {
                     <div class="alert alert-error mt">@Icons.Get("return")<div><strong>Return:</strong> @Model.ReturnReason</div></div>
                 }
+                @if (Model.Issue is { } issue)
+                {
+                    <div class="alert @(issue == ParcelIssue.InReview ? "alert-warning" : "alert-error") mt">
+                        @Icons.Get("flag")
+                        <div>
+                            <strong>@issue.DisplayName():</strong> @Model.IssueNote
+                            <div class="cell-sub">Flagged by the courier on @Model.IssueRaisedOn?.ToString("d MMM, h:mm tt"). It does not go out for delivery until the courier clears it.</div>
+                        </div>
+                    </div>
+                }
             </div>
         </div>
 
@@ -64,7 +74,14 @@
                         <dt>Pickup</dt><dd>@Model.PickupPoint, @Model.PickupAddress</dd>
                         <dt>Collected by</dt><dd>@Model.PickupHub</dd>
                         <dt>Delivered by</dt><dd>@Model.DeliveryHub</dd>
-                        <dt>Item</dt><dd>@(Model.ItemDescription ?? "—") · @Money.Kg(Model.WeightGrams)</dd>
+                        <dt>Item</dt>
+                        <dd>
+                            @(Model.ItemDescription ?? "—") · @Money.Kg(Model.BilledWeightGrams)
+                            @if (Model.MeasuredWeightGrams is not null && Model.MeasuredWeightGrams != Model.WeightGrams)
+                            {
+                                <div class="cell-sub">weighed at the hub; you booked it as @Money.Kg(Model.WeightGrams)</div>
+                            }
+                        </dd>
                         @if (Model.MerchantReference is not null)
                         {
                             <dt>Invoice</dt><dd>@Model.MerchantReference</dd>

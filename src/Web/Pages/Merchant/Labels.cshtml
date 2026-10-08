@@ -20,7 +20,8 @@
         <div class="empty">
             @Icons.Get("printer")
             <h3>No labels to print</h3>
-            <p>Labels are printed for parcels waiting for pickup. <a asp-page="/Merchant/NewParcel">Book a parcel</a> first.</p>
+            <p>Labels are printed for parcels waiting for pickup. Book a parcel first.</p>
+            <a class="btn btn-primary" asp-page="/Merchant/NewParcel">@Icons.Get("plus") Book a parcel</a>
         </div>
     </div>
 }

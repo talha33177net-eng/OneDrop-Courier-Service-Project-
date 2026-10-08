@@ -2,13 +2,17 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Application.Merchants.Admin;
 using Application.Parcels.Browse;
+using Application.Payments.RunPayouts;
 using Domain.Common;
 using Domain.Merchants;
 
 namespace Web.Pages.Admin;
 
-/// <summary>One merchant for the admin: approve, suspend or reactivate, correct its profile and payout account.</summary>
-public class MerchantModel(AdminMerchantsHandler merchants, ParcelListHandler parcels) : PageModel
+/// <summary>
+/// One merchant for the admin: approve, suspend or reactivate, correct its profile and payout account, hold, release or
+/// pay its payouts now, and write adjustments on its balance.
+/// </summary>
+public class MerchantModel(AdminMerchantsHandler merchants, ParcelListHandler parcels, PayoutsJob job) : PageModel
 {
     public MerchantView Merchant { get; private set; } = null!;
 
@@ -65,6 +69,42 @@ public class MerchantModel(AdminMerchantsHandler merchants, ParcelListHandler pa
         CancellationToken cancellationToken)
     {
         return Answer(id, await merchants.SetPayoutAsync(id, method, payoutAccount, accountName, cancellationToken), "Payout account saved.");
+    }
+
+    public async Task<IActionResult> OnPostHoldAsync(long id, string? reason, CancellationToken cancellationToken)
+    {
+        return Answer(id, await merchants.HoldPayoutsAsync(id, reason, cancellationToken), "Payouts held for the whole account.");
+    }
+
+    public async Task<IActionResult> OnPostReleaseAsync(long id, CancellationToken cancellationToken)
+    {
+        return Answer(id, await merchants.ReleasePayoutsAsync(id, cancellationToken), "Payouts released: the next run pays the balance.");
+    }
+
+    public async Task<IActionResult> OnPostPayNowAsync(long id, CancellationToken cancellationToken)
+    {
+        var paid = await job.PayNowAsync(id, cancellationToken);
+        if (paid.IsFailure)
+        {
+            return Answer(id, paid.Error!, "");
+        }
+
+        if (!paid.Value.Sent)
+        {
+            return Answer(id, Error.Conflict("payout.refused", $"{paid.Value.Number} was made, but the gateway refused it. See why on the payouts page."), "");
+        }
+
+        TempData["DoneLink"] = $"/Admin/Payout/{paid.Value.Number}";
+        TempData["DoneLinkText"] = $"Open {paid.Value.Number}";
+
+        return Answer(id, Result.Success(), $"{paid.Value.Number} sent.");
+    }
+
+    public async Task<IActionResult> OnPostAdjustAsync(long id, string? direction, decimal amount, string? note, CancellationToken cancellationToken)
+    {
+        var signed = direction == "charge" ? -Math.Abs(amount) : Math.Abs(amount);
+
+        return Answer(id, await merchants.AdjustAsync(id, signed, note, cancellationToken), "Adjustment written. It goes into the next payout.");
     }
 
     private IActionResult Answer(long id, Result result, string done)

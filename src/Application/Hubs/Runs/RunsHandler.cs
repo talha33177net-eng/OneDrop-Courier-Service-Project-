@@ -31,6 +31,31 @@ public sealed record RunRow(
     public bool Late { get; init; }
 }
 
+/// <summary>One parcel on the paper run sheet a rider carries, in the order the hub hands them over.</summary>
+public sealed record RunSheetStop(
+    string TrackingCode,
+    string Recipient,
+    string Phone,
+    string Address,
+    string Area,
+    decimal CodAmount,
+    string? Note,
+    int Attempt,
+    int OfAttempts);
+
+/// <summary>A rider's run on paper: who they are, the day, every stop and the cash they should bring back.</summary>
+public sealed record RunSheet(
+    long RunId,
+    string Rider,
+    string RiderPhone,
+    string Vehicle,
+    string Hub,
+    DateOnly Date,
+    IReadOnlyList<RunSheetStop> Stops)
+{
+    public decimal CashDue => Stops.Sum(stop => stop.CodAmount);
+}
+
 /// <summary>
 /// The end of a rider's day at the hub: their run sheets still open (today's and any earlier ones) and today's closed
 /// ones. Closing counts the cash the deliveries collected against what the rider handed in and takes back the parcels
@@ -83,6 +108,61 @@ public class RunsHandler(IAppDbContext db, ITenantContext tenantContext, HubDire
                 Late = row.Status == RunStatus.Open && tenant.RunIsLate(row.Date, now)
             })
         ];
+    }
+
+    /// <summary>
+    /// The run as a sheet of paper the rider carries: every parcel still to hand over, with the door, the phone and
+    /// the cash to collect. Parcels already recorded are left off, so a sheet printed again later is the work left.
+    /// Null when the run is not this hub's.
+    /// </summary>
+    public async Task<RunSheet?> SheetAsync(string hubCode, long runId, CancellationToken cancellationToken = default)
+    {
+        var tenant = tenantContext.Require();
+        var hub = await hubs.FindAsync(hubCode, cancellationToken);
+        if (hub is null)
+        {
+            return null;
+        }
+
+        var run = await (
+            from r in db.DeliveryRuns
+            join rider in db.Riders on r.RiderId equals rider.Id
+            where r.Id == runId && r.HubId == hub.Id
+            select new { r.Id, r.RunDate, Rider = rider.Name, rider.Phone, rider.Vehicle })
+            .AsNoTracking()
+            .SingleOrDefaultAsync(cancellationToken);
+        if (run is null)
+        {
+            return null;
+        }
+
+        var stops = await (
+            from attempt in db.DeliveryAttempts
+            join parcel in db.Parcels on attempt.ParcelId equals parcel.Id
+            join area in db.Areas on parcel.AreaId equals area.Id
+            where attempt.RunId == run.Id && attempt.Outcome == null
+            orderby area.Name, parcel.TrackingCode
+            select new RunSheetStop(
+                parcel.TrackingCode,
+                parcel.RecipientName,
+                parcel.RecipientPhone,
+                parcel.RecipientAddress,
+                area.Name,
+                parcel.CodAmount,
+                parcel.Note,
+                parcel.Attempts + 1,
+                tenant.MaxDeliveryAttempts))
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        return new RunSheet(
+            run.Id,
+            run.Rider,
+            run.Phone,
+            run.Vehicle.ToString(),
+            hub.Name,
+            run.RunDate,
+            stops);
     }
 
     /// <summary>

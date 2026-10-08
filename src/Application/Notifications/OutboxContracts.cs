@@ -2,6 +2,7 @@ using System.Text.Json;
 using Domain.Common;
 using Domain.Notifications;
 using Domain.Parcels;
+using Domain.Payments;
 
 namespace Application.Notifications;
 
@@ -10,6 +11,15 @@ public sealed record ParcelStatusChangedMessage(long ParcelId, long MerchantId, 
 
 /// <summary>A parcel reached a status the recipient is texted about (out for delivery, delivered).</summary>
 public sealed record RecipientTextMessage(long ParcelId, ParcelStatus Status);
+
+/// <summary>Why a merchant is being emailed. Stored by name in the outbox, so never rename a value in flight.</summary>
+public enum MerchantEmailKind
+{
+    PayoutSent = 1
+}
+
+/// <summary>Something a merchant is told about by email; <paramref name="SubjectId"/> is the row it is about.</summary>
+public sealed record MerchantEmailMessage(long MerchantId, MerchantEmailKind Kind, long SubjectId);
 
 /// <summary>
 /// Turns domain events into outbox rows. The row stores the contract's name and its JSON; the ids are read after the
@@ -36,6 +46,13 @@ public static class OutboxContracts
 
             case ParcelBooked booked:
                 yield return Write(new RecipientTextMessage(booked.Parcel.Id, ParcelStatus.Pending));
+                break;
+
+            case PayoutPaid paid:
+                yield return Write(new MerchantEmailMessage(
+                    paid.Payout.MerchantId,
+                    MerchantEmailKind.PayoutSent,
+                    paid.Payout.Id));
                 break;
 
             default:

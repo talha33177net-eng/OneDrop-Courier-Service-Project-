@@ -1,8 +1,16 @@
 @page
+@inject ITenantContext TenantContext
+@using System.Globalization
+@using Domain.Payments
 @model Web.Pages.Merchant.PaymentsModel
 @{
     ViewData["Title"] = "Payments";
     var d = Model.Data;
+    var online = Model.Online;
+    var owed = d.Unpaid.Owed;
+    var owedText = "৳" + owed.ToString("N0", CultureInfo.InvariantCulture);
+    var canPayOnline = online.Available && owed >= online.Limits.Minimum && owed <= online.Limits.Maximum;
+    decimal Total(LedgerEntryKind kind) => d.UnpaidLines.Where(line => line.Kind == kind).Sum(line => line.Amount);
 }
 
 <div class="page-head">
@@ -12,32 +20,94 @@
     </div>
 </div>
 
+<partial name="_Alerts" />
+
+@if (Model.Returned is { } back)
+{
+    switch (back.Status)
+    {
+        case OnlinePaymentStatus.Paid:
+            <div class="alert alert-success" role="status">@Icons.Get("check-circle")<div><strong>Thank you: @Money.Taka(back.PaidAmount ?? back.Amount) received</strong>@(back.Method is null ? "" : $" by {back.Method}") (@back.Number). It is on your balance below.</div></div>
+            break;
+        case OnlinePaymentStatus.Review:
+            <div class="alert alert-info" role="status">@Icons.Get("info")<div><strong>@Money.Taka(back.PaidAmount ?? back.Amount) received (@back.Number).</strong> The courier checks it before it reaches your balance; you will see it here once they have.</div></div>
+            break;
+        case OnlinePaymentStatus.Failed:
+            <div class="alert alert-warning" role="status">@Icons.Get("alert")<div><strong>@back.Number was not paid.</strong> @back.Note Nothing was taken; you can try again.</div></div>
+            break;
+        case OnlinePaymentStatus.Started:
+            <div class="alert alert-info" role="status">@Icons.Get("clock")<div><strong>Waiting for @online.Gateway to confirm @back.Number.</strong> If you paid, it reaches your balance within a few minutes; reload this page to see it.</div></div>
+            break;
+    }
+}
 @if (!d.HasPayoutAccount)
 {
     <div class="alert alert-warning">@Icons.Get("wallet")<div>We cannot pay you yet. Add your bKash, Nagad or bank account in <a asp-page="/Merchant/Settings">Settings</a>.</div></div>
 }
+@if (d.PayoutHold is { } hold)
+{
+    <div class="alert alert-warning" role="status">@Icons.Get("pause")<div>The courier is holding your payouts: <strong>@hold.TrimEnd('.').</strong> Your balance keeps counting and is paid once the hold is lifted. @if (TenantContext.Tenant?.SupportPhone is { } hotline) { <text>Questions? Call <a href="tel:@hotline">@hotline</a>.</text> }</div></div>
+}
 
-<div class="stats">
-    <div class="stat">
-        <div class="stat-icon green">@Icons.Get("cash")</div>
-        <div><div class="stat-label">Cash collected, not paid yet</div><div class="stat-value">@Money.Taka(d.Unpaid.Cod)</div></div>
+<div class="grid grid-2 mb">
+    <div class="balance-card">
+        <div class="stat-label">@(owed > 0 ? "You owe the courier" : "Your balance")</div>
+        <div class="balance-value @(d.Unpaid.Net < 0 ? "negative" : "")">@Money.Taka(owed > 0 ? owed : d.Unpaid.Net)</div>
+        @if (owed > 0)
+        {
+            <div class="stat-sub">Your charges come to more than the cash collected for you. Pay it now, or it comes off the next cash we collect for you.</div>
+        }
+        else
+        {
+            <div class="stat-sub">@(d.PayoutAccount is null ? "No payout account yet" : $"To {d.PayoutAccount}"). We send it by ourselves the morning after each day, or now if you ask.</div>
+        }
+        <div class="gap">
+            @if (canPayOnline)
+            {
+                <form method="post" asp-page-handler="PayOnline" class="inline-form">
+                    <button class="btn btn-primary" type="submit" data-confirm="You go to @online.Gateway's payment page to pay @owedText by bKash, Nagad, a card or your bank. It reaches your balance as soon as @online.Gateway confirms it." data-confirm-title="Pay @owedText online?" data-confirm-ok="Go to the payment page" data-confirm-tone="calm">@Icons.Get("wallet") Pay @Money.Taka(owed) online</button>
+                </form>
+            }
+            else if (owed > 0 && online.Available && owed < online.Limits.Minimum)
+            {
+                <span class="stat-sub">Online payments start at @Money.Taka(online.Limits.Minimum).</span>
+            }
+            @if (d.CanPayNow)
+            {
+                <form method="post" asp-page-handler="PayNow" class="inline-form">
+                    <button class="btn btn-primary" type="submit" data-confirm="Everything in your balance, today's cash too, is sent to @d.PayoutAccount now." data-confirm-title="Get paid now?" data-confirm-ok="Pay me now">@Icons.Get("send") Get paid now</button>
+                </form>
+            }
+            <a class="btn btn-outline" asp-page="/Merchant/Settings" asp-fragment="payout">@Icons.Get("settings") Payout accounts</a>
+        </div>
     </div>
-    <div class="stat">
-        <div class="stat-icon red">@Icons.Get("tag")</div>
-        <div><div class="stat-label">Charges to take off</div><div class="stat-value">@Money.Taka(d.Unpaid.Charges)</div></div>
-    </div>
-    <div class="stat">
-        <div class="stat-icon">@Icons.Get("wallet")</div>
-        <div>
-            <div class="stat-label">Your next payout</div>
-            <div class="stat-value @(d.Unpaid.Net < 0 ? "negative" : "")">@Money.Taka(d.Unpaid.Net)</div>
-            <div class="stat-sub">@(d.PayoutAccount is null ? "No payout account yet" : $"To {d.PayoutAccount}")</div>
+    <div class="card">
+        <div class="card-head"><div><h2>How it adds up</h2><p>@d.Unpaid.Parcels parcel@(d.Unpaid.Parcels == 1 ? "" : "s") finished and not paid out yet</p></div></div>
+        <div class="card-body" style="padding-top:8px">
+            <dl class="adds-up">
+                <div><dt>Collected from delivered parcels</dt><dd>@Money.Taka(Total(LedgerEntryKind.Cod))</dd></div>
+                <div><dt>Delivery charges</dt><dd>@Money.Taka(Total(LedgerEntryKind.DeliveryCharge))</dd></div>
+                <div><dt>COD charges</dt><dd>@Money.Taka(Total(LedgerEntryKind.CodCharge))</dd></div>
+                <div><dt>Return charges</dt><dd>@Money.Taka(Total(LedgerEntryKind.ReturnCharge))</dd></div>
+                @if (d.Unpaid.Adjustments - d.Unpaid.PaidOnline != 0)
+                {
+                    <div><dt>Adjustments by the courier</dt><dd>@Money.Taka(d.Unpaid.Adjustments - d.Unpaid.PaidOnline)</dd></div>
+                }
+                @if (d.Unpaid.PaidOnline != 0)
+                {
+                    <div><dt>Paid by you online</dt><dd>@Money.Taka(d.Unpaid.PaidOnline)</dd></div>
+                }
+                <div class="total"><dt>Your balance</dt><dd class="@(d.Unpaid.Net < 0 ? "negative" : "")">@Money.Taka(d.Unpaid.Net)</dd></div>
+                <div><dt>Of which up to yesterday, sent by the next payout run</dt><dd>@Money.Taka(d.Ready.Net)</dd></div>
+                <div><dt>Of which collected today, sent tomorrow morning</dt><dd>@Money.Taka(d.Today.Net)</dd></div>
+                <div><dt>Still to collect on @d.ParcelsOnTheirWay parcel@(d.ParcelsOnTheirWay == 1 ? "" : "s") on their way</dt><dd class="muted">@Money.Taka(d.ToCollect)</dd></div>
+            </dl>
         </div>
     </div>
 </div>
 
 <div class="card">
-    <div class="card-head"><div><h2>Waiting for your next payout</h2><p>@d.Unpaid.Parcels parcels finished and not paid out yet</p></div></div>
+    <div class="card-head"><div><h2>Your balance, line by line</h2><p>Each finished parcel's cash and charges not paid out yet</p></div></div>
     @await Html.PartialAsync("_StatementLines", (d.UnpaidLines, "/Merchant/Parcel/"))
 </div>
 
@@ -45,3 +115,27 @@
     <div class="card-head"><h2>Payouts</h2></div>
     @await Html.PartialAsync("_PayoutTable", (d.Payouts, "/Merchant/Payment/", false))
 </div>
+
+@if (online.Recent.Count > 0)
+{
+    <div class="card">
+        <div class="card-head"><div><h2>Your online payments</h2><p>What you paid the courier through @online.Gateway</p></div></div>
+        <div class="table-wrap">
+            <table class="table compact">
+                <thead><tr><th>Payment</th><th>Started</th><th class="num">Amount</th><th>Status</th><th>How</th></tr></thead>
+                <tbody>
+                    @foreach (var payment in online.Recent)
+                    {
+                        <tr>
+                            <td class="mono">@payment.Number</td>
+                            <td class="nowrap">@payment.Created.ToString("d MMM, HH:mm")</td>
+                            <td class="num">@Money.Taka(payment.PaidAmount ?? payment.Amount)</td>
+                            <td>@Statuses.Badge(payment.Status)@if (payment.Note is { } note && payment.Status != OnlinePaymentStatus.Paid) { <div class="cell-sub">@note</div> }</td>
+                            <td>@(payment.Method ?? "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}

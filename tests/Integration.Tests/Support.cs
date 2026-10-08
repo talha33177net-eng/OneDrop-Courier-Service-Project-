@@ -161,13 +161,13 @@ public abstract partial class AppTests(WebAppFactory factory)
         return Visit(slug, await SignInCookieAsync(slug, email));
     }
 
-    protected async Task<string> SignInCookieAsync(string slug, string email)
+    protected async Task<string> SignInCookieAsync(string slug, string email, string? password = null)
     {
         var signedIn = await Visit(slug).PostFormAsync(
             "/Account/Login",
             "/Account/Login",
             ("Input.Email", email),
-            ("Input.Password", WebAppFactory.Password));
+            ("Input.Password", password ?? WebAppFactory.Password));
         Assert.Equal(HttpStatusCode.Redirect, signedIn.StatusCode);
 
         return Visitor.Cookies(signedIn);
@@ -220,6 +220,18 @@ public abstract partial class AppTests(WebAppFactory factory)
                 .. fields.Select(field => KeyValuePair.Create(field.Name, field.Value)),
                 KeyValuePair.Create("__RequestVerificationToken", token)
             ]);
+
+            return await SendAsync(HttpMethod.Post, url, content, Cookies(form));
+        }
+
+        /// <summary>Posts one file as a browser's file input would, with the anti-forgery token of <paramref name="formPage"/>.</summary>
+        public async Task<HttpResponseMessage> UploadAsync(string formPage, string url, string field, byte[] file)
+        {
+            var form = await GetAsync(formPage);
+            Assert.True(form.StatusCode == HttpStatusCode.OK, $"{formPage} answered {(int)form.StatusCode}");
+            var token = Token().Match(await form.Content.ReadAsStringAsync(Cancel)).Groups[1].Value;
+            var content = new MultipartFormDataContent { { new StringContent(token), "__RequestVerificationToken" } };
+            content.Add(new ByteArrayContent(file), field, "picture.bin");
 
             return await SendAsync(HttpMethod.Post, url, content, Cookies(form));
         }

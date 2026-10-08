@@ -1,0 +1,77 @@
+@page "{number}"
+@model Web.Pages.Rider.ReturnModel
+@{
+    ViewData["Title"] = Model.List.List.Number;
+    var l = Model.List.List;
+}
+@section Head {
+    <partial name="_RiderApp" />
+}
+
+<div class="rider-wrap">
+    <div class="breadcrumb"><a asp-page="/Rider/Index">@Icons.Get("arrow-left") My deliveries</a></div>
+    <div class="task mb">
+        <div class="task-head">
+            <div>
+                <div class="task-name">@l.Merchant</div>
+                <div class="mono muted" style="font-size:12.5px">@l.Number · @l.PickupPoint</div>
+            </div>
+            <div class="text-right"><div class="task-cod">@l.Parcels</div><div class="muted" style="font-size:12px">parcel@(l.Parcels == 1 ? "" : "s") to hand back</div></div>
+        </div>
+        <div class="task-meta">
+            <div>@Icons.Get("map-pin") <span>@l.Address</span></div>
+            <div>@Icons.Get("phone") <a href="tel:@Money.Phone(l.Phone)">@Money.Phone(l.Phone)</a></div>
+        </div>
+        <div class="task-actions">
+            <a class="btn btn-outline" href="tel:@Money.Phone(l.Phone)">@Icons.Get("phone") Call</a>
+            <a class="btn btn-outline" href="https://www.google.com/maps/search/?api=1&query=@Uri.EscapeDataString(l.Address)" target="_blank" rel="noopener">@Icons.Get("map-pin") Map</a>
+        </div>
+    </div>
+
+    @if (Model.Problem is not null)
+    {
+        <div class="alert alert-error">@Icons.Get("alert")<div>@Model.Problem</div></div>
+    }
+
+    <h4 class="mb">The parcels</h4>
+    <div class="card mb">
+        <div class="table-wrap">
+            <table class="table compact">
+                <tbody>
+                    @foreach (var p in Model.List.Parcels)
+                    {
+                        <tr>
+                            <td><div class="cell-main mono">@p.TrackingCode</div><div class="cell-sub">@p.RecipientName · @p.Area</div></td>
+                            <td>@(p.Reason ?? "")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <h4 class="mb">At the merchant's door</h4>
+    <div class="outcome-forms">
+        <details open>
+            <summary><span class="stat-icon green">@Icons.Get("check")</span> Handed over</summary>
+            <div class="body">
+                <form method="post" asp-page-handler="HandOver" asp-route-number="@l.Number">
+                    <p class="hint">Hand over every parcel on this list. The merchant confirms in their panel that they arrived.</p>
+                    <button class="btn btn-primary btn-lg btn-block" type="submit" data-confirm="Every parcel on @l.Number is handed back to @l.Merchant, and the merchant is charged for the returns." data-confirm-title="Handed over?" data-confirm-ok="Yes, handed over">@Icons.Get("check") @(l.Parcels == 1 ? "Handed over" : $"All {l.Parcels} handed over")</button>
+                </form>
+            </div>
+        </details>
+        <details>
+            <summary><span class="stat-icon red">@Icons.Get("x")</span> Could not hand over</summary>
+            <div class="body">
+                <form method="post" asp-page-handler="Miss" asp-route-number="@l.Number">
+                    <div class="field">
+                        <label for="reason">Why</label>
+                        <input type="text" id="reason" name="reason" maxlength="200" placeholder="Shop closed, nobody answered" required />
+                    </div>
+                    <button class="btn btn-danger btn-block mt" type="submit">@Icons.Get("return") Bring them back to the hub</button>
+                </form>
+            </div>
+        </details>
+    </div>
+</div>

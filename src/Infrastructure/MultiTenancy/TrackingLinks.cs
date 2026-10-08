@@ -12,10 +12,30 @@ public class TrackingLinks(IConfiguration configuration, ITenantContext tenantCo
 {
     public string Track(string trackingCode)
     {
-        var tenant = tenantContext.Tenant ?? throw new InvalidOperationException("A tracking link needs a tenant.");
+        return Portal() + "Track?code=" + Uri.EscapeDataString(trackingCode);
+    }
+
+    public string Invoice(string payoutNumber)
+    {
+        return Portal() + "Merchant/Payment/" + Uri.EscapeDataString(payoutNumber);
+    }
+
+    public string PaymentReturn(string transactionId, string outcome)
+    {
+        return Portal() + "pay/" + Uri.EscapeDataString(transactionId) + "/" + Uri.EscapeDataString(outcome);
+    }
+
+    public string PaymentNotice()
+    {
+        return Portal() + "pay/notice";
+    }
+
+    private string Portal()
+    {
+        var tenant = tenantContext.Tenant ?? throw new InvalidOperationException("A link needs a tenant.");
         var format = configuration["Links:PortalUrlFormat"]
             ?? throw new InvalidOperationException("Links:PortalUrlFormat is not set.");
 
-        return format.Replace("{slug}", tenant.Slug, StringComparison.Ordinal) + "Track?code=" + Uri.EscapeDataString(trackingCode);
+        return format.Replace("{slug}", tenant.Slug, StringComparison.Ordinal);
     }
 }

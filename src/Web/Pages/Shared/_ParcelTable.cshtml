@@ -61,6 +61,10 @@ else
                         </td>
                         <td>
                             @Statuses.Badge(row.Status)
+                            @if (row.Issue is { } issue)
+                            {
+                                <div class="mt-xs">@Statuses.Badge(issue)</div>
+                            }
                             @if (row.Attempts > 0)
                             {
                                 <div class="cell-sub">@row.Attempts attempt@(row.Attempts == 1 ? "" : "s")</div>

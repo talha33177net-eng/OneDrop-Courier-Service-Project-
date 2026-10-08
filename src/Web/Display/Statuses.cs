@@ -32,6 +32,15 @@ public static class Statuses
         return Pill(tone, status.DisplayName());
     }
 
+    /// <summary>A problem a hub flagged, with a flag: amber while in review, red when exceptional.</summary>
+    public static IHtmlContent Badge(ParcelIssue issue)
+    {
+        var tone = issue == ParcelIssue.InReview ? "pending" : "return";
+
+        return new HtmlString(
+            $"""<span class="badge badge-{tone} plain">{Icons.Get("flag")}{WebUtility.HtmlEncode(issue.DisplayName())}</span>""");
+    }
+
     public static IHtmlContent Badge(MerchantStatus status)
     {
         return status switch
@@ -53,14 +62,67 @@ public static class Statuses
         };
     }
 
+    public static IHtmlContent Badge(ParcelRequestStatus status)
+    {
+        return status switch
+        {
+            ParcelRequestStatus.Open => Pill("pending", "Waiting for an answer"),
+            ParcelRequestStatus.Approved => Pill("done", "Approved"),
+            _ => Pill("return", "Refused")
+        };
+    }
+
+    /// <summary>What a request asks for, in words: "Cancel" or "Cash ৳1,250 to ৳900".</summary>
+    public static IHtmlContent Asked(ParcelRequestKind kind, decimal codAmount, decimal? newCodAmount)
+    {
+        return kind == ParcelRequestKind.Cancel
+            ? new HtmlString("Cancel and bring it back")
+            : new HtmlContentBuilder()
+                .AppendHtml("Cash on delivery ")
+                .AppendHtml(Money.Taka(codAmount))
+                .AppendHtml(" to ")
+                .AppendHtml(Money.Taka(newCodAmount));
+    }
+
+    public static IHtmlContent Badge(ReturnListStatus status)
+    {
+        return status switch
+        {
+            ReturnListStatus.Out => Pill("out", "With the rider"),
+            ReturnListStatus.HandedOver => Pill("pending", "Waiting for the merchant"),
+            ReturnListStatus.Confirmed => Pill("done", "Received"),
+            _ => Pill("return", "Not handed over")
+        };
+    }
+
     public static IHtmlContent Badge(RunStatus status)
     {
         return status == RunStatus.Open ? Pill("out", "Open") : Pill("done", "Closed");
     }
 
-    public static IHtmlContent Badge(PayoutStatus status)
+    /// <summary>A payout's state; <paramref name="stuck"/> marks one the gateway has refused and the run keeps retrying.</summary>
+    public static IHtmlContent Badge(PayoutStatus status, bool stuck = false)
     {
-        return status == PayoutStatus.Paid ? Pill("done", "Paid") : Pill("pending", "Processing");
+        return status switch
+        {
+            PayoutStatus.Paid => Pill("done", "Paid"),
+            PayoutStatus.Cancelled => Pill("cancel", "Cancelled"),
+            _ when stuck => Pill("return", "Refused, retrying"),
+            _ => Pill("pending", "Processing")
+        };
+    }
+
+    /// <summary>A merchant's online payment of what it owed.</summary>
+    public static IHtmlContent Badge(OnlinePaymentStatus status)
+    {
+        return status switch
+        {
+            OnlinePaymentStatus.Paid => Pill("done", "Paid"),
+            OnlinePaymentStatus.Failed => Pill("cancel", "Not paid"),
+            OnlinePaymentStatus.Review => Pill("hold", "Being checked"),
+            OnlinePaymentStatus.Refunded => Pill("return", "Refunded"),
+            _ => Pill("pending", "Waiting")
+        };
     }
 
     public static IHtmlContent Badge(AttemptOutcome? outcome)
@@ -73,6 +135,12 @@ public static class Statuses
             AttemptOutcome.Refused => Pill("return", "Refused"),
             _ => Pill("out", "With rider")
         };
+    }
+
+    /// <summary>A payout account in words: "bKash 01711000009", or "Bank 1501203456789".</summary>
+    public static string PayoutAccount(PayoutMethod method, string? number)
+    {
+        return $"{method.DisplayName()} {(method == PayoutMethod.Bank ? number : Money.Phone(number))}";
     }
 
     public static string Name(LedgerEntryKind kind)
@@ -149,7 +217,7 @@ public static class Money
             ? "−৳" + (-amount).ToString("N0", CultureInfo.InvariantCulture)
             : "৳" + amount.ToString("N0", CultureInfo.InvariantCulture);
 
-        return new HtmlString($"""<span class="amount">{text}</span>""");
+        return new HtmlString($"""<span class="amount"><span class="amount-figure">{text}</span></span>""");
     }
 
     public static IHtmlContent Taka(decimal? amount)

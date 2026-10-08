@@ -1,0 +1,48 @@
+@page
+@model Web.Pages.Merchant.RequestsModel
+@{
+    ViewData["Title"] = "Requests";
+    var open = Model.Requests.Count(r => r.Status == ParcelRequestStatus.Open);
+}
+
+<div class="page-head">
+    <div>
+        <h1>Requests</h1>
+        <p>What you asked the courier about parcels on their way: to cancel one, or to change its cash on delivery. Ask from the parcel's page.</p>
+    </div>
+</div>
+
+<partial name="_Alerts" />
+
+<div class="card">
+    <div class="card-head"><div><h2>Your requests</h2><p>@(open == 0 ? "Nothing waiting for an answer" : $"{open} waiting for an answer"), newest first</p></div></div>
+    @if (Model.Requests.Count == 0)
+    {
+        <div class="empty">
+            @Icons.Get("message")
+            <h3>No requests yet</h3>
+            <p>Open a parcel that is on its way to ask the courier to cancel it or to change its cash on delivery.</p>
+            <a class="btn btn-outline" asp-page="/Merchant/Parcels" asp-route-tab="InTransit">@Icons.Get("package") Parcels on their way</a>
+        </div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Parcel</th><th>You asked</th><th>Why</th><th>Status</th><th>The courier's answer</th></tr></thead>
+                <tbody>
+                    @foreach (var r in Model.Requests)
+                    {
+                        <tr>
+                            <td><a class="code-link" asp-page="/Merchant/Parcel" asp-route-code="@r.TrackingCode">@r.TrackingCode</a><div class="cell-sub">@r.Asked.ToString("d MMM, h:mm tt")</div></td>
+                            <td>@Statuses.Asked(r.Kind, r.CodAmount, r.NewCodAmount)</td>
+                            <td>@r.Reason</td>
+                            <td>@Statuses.Badge(r.Status)@if (r.AnsweredOn is { } on) { <div class="cell-sub">@on.ToString("d MMM, h:mm tt")</div> }</td>
+                            <td>@(r.Answer ?? "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

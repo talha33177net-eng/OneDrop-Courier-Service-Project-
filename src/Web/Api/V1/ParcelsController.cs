@@ -9,8 +9,9 @@ using Web.Authentication;
 namespace Web.Api.V1;
 
 /// <summary>
-/// A parcel as the API returns it: its status, where the money stands, and the day it should be delivered by (DueOn,
-/// once picked up when a time was promised; Late when still on its way after it).
+/// A parcel as the API returns it: its status, where the money stands, the day it should be delivered by (DueOn,
+/// once picked up when a time was promised; Late when still on its way after it), and a problem the courier flagged
+/// on it (Issue: inReview or exceptional, with IssueNote; null when there is none).
 /// </summary>
 public sealed record ParcelStatusResult(
     string TrackingCode,
@@ -27,7 +28,9 @@ public sealed record ParcelStatusResult(
     DateTime Booked,
     DateTime? Closed,
     DateOnly? DueOn,
-    bool Late);
+    bool Late,
+    ParcelIssue? Issue,
+    string? IssueNote);
 
 public sealed record CancelParcelRequest(string? Reason);
 
@@ -95,7 +98,9 @@ public class ParcelsController : ControllerBase
             parcel.Booked,
             parcel.Closed,
             parcel.DueOn,
-            parcel.Late));
+            parcel.Late,
+            parcel.Issue,
+            parcel.IssueNote));
     }
 
     /// <summary>Cancels a parcel not yet picked up.</summary>

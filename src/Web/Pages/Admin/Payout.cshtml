@@ -1,15 +1,30 @@
 @page "{number}"
+@using Domain.Payments
 @model Web.Pages.Admin.PayoutModel
 @{
-    ViewData["Title"] = $"Invoice {Model.Details.Payout.Number}";
+    var p = Model.Details.Payout;
+    ViewData["Title"] = $"Invoice {p.Number}";
 }
 
 <div class="page-head">
     <div>
-        <div class="breadcrumb"><a asp-page="/Admin/Payouts">Merchant payouts</a> <span>/</span> <span>@Model.Details.Payout.Number</span></div>
-        <h1>Invoice @Model.Details.Payout.Number</h1>
-        <p>@Model.Details.Payout.Merchant</p>
+        <div class="breadcrumb"><a asp-page="/Admin/Payouts">Merchant payouts</a> <span>/</span> <span>@p.Number</span></div>
+        <h1>Invoice @p.Number</h1>
+        <p>@p.Merchant</p>
     </div>
+    @if (p.Status == PayoutStatus.Pending)
+    {
+        <div class="page-actions">
+            <form method="post" asp-page-handler="Cancel" asp-route-number="@p.Number" class="inline-form">
+                <button class="btn btn-outline" type="submit" data-confirm="Nothing is sent. Its parcels go back into the merchant's balance and the next payout goes to the account the merchant has then. If the gateway may have sent it after all, check with the gateway first." data-confirm-title="Cancel @p.Number?" data-confirm-ok="Cancel payout">@Icons.Get("x") Cancel payout</button>
+            </form>
+            <form method="post" asp-page-handler="Send" asp-route-number="@p.Number" class="inline-form">
+                <button class="btn btn-primary" type="submit">@Icons.Get("send") Send again now</button>
+            </form>
+        </div>
+    }
 </div>
+
+<partial name="_Alerts" />
 
 @await Html.PartialAsync("_PayoutInvoice", (Model.Details, "/Hub/Parcel/"))

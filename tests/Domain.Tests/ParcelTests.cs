@@ -1,5 +1,6 @@
 using Domain.Common;
 using Domain.Parcels;
+using Domain.Pricing;
 
 namespace Domain.Tests;
 
@@ -311,6 +312,124 @@ public class ParcelTests
         Assert.True(unreachable.Hold("Not reachable", null, Today, maxAttempts: 3).IsSuccess);
         Assert.Equal(Today.AddDays(1), unreachable.DueOn);
         Assert.True(unreachable.IsLate(Today.AddDays(2)));
+    }
+
+    [Fact]
+    public void A_hub_weighing_a_parcel_charges_the_merchant_for_what_the_scale_says()
+    {
+        // Booked as 500 g inside the city: the first kilogram costs 60, each started kilogram above it 15
+        var parcel = Build.Parcel(grams: 500);
+        parcel.PickUp(Today);
+        parcel.ReceiveAt(Build.Mirpur, Today);
+        Assert.Equal(60, parcel.DeliveryCharge);
+
+        Assert.True(parcel.Reweigh(4800, Build.Mirpur).IsSuccess);
+
+        Assert.Equal(4800, parcel.MeasuredWeightGrams);
+        Assert.Equal(500, parcel.WeightGrams);
+        Assert.Equal(4800, parcel.BilledWeightGrams);
+        Assert.Equal(60 + 4 * 15, parcel.DeliveryCharge);
+        Assert.Contains("0.5 kg booked, 4.8 kg measured", parcel.Events[^1].Note);
+    }
+
+    [Fact]
+    public void Weighing_a_parcel_again_prices_it_at_the_rates_it_was_booked_under_not_todays()
+    {
+        var rate = Build.Rate(ServiceArea.InsideCity);
+        var parcel = Build.Parcel(grams: 500);
+        parcel.PickUp(Today);
+        parcel.ReceiveAt(Build.Mirpur, Today);
+
+        // The courier doubles its rate card after the parcel was booked
+        Assert.True(rate.Change(new RateValues(1000, 120, 30, 1, 0, 1)).IsSuccess);
+        Assert.True(parcel.Reweigh(4800, Build.Mirpur).IsSuccess);
+
+        Assert.Equal(60 + 4 * 15, parcel.DeliveryCharge);
+    }
+
+    [Fact]
+    public void A_parcel_is_weighed_only_while_the_courier_still_has_it_to_deliver()
+    {
+        var booked = Build.Parcel(grams: 500);
+        Assert.Equal("parcel.reweigh", booked.Reweigh(4800, Build.Mirpur).Error?.Code);
+
+        var delivered = Build.OutForDelivery(cod: 1250);
+        Assert.True(delivered.Deliver(1250, null, Now).IsSuccess);
+        Assert.Equal("parcel.reweigh", delivered.Reweigh(4800, Build.Mirpur).Error?.Code);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(30_001)]
+    public void A_weight_the_scale_could_not_have_read_is_refused(int grams)
+    {
+        var parcel = Build.OutForDelivery();
+
+        Assert.Equal("parcel.reweigh.weight", parcel.Reweigh(grams, Build.Mirpur).Error?.Code);
+    }
+
+    [Fact]
+    public void A_flagged_parcel_keeps_its_status_and_stays_off_a_rider_until_the_flag_is_cleared()
+    {
+        var parcel = Build.Parcel();
+        parcel.PickUp(Today);
+        parcel.ReceiveAt(Build.Mirpur, Today);
+        parcel.ClearDomainEvents();
+
+        Assert.True(parcel.Flag(ParcelIssue.InReview, "Address unclear", Build.Mirpur, Now).IsSuccess);
+
+        Assert.Equal((ParcelIssue.InReview, "Address unclear", Now), (parcel.Issue, parcel.IssueNote, parcel.IssueRaisedOn));
+        Assert.Equal(ParcelStatus.AtHub, parcel.Status);
+        Assert.Equal("In review: Address unclear", parcel.Events[^1].Note);
+        Assert.Empty(parcel.GetDomainEvents());
+        Assert.Equal("parcel.assign.flagged", parcel.AssignTo(5, Build.Mirpur).Error?.Code);
+
+        Assert.True(parcel.ClearFlag("Called the customer", Build.Mirpur).IsSuccess);
+
+        Assert.Equal((null, null, null), (parcel.Issue, parcel.IssueNote, parcel.IssueRaisedOn));
+        Assert.Equal("Review finished: Called the customer", parcel.Events[^1].Note);
+        Assert.True(parcel.AssignTo(5, Build.Mirpur).IsSuccess);
+    }
+
+    [Fact]
+    public void Flagging_again_changes_the_kind_and_keeps_the_time_it_was_first_flagged()
+    {
+        var parcel = Build.Parcel();
+        parcel.PickUp(Today);
+        parcel.Flag(ParcelIssue.InReview, "Box looks wet", null, Now);
+
+        Assert.True(parcel.Flag(ParcelIssue.Exceptional, "Box crushed, items broken", null, Now.AddHours(2)).IsSuccess);
+        Assert.Equal((ParcelIssue.Exceptional, "Box crushed, items broken", Now), (parcel.Issue, parcel.IssueNote, parcel.IssueRaisedOn));
+
+        parcel.ClearFlag(null, null);
+        Assert.Equal("Exception settled", parcel.Events[^1].Note);
+    }
+
+    [Fact]
+    public void Only_a_parcel_the_courier_has_is_flagged_and_only_with_what_is_wrong()
+    {
+        var waiting = Build.Parcel();
+        var delivered = Build.OutForDelivery().Let(p => p.Deliver(1250, null, Now));
+        var moving = Build.OutForDelivery();
+
+        Assert.Equal("parcel.flag", waiting.Flag(ParcelIssue.InReview, "Check it", null, Now).Error?.Code);
+        Assert.Equal("parcel.flag", delivered.Flag(ParcelIssue.Exceptional, "Damaged", null, Now).Error?.Code);
+        Assert.Equal("parcel.flag.note", moving.Flag(ParcelIssue.InReview, " ", null, Now).Error?.Code);
+        Assert.Equal("parcel.flag.note", moving.Flag(ParcelIssue.InReview, new string('x', 201), null, Now).Error?.Code);
+        Assert.Equal("parcel.flag.kind", moving.Flag((ParcelIssue)9, "Odd", null, Now).Error?.Code);
+        Assert.Equal("parcel.flag.none", moving.ClearFlag(null, null).Error?.Code);
+    }
+
+    [Fact]
+    public void A_parcel_flagged_while_with_a_rider_is_still_recorded_at_the_door_and_keeps_its_flag()
+    {
+        var parcel = Build.OutForDelivery();
+
+        Assert.True(parcel.Flag(ParcelIssue.Exceptional, "Rider says the box was opened", null, Now).IsSuccess);
+        Assert.True(parcel.Deliver(1250, null, Now).IsSuccess);
+
+        Assert.Equal((ParcelStatus.Delivered, ParcelIssue.Exceptional), (parcel.Status, parcel.Issue));
+        Assert.True(parcel.ClearFlag("Merchant agreed it was sealed", null).IsSuccess);
     }
 }
 

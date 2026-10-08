@@ -6,7 +6,10 @@ using Domain.Parcels;
 
 namespace Application.Parcels.Browse;
 
-/// <summary>The tabs a parcel list is cut into, each a group of statuses.</summary>
+/// <summary>
+/// The tabs a parcel list is cut into: each a group of statuses, and last the problems a hub flagged, which a parcel
+/// carries whatever its status.
+/// </summary>
 public enum ParcelTab
 {
     All,
@@ -15,8 +18,11 @@ public enum ParcelTab
     OutForDelivery,
     OnHold,
     Delivered,
+    PartlyDelivered,
     Returns,
-    Cancelled
+    Cancelled,
+    InReview,
+    Exceptional
 }
 
 public sealed record ParcelQuery
@@ -64,9 +70,32 @@ public sealed record ParcelRow(
     DateOnly? DueOn)
 {
     public bool Late { get; init; }
+
+    /// <summary>A problem a hub flagged on the parcel, if any.</summary>
+    public ParcelIssue? Issue { get; init; }
 }
 
 public sealed record ParcelList(Page<ParcelRow> Page, IReadOnlyDictionary<ParcelTab, int> Counts);
+
+/// <summary>A parcel as an export file holds it: everything a merchant's own books need. Times are the tenant's.</summary>
+public sealed record ParcelExportRow(
+    string TrackingCode,
+    string? MerchantReference,
+    string RecipientName,
+    string RecipientPhone,
+    string RecipientAddress,
+    string Area,
+    ParcelStatus Status,
+    ParcelIssue? Issue,
+    decimal CodAmount,
+    decimal? CollectedAmount,
+    decimal DeliveryCharge,
+    decimal CodCharge,
+    decimal TotalCharge,
+    int WeightGrams,
+    DateTime Booked,
+    DateTime? Closed,
+    DateOnly? DueOn);
 
 /// <summary>
 /// Lists parcels with tabs, search, date range, late ones only and paging. A merchant sees only its own (the merchant
@@ -76,6 +105,7 @@ public class ParcelListHandler(IAppDbContext db, ITenantContext tenantContext, T
 {
     public const int MaxPageSize = 100;
 
+    /// <summary>The statuses a tab holds; every status for All and for the tabs of flagged problems.</summary>
     public static ParcelStatus[] StatusesOf(ParcelTab tab)
     {
         return tab switch
@@ -84,10 +114,22 @@ public class ParcelListHandler(IAppDbContext db, ITenantContext tenantContext, T
             ParcelTab.InTransit => [ParcelStatus.PickedUp, ParcelStatus.AtHub, ParcelStatus.InTransit],
             ParcelTab.OutForDelivery => [ParcelStatus.OutForDelivery],
             ParcelTab.OnHold => [ParcelStatus.OnHold],
-            ParcelTab.Delivered => [ParcelStatus.Delivered, ParcelStatus.PartlyDelivered],
+            ParcelTab.Delivered => [ParcelStatus.Delivered],
+            ParcelTab.PartlyDelivered => [ParcelStatus.PartlyDelivered],
             ParcelTab.Returns => [ParcelStatus.Returning, ParcelStatus.Returned],
             ParcelTab.Cancelled => [ParcelStatus.Cancelled],
             _ => Enum.GetValues<ParcelStatus>()
+        };
+    }
+
+    /// <summary>The problem a tab of flagged parcels holds; null for the tabs of statuses.</summary>
+    public static ParcelIssue? IssueOf(ParcelTab tab)
+    {
+        return tab switch
+        {
+            ParcelTab.InReview => ParcelIssue.InReview,
+            ParcelTab.Exceptional => ParcelIssue.Exceptional,
+            _ => null
         };
     }
 
@@ -101,13 +143,23 @@ public class ParcelListHandler(IAppDbContext db, ITenantContext tenantContext, T
             .GroupBy(p => p.Status)
             .Select(g => new { Status = g.Key, Count = g.Count() })
             .ToDictionaryAsync(g => g.Status, g => g.Count, cancellationToken);
+        var byIssue = await parcels
+            .Where(p => p.Issue != null)
+            .GroupBy(p => p.Issue)
+            .Select(g => new { Issue = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.Issue!.Value, g => g.Count, cancellationToken);
         var counts = Enum.GetValues<ParcelTab>()
-            .ToDictionary(tab => tab, tab => StatusesOf(tab).Sum(status => byStatus.GetValueOrDefault(status)));
+            .ToDictionary(
+                tab => tab,
+                tab => IssueOf(tab) is { } issue
+                    ? byIssue.GetValueOrDefault(issue)
+                    : StatusesOf(tab).Sum(status => byStatus.GetValueOrDefault(status)));
 
         var statuses = StatusesOf(query.Tab);
+        var flagged = IssueOf(query.Tab);
         var size = Math.Clamp(query.PageSize, 1, MaxPageSize);
         var number = Math.Max(1, query.Page);
-        var inTab = parcels.Where(p => statuses.Contains(p.Status));
+        var inTab = flagged is null ? parcels.Where(p => statuses.Contains(p.Status)) : parcels.Where(p => p.Issue == flagged);
         var rows = await (
             from parcel in inTab
             join merchant in db.Merchants on parcel.MerchantId equals merchant.Id
@@ -128,7 +180,10 @@ public class ParcelListHandler(IAppDbContext db, ITenantContext tenantContext, T
                 parcel.DeliveryCharge,
                 parcel.Attempts,
                 parcel.Created,
-                parcel.DueOn))
+                parcel.DueOn)
+            {
+                Issue = parcel.Issue
+            })
             .Skip((number - 1) * size)
             .Take(size)
             .ToListAsync(cancellationToken);
@@ -146,6 +201,58 @@ public class ParcelListHandler(IAppDbContext db, ITenantContext tenantContext, T
                 number,
                 size),
             counts);
+    }
+
+    /// <summary>The most parcels one export file holds.</summary>
+    public const int MaxExport = 10_000;
+
+    /// <summary>
+    /// Every parcel of the tab and filters, newest first, up to <see cref="MaxExport"/>, with the charges worked out as
+    /// the parcel page shows them; the query's page is ignored.
+    /// </summary>
+    public async Task<IReadOnlyList<ParcelExportRow>> ExportAsync(ParcelQuery query, CancellationToken cancellationToken = default)
+    {
+        var tenant = tenantContext.Require();
+        var today = tenant.Today(time.GetUtcNow().UtcDateTime);
+        var statuses = StatusesOf(query.Tab);
+        var flagged = IssueOf(query.Tab);
+        var parcels = Filter(db.Parcels.AsNoTracking(), query, tenant, today);
+        parcels = flagged is null ? parcels.Where(p => statuses.Contains(p.Status)) : parcels.Where(p => p.Issue == flagged);
+        var rows = await (
+            from parcel in parcels
+            join area in db.Areas on parcel.AreaId equals area.Id
+            orderby parcel.Id descending
+            select new { Parcel = parcel, Area = area.Name })
+            .Take(MaxExport)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        return
+        [
+            .. rows.Select(row => new ParcelExportRow(
+                row.Parcel.TrackingCode,
+                row.Parcel.MerchantReference,
+                row.Parcel.RecipientName,
+                row.Parcel.RecipientPhone,
+                row.Parcel.RecipientAddress,
+                row.Area,
+                row.Parcel.Status,
+                row.Parcel.Issue,
+                row.Parcel.CodAmount,
+                row.Parcel.CollectedAmount,
+                row.Parcel.DeliveryCharge,
+                row.Parcel.Status switch
+                {
+                    ParcelStatus.Delivered or ParcelStatus.PartlyDelivered => row.Parcel.CodCharge ?? 0,
+                    ParcelStatus.Returned or ParcelStatus.Cancelled => 0,
+                    _ => row.Parcel.Charges.CodChargeOn(row.Parcel.CodAmount)
+                },
+                row.Parcel.TotalCharge,
+                row.Parcel.BilledWeightGrams,
+                tenant.Local(row.Parcel.Created),
+                row.Parcel.ClosedOn is { } closed ? tenant.Local(closed) : null,
+                row.Parcel.DueOn))
+        ];
     }
 
     private static IQueryable<Parcel> Filter(IQueryable<Parcel> parcels, ParcelQuery query, TenantInfo tenant, DateOnly today)

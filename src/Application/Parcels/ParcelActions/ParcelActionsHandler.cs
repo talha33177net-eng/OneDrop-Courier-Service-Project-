@@ -11,7 +11,8 @@ namespace Application.Parcels.ParcelActions;
 
 /// <summary>
 /// What a merchant does with a parcel after booking it: correct it or cancel it before pickup, or ask for it back later.
-/// Courier staff can also ask for a parcel back. A merchant finds only its own parcels.
+/// Courier staff can also ask for a parcel back, weigh it, and flag a problem on it. A merchant finds only its own
+/// parcels.
 /// </summary>
 public class ParcelActionsHandler(
     IAppDbContext db,
@@ -80,6 +81,48 @@ public class ParcelActionsHandler(
         }
 
         return await SaveAsync(parcel.Cancel(reason, time.GetUtcNow().UtcDateTime), cancellationToken);
+    }
+
+    /// <summary>
+    /// The weight a hub's scale read. The parcel is charged on it at the rates it was booked under, so a rate card
+    /// changed since booking never reaches it. Courier staff only: the pages that call this are the hub's.
+    /// </summary>
+    public async Task<Result> ReweighAsync(string trackingCode, int measuredGrams, CancellationToken cancellationToken = default)
+    {
+        var parcel = await FindAsync(trackingCode, cancellationToken);
+        if (parcel is null)
+        {
+            return ParcelDetailsHandler.NotFound;
+        }
+
+        return await SaveAsync(parcel.Reweigh(measuredGrams, null), cancellationToken);
+    }
+
+    /// <summary>
+    /// Courier staff flag a problem for the courier to look at; the parcel does not go out to the door until it is
+    /// cleared. The pages that call this are the hub's.
+    /// </summary>
+    public async Task<Result> FlagAsync(string trackingCode, ParcelIssue issue, string? note, CancellationToken cancellationToken = default)
+    {
+        var parcel = await FindAsync(trackingCode, cancellationToken);
+        if (parcel is null)
+        {
+            return ParcelDetailsHandler.NotFound;
+        }
+
+        return await SaveAsync(parcel.Flag(issue, note, null, time.GetUtcNow().UtcDateTime), cancellationToken);
+    }
+
+    /// <summary>Courier staff clear a flagged problem once it has been looked at, saying what was done.</summary>
+    public async Task<Result> ClearFlagAsync(string trackingCode, string? note, CancellationToken cancellationToken = default)
+    {
+        var parcel = await FindAsync(trackingCode, cancellationToken);
+        if (parcel is null)
+        {
+            return ParcelDetailsHandler.NotFound;
+        }
+
+        return await SaveAsync(parcel.ClearFlag(note, null), cancellationToken);
     }
 
     public async Task<Result> RequestReturnAsync(string trackingCode, string? reason, CancellationToken cancellationToken = default)

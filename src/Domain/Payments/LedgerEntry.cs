@@ -16,7 +16,13 @@ public enum LedgerEntryKind : byte
     CodCharge = 3,
 
     /// <summary>Charged on top of the delivery charge for a parcel that came back.</summary>
-    ReturnCharge = 4
+    ReturnCharge = 4,
+
+    /// <summary>
+    /// Written by the courier, not by a parcel, with a reason: positive when it credits the merchant (the merchant paid
+    /// the courier what it owed, or is compensated), negative when it charges the merchant.
+    /// </summary>
+    Adjustment = 5
 }
 
 /// <summary>
@@ -24,23 +30,31 @@ public enum LedgerEntryKind : byte
 /// the merchant (its cash on delivery) and negative when the merchant owes it (a charge). <see cref="EntryDate"/> is the
 /// tenant's day it belongs to. A line is paid out once, by the <see cref="Payout"/> that takes it; until then it counts
 /// towards the merchant's next payout, so charges the day's cash does not cover are carried forward. One line of each
-/// kind per parcel. A line of ৳0 is never written.
+/// kind per parcel, and adjustments the courier writes by hand. A line of ৳0 is never written.
 /// </summary>
 public class LedgerEntry : TenantEntity, IMerchantOwned
 {
+    public const int MaxNoteLength = 200;
+
+    public const decimal MaxAdjustment = 1_000_000m;
+
     private LedgerEntry()
     {
     }
 
     public long MerchantId { get; private set; }
 
-    public long ParcelId { get; private set; }
+    /// <summary>The parcel the line is for; null for an <see cref="LedgerEntryKind.Adjustment"/>.</summary>
+    public long? ParcelId { get; private set; }
 
     public LedgerEntryKind Kind { get; private set; }
 
     public decimal Amount { get; private set; }
 
     public DateOnly EntryDate { get; private set; }
+
+    /// <summary>Why the courier wrote an adjustment; null on a parcel's lines.</summary>
+    public string? Note { get; private set; }
 
     /// <summary>The payout that paid the line; null while it waits for the next one.</summary>
     public long? PayoutId { get; private set; }
@@ -92,6 +106,34 @@ public class LedgerEntry : TenantEntity, IMerchantOwned
         ];
     }
 
+    /// <summary>
+    /// A line the courier writes on a merchant's balance by hand, with why: <paramref name="amount"/> positive credits
+    /// the merchant (it paid what it owed, or is compensated), negative charges it. It counts towards the next payout
+    /// like any other line.
+    /// </summary>
+    public static Result<LedgerEntry> Adjust(long merchantId, decimal amount, string? note, DateOnly entryDate)
+    {
+        if (amount == 0 || Math.Abs(amount) > MaxAdjustment || decimal.Round(amount, 2) != amount)
+        {
+            return Error.Validation("ledger.amount", $"Enter an amount other than ৳0, at most ৳{MaxAdjustment:N0}, in taka and paisa.");
+        }
+
+        var why = note?.Trim();
+        if (string.IsNullOrEmpty(why) || why.Length > MaxNoteLength)
+        {
+            return Error.Validation("ledger.note", $"Say why, in at most {MaxNoteLength} characters: the merchant reads it on its statement.");
+        }
+
+        return new LedgerEntry
+        {
+            MerchantId = merchantId,
+            Kind = LedgerEntryKind.Adjustment,
+            Amount = amount,
+            EntryDate = entryDate,
+            Note = why
+        };
+    }
+
     /// <summary>The payout <paramref name="payout"/> takes the line. A line is paid out once.</summary>
     internal void PayIn(Payout payout)
     {
@@ -101,5 +143,12 @@ public class LedgerEntry : TenantEntity, IMerchantOwned
         }
 
         Payout = payout;
+    }
+
+    /// <summary>Its payout was cancelled before it was sent: the line waits for the next one again.</summary>
+    internal void Release()
+    {
+        Payout = null;
+        PayoutId = null;
     }
 }

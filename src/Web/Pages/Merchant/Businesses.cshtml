@@ -1,0 +1,70 @@
+@page
+@using Domain.Merchants
+@model Web.Pages.Merchant.BusinessesModel
+@{
+    ViewData["Title"] = "All businesses";
+}
+
+<partial name="_Alerts" />
+
+<div class="page-head">
+    <div>
+        <h1>Businesses</h1>
+        <p>Each business has its own parcels, pickups, payments, balance and figures. Approval and the payout account are shared from your account.</p>
+    </div>
+    @if (!Model.Room.Full)
+    {
+        <div class="page-actions">
+            <a class="btn btn-primary" asp-page="/Merchant/NewBusiness">@Icons.Get("plus") Add business</a>
+        </div>
+    }
+</div>
+
+<div class="business-cards">
+    @foreach (var card in Model.Cards)
+    {
+        var current = card.Id == Model.Current;
+        <div class="card business-card @(current ? "current" : "")">
+            <div class="business-card-head">
+                <span class="stat-icon">@if (Pictures.Url(card.Id, card.Picture) is { } mark) {<img src="@mark" alt="" />} else {@Icons.Get("store")}</span>
+                <div class="business-card-name">
+                    <strong>@card.Name</strong>
+                    <span>@(card.IsMain ? "Main profile" : "Business") · since @card.Since.ToString("MMM yyyy")</span>
+                </div>
+                @if (current)
+                {
+                    <span class="badge badge-done">Open now</span>
+                }
+                else if (card.Status != MerchantStatus.Active)
+                {
+                    @Statuses.Badge(card.Status)
+                }
+            </div>
+            <div class="business-card-figures">
+                <div><span>On the way</span><strong>@card.OnTheWay</strong></div>
+                <div><span>Waiting for payout</span><strong>@Money.Taka(card.Unpaid)</strong></div>
+            </div>
+            @if (current)
+            {
+                <a class="btn btn-outline btn-sm" asp-page="/Merchant/Index">@Icons.Get("dashboard") Dashboard</a>
+            }
+            else
+            {
+                <form method="post" asp-page-handler="Open" asp-route-id="@card.Id" class="inline-form">
+                    <button type="submit" class="btn btn-outline btn-sm">@Icons.Get("arrow-right") Open</button>
+                </form>
+            }
+        </div>
+    }
+    @if (!Model.Room.Full)
+    {
+        <a class="business-add" asp-page="/Merchant/NewBusiness">
+            <span class="stat-icon">@Icons.Get("plus")</span>
+            <span><strong>Add business</strong><small>Its own parcels, payments and figures</small></span>
+            @Icons.Get("chevron-right")
+        </a>
+    }
+</div>
+<p class="muted mt">
+    @(Model.Room.Limit is { } most ? $"{Model.Room.Added} of {most} businesses added" : $"{Model.Room.Added} business{(Model.Room.Added == 1 ? "" : "es")} added") besides your main profile.@(Model.Room.Full ? " Your account has all it can; call the hotline if you need more." : "")
+</p>

@@ -1,6 +1,6 @@
 // The small behaviours every page shares: numbers that count up on arrival, buttons that show they are working and
 // cannot be pressed twice, a confirm step before anything hard to undo, toasts, tips that can be put away, "/" to search,
-// a password that can be shown, and drawings that rest while off screen. Everything here is an extra: each page works
+// a password that can be shown, drawings that rest while off screen, and filters that read only their own part again. Everything here is an extra: each page works
 // without it.
 (() => {
     const root = document.documentElement;
@@ -86,6 +86,88 @@
         addEventListener("scroll", onScroll, { passive: true });
         onScroll();
     }
+
+    // ---------- The bell: opening it marks what it shows as seen, in a cookie per login the server reads ----------
+    document.querySelectorAll("details[data-bell]").forEach(bell => {
+        bell.addEventListener("toggle", () => {
+            if (bell.open && bell.dataset.bellLatest !== "0") {
+                document.cookie = `${bell.dataset.bellCookie}=${bell.dataset.bellLatest}; path=/; max-age=31536000; SameSite=Lax`;
+                bell.querySelector("[data-bell-count]")?.remove();
+            }
+        });
+    });
+
+    // ---------- On a phone the tabs are one row to swipe along: the open one is brought into view ----------
+    document.querySelectorAll(".tabs").forEach(tabs => {
+        const open = tabs.querySelector(".tab.active");
+        if (open && tabs.scrollWidth > tabs.clientWidth) {
+            const left = open.getBoundingClientRect().left - tabs.getBoundingClientRect().left;
+            tabs.scrollLeft += left - (tabs.clientWidth - open.offsetWidth) / 2;
+        }
+    });
+
+    // ---------- A part of a page with its own filter (data-swap="name") is read again alone ----------
+    // A link in it to this same page fetches the page and puts only its part of the same name in place; the address bar
+    // follows, so back, reload and a shared link still show that filter. Anything unexpected falls back to the link.
+    let shown = location.pathname + location.search;
+    let latest = 0;
+    const swapIn = async (href, names, push) => {
+        const ticket = ++latest;
+        const parts = names.map(name => document.querySelector(`[data-swap="${CSS.escape(name)}"]`));
+        parts.forEach(part => part.setAttribute("aria-busy", "true"));
+        try {
+            const response = await fetch(href, { credentials: "same-origin", headers: { "X-Swap": names.join(",") } });
+            const fresh = response.ok && !response.redirected
+                ? new DOMParser().parseFromString(await response.text(), "text/html")
+                : null;
+            const next = names.map(name => fresh?.querySelector(`[data-swap="${CSS.escape(name)}"]`));
+            if (ticket !== latest) {
+                return;
+            }
+
+            if (next.includes(null) || next.includes(undefined)) {
+                location.href = href;
+                return;
+            }
+
+            const focused = document.activeElement?.closest("[data-swap] a[href]")?.getAttribute("href");
+            parts.forEach((part, index) => part.replaceWith(next[index]));
+            if (push) {
+                history.pushState({ swap: names }, "", href);
+            }
+            shown = location.pathname + location.search;
+            if (focused) {
+                document.querySelector(`[data-swap] a[href="${CSS.escape(focused)}"]`)?.focus();
+            }
+        } catch {
+            location.href = href;
+        }
+    };
+    document.addEventListener("click", event => {
+        const link = event.target.closest("[data-swap] a[href]");
+        if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey ||
+            event.altKey || link.target || link.hasAttribute("download")) {
+            return;
+        }
+
+        const url = new URL(link.href);
+        if (url.origin !== location.origin || url.pathname.toLowerCase() !== location.pathname.toLowerCase() ||
+            url.search === location.search) {
+            return;
+        }
+
+        event.preventDefault();
+        for (const sibling of link.parentElement.children) {
+            sibling.classList.toggle("active", sibling === link);
+        }
+        swapIn(url.href, [link.closest("[data-swap]").dataset.swap], true);
+    });
+    addEventListener("popstate", () => {
+        const names = [...document.querySelectorAll("[data-swap]")].map(part => part.dataset.swap);
+        if (names.length > 0 && location.pathname + location.search !== shown) {
+            swapIn(location.href, names, false);
+        }
+    });
 
     // ---------- "/" jumps to the search box ----------
     addEventListener("keydown", event => {
@@ -287,6 +369,27 @@
         }
     });
 
+    // ---------- Hide the amounts on screen; the choice is remembered on this browser ----------
+    // The class is put on <html> by a small script in the head, so amounts are never shown before it is read.
+    for (const button of document.querySelectorAll("[data-hide-amounts]")) {
+        const show = hidden => {
+            document.documentElement.classList.toggle("amounts-hidden", hidden);
+            button.setAttribute("aria-pressed", String(hidden));
+            button.title = hidden ? "Show the amounts" : "Hide the amounts on screen";
+        };
+
+        show(remembered("amounts-hidden"));
+        button.addEventListener("click", () => {
+            const hidden = !document.documentElement.classList.contains("amounts-hidden");
+            show(hidden);
+            try {
+                localStorage.setItem("amounts-hidden", hidden ? "1" : "0");
+            } catch {
+                // Private windows may refuse: the amounts simply show again next time
+            }
+        });
+    }
+
     // ---------- Close the phone menu when a link in it is followed ----------
     const navOpen = document.getElementById("nav-open");
     document.querySelector(".sidebar")?.addEventListener("click", event => {
@@ -299,4 +402,93 @@
             navOpen.checked = false;
         }
     });
+
+    // ---------- Pop-over menus (the account menu, the favourites picker): one open at a time ----------
+    const popovers = [...document.querySelectorAll("details[data-popover]")];
+    for (const popover of popovers) {
+        popover.addEventListener("toggle", () => {
+            if (popover.open) {
+                popovers.filter(other => other !== popover).forEach(other => other.open = false);
+            }
+        });
+    }
+    document.addEventListener("click", event => {
+        popovers.filter(popover => popover.open && !popover.contains(event.target)).forEach(popover => popover.open = false);
+    });
+    addEventListener("keydown", event => {
+        if (event.key === "Escape") {
+            popovers.filter(popover => popover.open).forEach(popover => {
+                popover.open = false;
+                popover.querySelector("summary")?.focus();
+            });
+        }
+    });
+
+    // ---------- Favourites: the stars in the menu and the picker both pin a page to the bar ----------
+    // The list is kept in a cookie per login, so the server draws the bar with the page next time.
+    const favbar = document.querySelector("[data-favbar]");
+    if (favbar) {
+        const items = favbar.querySelector("[data-fav-items]");
+        const empty = favbar.querySelector(".favbar-empty");
+        const count = favbar.querySelector("[data-fav-count]");
+        const head = favbar.querySelector(".fav-panel-head");
+        const headText = head.textContent;
+        const max = Number(favbar.dataset.favMax);
+        const chips = () => [...items.querySelectorAll("[data-fav-chip]")];
+
+        const save = () => {
+            // "-" for none: an empty cookie reads as never chosen, which would bring the defaults back
+            const list = chips().map(chip => chip.dataset.favChip).join(",") || "-";
+            document.cookie = `${favbar.dataset.favCookie}=${encodeURIComponent(list)}; path=/; max-age=31536000; samesite=lax`;
+            count.textContent = `${chips().length}/${max}`;
+            empty.hidden = chips().length > 0;
+            head.textContent = headText;
+            favbar.classList.remove("full");
+        };
+
+        const mark = (href, pinned) => {
+            for (const button of document.querySelectorAll(`[data-fav="${CSS.escape(href)}"]`)) {
+                button.setAttribute("aria-pressed", String(pinned));
+                if (button.classList.contains("nav-star")) {
+                    button.title = pinned ? "Remove from favourites" : "Add to favourites";
+                }
+            }
+        };
+
+        document.addEventListener("click", event => {
+            const button = event.target.closest("[data-fav]");
+            if (!button) {
+                return;
+            }
+
+            event.preventDefault();
+            const href = button.dataset.fav;
+            const chip = chips().find(c => c.dataset.favChip === href);
+            if (chip) {
+                chip.remove();
+                mark(href, false);
+                save();
+                return;
+            }
+
+            if (chips().length >= max) {
+                head.textContent = `All ${max} places are taken. Remove one first.`;
+                favbar.classList.remove("full");
+                void favbar.offsetWidth;
+                favbar.classList.add("full");
+                return;
+            }
+
+            // The picker holds every page with its icon and name, so a new chip is made from it
+            const option = favbar.querySelector(`.fav-option[data-fav="${CSS.escape(href)}"]`);
+            const added = document.createElement("a");
+            added.className = "fav-chip" + (location.pathname.toLowerCase() === href.toLowerCase() ? " active" : "");
+            added.href = href;
+            added.dataset.favChip = href;
+            added.append(option.querySelector("svg").cloneNode(true), " ", option.querySelector(".fav-option-label").textContent);
+            empty.before(added);
+            mark(href, true);
+            save();
+        });
+    }
 })();

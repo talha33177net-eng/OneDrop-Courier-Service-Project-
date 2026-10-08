@@ -19,9 +19,15 @@ public class MerchantConfiguration : IEntityTypeConfiguration<Merchant>
         builder.Property(m => m.PayoutAccountName).HasMaxLength(200);
         builder.Property(m => m.WebhookUrl).HasMaxLength(Merchant.MaxWebhookUrlLength);
         builder.Property(m => m.WebhookSecret).HasMaxLength(100);
+        builder.Property(m => m.PayoutHold).HasMaxLength(Merchant.MaxPayoutHoldLength);
         builder.Ignore(m => m.CanBook);
         builder.Ignore(m => m.HasPayoutAccount);
+        builder.Ignore(m => m.ArePayoutsHeld);
+        builder.Ignore(m => m.IsMainProfile);
+        builder.Ignore(m => m.AccountId);
+        builder.HasOne<Merchant>().WithMany().HasForeignKey(m => m.MainMerchantId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(m => new { m.TenantId, m.Name }).IsUnique().HasDatabaseName("UX_Merchant_Tenant_Name");
+        builder.HasIndex(m => new { m.TenantId, m.MainMerchantId }).HasDatabaseName("IX_Merchant_Tenant_MainMerchant");
     }
 }
 
@@ -43,7 +49,48 @@ public class MerchantApiKeyConfiguration : IEntityTypeConfiguration<MerchantApiK
     }
 }
 
-public class PickupPointConfiguration : IEntityTypeConfiguration<PickupPoint>
+public class MerchantPictureConfiguration : IEntityTypeConfiguration<MerchantPicture>
+{
+    public void Configure(EntityTypeBuilder<MerchantPicture> builder)
+    {
+        builder.MapTenantOwned(Schemas.Merchants);
+        builder.Property(p => p.ContentType).HasMaxLength(50);
+        builder.Property(p => p.Content).HasColumnType("varbinary(max)");
+        builder.HasOne<Merchant>().WithMany().HasForeignKey(p => p.MerchantId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(p => new { p.TenantId, p.MerchantId }).IsUnique().HasDatabaseName("UX_MerchantPicture_Tenant_Merchant");
+    }
+}
+
+public class ModeratorConfiguration : IEntityTypeConfiguration<Moderator>
+{
+    public void Configure(EntityTypeBuilder<Moderator> builder)
+    {
+        builder.MapTenantOwned(Schemas.Merchants);
+        builder.Property(m => m.Name).HasMaxLength(Moderator.MaxNameLength);
+        builder.Property(m => m.Phone).HasMaxLength(20);
+        builder.Property(m => m.Permissions).HasConversion<int>();
+        builder.HasOne<Merchant>().WithMany().HasForeignKey(m => m.AccountId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(m => new { m.TenantId, m.UserId }).IsUnique().HasDatabaseName("UX_Moderator_Tenant_User");
+        builder.HasIndex(m => new { m.TenantId, m.AccountId }).HasDatabaseName("IX_Moderator_Tenant_Account");
+    }
+}
+
+public class MerchantPayoutAccountConfiguration : IEntityTypeConfiguration<MerchantPayoutAccount>
+{
+    public void Configure(EntityTypeBuilder<MerchantPayoutAccount> builder)
+    {
+        builder.MapTenantOwned(Schemas.Merchants);
+        builder.Property(a => a.Number).HasMaxLength(30);
+        builder.Property(a => a.Name).HasMaxLength(200);
+        builder.HasOne<Merchant>().WithMany().HasForeignKey(a => a.AccountId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(a => new { a.TenantId, a.AccountId, a.Method, a.Number })
+            .IsUnique()
+            .HasFilter("[Archived] = (0)")
+            .HasDatabaseName("UX_MerchantPayoutAccount_Account_Number");
+    }
+}
+
+public class PickupPointConfiguration: IEntityTypeConfiguration<PickupPoint>
 {
     public void Configure(EntityTypeBuilder<PickupPoint> builder)
     {

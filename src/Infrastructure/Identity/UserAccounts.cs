@@ -56,6 +56,36 @@ public class UserAccounts(UserManager<AppUser> users, ITenantContext tenantConte
             .ToDictionaryAsync(u => u.Id, u => u.Email ?? u.UserName ?? "", cancellationToken);
     }
 
+    public async Task SetLoginEnabledAsync(long userId, bool enabled, CancellationToken cancellationToken = default)
+    {
+        if (await users.Users.SingleOrDefaultAsync(u => u.Id == userId, cancellationToken) is not { } user)
+        {
+            return;
+        }
+
+        user.Archived = !enabled;
+        await users.SetLockoutEnabledAsync(user, !enabled);
+        await users.SetLockoutEndDateAsync(user, enabled ? null : DateTimeOffset.MaxValue);
+
+        // Ends the cookie of a session already open at its next security check
+        await users.UpdateSecurityStampAsync(user);
+    }
+
+    public async Task<Result> ResetPasswordAsync(long userId, string password, CancellationToken cancellationToken = default)
+    {
+        if (await users.Users.SingleOrDefaultAsync(u => u.Id == userId, cancellationToken) is not { } user)
+        {
+            return Error.NotFound("login.notFound", "That login was not found.");
+        }
+
+        var token = await users.GeneratePasswordResetTokenAsync(user);
+        var reset = await users.ResetPasswordAsync(user, token, password);
+
+        return reset.Succeeded
+            ? Result.Success()
+            : Error.Validation("login.password", string.Join(" ", reset.Errors.Select(e => e.Description)));
+    }
+
     public async Task<string?> MerchantEmailAsync(long merchantId, CancellationToken cancellationToken = default)
     {
         return await users.Users

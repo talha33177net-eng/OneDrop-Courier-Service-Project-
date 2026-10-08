@@ -1,4 +1,4 @@
-# Project
+# Projectsees its payments and invoices, and adds moderators who work in the account with their own sign-in |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="src/Web/wwwroot/images/logo-on-dark.svg" />
@@ -14,10 +14,10 @@ the next day.
 
 | Who | What they do |
 |---|---|
-| Merchant | Signs up (approved by the courier), books parcels by form, spreadsheet or API, asks for pickups, prints labels, follows every parcel, checks a phone number's delivery record, sees its payments and invoices |
-| Hub staff | Scan parcels in and out (receive, send to the delivery hub, hand back returns), send riders to pickups, hand parcels to riders, close each rider's run with the cash handed in |
-| Rider | A phone screen: today's pickups and deliveries, and at each door delivered, partly delivered, on hold or refused |
-| Courier admin | Live dashboard, merchants (approve, suspend, edit), riders, the rate card, coverage, payouts, failed messages |
+| Merchant | Signs up (approved by the courier), books parcels by form, spreadsheet or API, asks for pickups, prints labels, follows every parcel (by stage, by date, in stats over any period, and a bell of what happened), asks the courier to cancel a parcel on its way or change its cash, confirms the returns a rider brings back, checks a phone number's delivery record, keeps several payout accounts and can be paid now, sees its payments and invoices, exports its parcels, and adds moderators who work in the account with a sign-in of their own |
+| Hub staff | Scan parcels in and out (receive, send to the delivery hub, hand back returns), send riders to pickups, hand parcels to riders, send returns back to merchants with a rider, flag a parcel with a problem, close each rider's run with the cash handed in |
+| Rider | A phone screen: today's pickups, deliveries and returns to hand back, and at each door delivered, partly delivered, on hold or refused |
+| Courier admin | Live dashboard, merchants (approve, suspend, edit), merchants' requests to answer, riders, the rate card, coverage, payouts, reports, failed messages |
 | Recipient | Public tracking by code, and an SMS when the parcel goes out and when it is delivered |
 
 Prices come from the courier's rate card, per service area (seeded values):
@@ -40,7 +40,7 @@ Prices come from the courier's rate card, per service area (seeded values):
 
 ## Run it
 
-Prerequisites: .NET 10 SDK, SQL Server (the dev server is `10.50.0.1,1433` over the VPN), and SqlPackage
+Prerequisites: .NET 10 SDK, SQL Server (the dev server is `ras-x2,1433`), and SqlPackage
 (`dotnet tool install -g microsoft.sqlpackage`).
 
 **One-time setup: connection strings.** They contain the database password, so they are kept in git-ignored
@@ -56,10 +56,49 @@ Both have the same shape:
 ```json
 {
   "ConnectionStrings": {
-    "Database": "Server=10.50.0.1,1433;Database=OneDrop;User Id=...;Password=...;TrustServerCertificate=true;MultipleActiveResultSets=true"
+    "Database": "Server=ras-x2,1433;Database=OneDrop;User Id=...;Password=...;TrustServerCertificate=true;MultipleActiveResultSets=true"
   }
 }
 ```
+
+**Sending email (optional).** Merchants are emailed when a payout leaves. Add the mail server to the same git-ignored
+`src/Web/appsettings.Local.json`; with no `Email:Host` the app keeps the emails in memory and lists them at
+`/Dev/Emails`, which also has a button that sends a test email.
+
+```json
+{
+  "Email": {
+    "Host": "smtp.gmail.com",
+    "Port": 587,
+    "User": "you@gmail.com",
+    "Password": "a Google app password, not the account password",
+    "From": "you@gmail.com",
+    "FromName": "OneDrop Courier"
+  }
+}
+```
+
+The integration tests always use the fake sender, whatever is configured here.
+
+**Taking payments online (optional).** A merchant who owes the courier (its charges came to more than the cash
+collected for it) can pay it online through SSLCommerz from its Payments page. Add the store to the same git-ignored
+file; with no store, Development uses a test gateway whose payment page is `/Dev/Pay/…`, and any other environment
+offers no online payment.
+
+```json
+{
+  "Sslcommerz": {
+    "StoreId": "your sandbox store id",
+    "StorePassword": "your sandbox store password",
+    "BaseUrl": "https://sandbox.sslcommerz.com/"
+  }
+}
+```
+
+`BaseUrl` is the sandbox until the store goes live (`https://securepay.sslcommerz.com/`). SSLCommerz sends the payer
+back to `/pay/{transaction}/success` on the courier's own address, which works on localhost; its server-to-server
+notice (`/pay/notice`) cannot reach localhost, so there a payment whose browser never came back is found by the check
+job that runs every 10 minutes. The integration tests always use the test gateway.
 
 Then:
 
@@ -71,7 +110,7 @@ dotnet run --project src/Web                # seeds demo logins, merchants and r
 | Address | What |
 |---|---|
 | http://onedrop.localhost:5080 | OneDrop Courier: public site, tracking, sign-up, and every panel |
-| http://localhost:5080 | The platform (lists couriers; platform admin only) |
+| http://localhost:5080 | Sends visitors to OneDrop Courier (`Tenancy:HomeCourier`); platform admins sign in at http://localhost:5080/Account/Login and land on the list of couriers |
 
 Browsers resolve `*.localhost` to your machine, so no hosts-file changes are needed. In Development the app also books
 about twenty sample parcels in every stage (`Seed:DemoActivity`), so every screen has something to show.
@@ -111,10 +150,11 @@ The sign-in page lists them as one-press buttons in Development.
 | `fashion@onedrop.test`, `gadget@onedrop.test`, `beauty@onedrop.test`, `crafts@onedrop.test` | Merchants (Fashion House, Gadget BD, Beauty Shop, Chattogram Crafts) |
 | `organic@onedrop.test` | Organic Bazar, a merchant still waiting for approval |
 | `rider@onedrop.test`, `rider2@` (Mirpur), `rider3@` (Gulshan), `rider4@` (Chattogram), `rider5@` (Dhanmondi), `rider6@` (Uttara) | Riders |
-| `admin@platform.test` on http://localhost:5080 | Platform admin |
+| `admin@platform.test` on http://localhost:5080/Account/Login | Platform admin |
 
 The **Demo mode** bar links the fake gateways: **SMS inbox** (`/Dev/Sms`), **Payouts sent** (`/Dev/Payouts`) and
-**Webhooks received** (`/Dev/Webhooks`).
+**Webhooks received** (`/Dev/Webhooks`). Without an SSLCommerz store, a merchant's "Pay online" opens the test
+payment page (`/Dev/Pay/…`), which pays, fails, cancels, or pays a payment marked risky.
 
 ### Demo API keys (Development only)
 
@@ -149,7 +189,7 @@ curl http://onedrop.localhost:5080/api/v1/parcels \
 | Endpoint | |
 |---|---|
 | `POST /api/v1/parcels` | 201 with the tracking code (`OD10000001`), status, service area, delivery hub and charges. A retry with the same `Idempotency-Key` returns 200 and the same parcel; a different body with that key 409. A merchant waiting for approval gets 403 |
-| `GET /api/v1/parcels/{code}` | The caller's own parcel and its history; anyone else's is 404 |
+| `GET /api/v1/parcels/{code}` | The caller's own parcel and its history, and any problem the courier flagged on it (`issue`: `inReview` or `exceptional`, with `issueNote`); anyone else's is 404 |
 | `POST /api/v1/parcels/{code}/cancel` | Before pickup only (409 after); optional `reason` |
 | `GET /api/v1/charge?area=&weightKg=&codAmount=` | What a parcel would cost: service area, delivery charge, COD charge, total, return charge |
 | `GET /api/v1/areas` | The areas an address must pick from, with their city and hub |

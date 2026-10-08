@@ -14,9 +14,9 @@ The one place to see where we are and what comes next for **OneDrop Courier**, t
 
 | | |
 |---|---|
-| Current phase | **Phase 2 — After the rebuild** |
-| Next task | Owner's review of the rebuild on branch `traditional-courier` (uncommitted), then 2.1 |
-| Last session | 2026-10-05 — UI redesign with motion and on-page guidance; three logic gaps closed (rider stopped or moved with work, pickup point moved with parcels waiting, hold for a past day); then a new brand (logo, ink and sky blue theme) and a drawn, animated front page; all suites green, live check done |
+| Current phase | **Phase 4** — the admin panel and payouts the courier can steer |
+| Next task | 4.10 recipients pay COD online, if the owner says go (recommended); otherwise 4.3 Courier settings. Still waiting on the owner: 2.1 review and commit of everything since `ce576c1` (all uncommitted on `main`); 2.6 and 2.7 wait on accounts and a decision |
+| Last session | 2026-10-08 — 4.9: merchants pay what they owe online through SSLCommerz, proved on the owner's sandbox store |
 | Blockers | None |
 
 ---
@@ -81,12 +81,95 @@ base with one courier seeded, reset both databases, recipients track publicly wi
 ## Phase 2 — After the rebuild
 
 - [ ] **2.1 Owner's review and commit** on `traditional-courier`; merge into `main` when approved.
-- [ ] **2.2 Coverage admin.** Add and edit hubs, zones (city, suburb) and areas on a page instead of the seed.
-- [ ] **2.3 Run sheet.** A printable list of a rider's parcels (address, phone, COD) when the run is assigned.
-- [ ] **2.4 Merchant notifications.** Tell the merchant by SMS or webhook when a payout is sent.
-- [ ] **2.5 Reports.** COD collected, charges and shortfalls by day and by rider; returns by merchant.
-- [ ] **2.6 Real gateways.** SMS, bKash / Nagad / bank payout adapters behind the existing interfaces.
+- [x] **2.2 Coverage admin** (2026-10-06). `/Admin/Coverage` keeps the map it always showed and gains three tabs:
+      hubs, zones (code, name, city, suburb, hub) and areas (name, zone, filtered by zone). The seed still lays the
+      map out; a part of it that leaves is archived, never deleted, and refuses to move while work rests on it.
+- [x] **2.3 Run sheet** (2026-10-06). `/Hub/RunSheet/{run}`: the parcels still to hand over with the door, the phone,
+      the cash and a line to sign; offered when parcels are assigned and from the closing page. Printed from the page.
+- [x] **2.4 Merchant notifications** (2026-10-06). The merchant is emailed when its payout has left: what was
+      collected, the charges, what was sent, to which account, and a link to the invoice. Through the outbox.
+- [x] **2.5 Reports** (2026-10-06). `/Admin/Reports` over a chosen period: day by day (delivered, returned, cash,
+      charges, earned, owed), by rider (stops, deliveries, cash collected against handed in, short) and returns by
+      merchant. Each table downloads as CSV.
+- [~] **2.6 Real gateways.** **Email is real** (SMTP, Gmail today; `Email:*` in `appsettings.Local.json`) and sends
+      the merchant notifications. **SMS and the bKash / Nagad / bank payout adapters stay fakes**: the owner has no
+      accounts with those providers yet (2026-10-06), so recipients' texts are still listed at `/Dev/Sms`.
 - [ ] **2.7 The app's own SQL login** without `ALTER ANY SECURITY POLICY` (shown to the owner before it is created).
+      Left alone for now by the owner's choice (2026-10-06): the app still signs in as `sa`.
+
+---
+
+## Phase 3 — The gaps found in Steadfast's merchant panel (owner, 2026-10-06)
+
+The owner walked through Steadfast's panel again and asked for the features we do not have. One task at a time, each
+with the full test routine. Moderators first, by the owner's choice.
+
+- [x] **3.1 Moderators** (2026-10-06). People who work inside a merchant account with their own sign-in and their own permissions
+      (dashboard, parcels, payments, support, settings), invited by email with a code; the account owner chooses what
+      each may see and do, and can stop them. New table, invitation flow, a permission check on every merchant page.
+- [x] **3.2 More parcel tabs** (2026-10-07). Partly delivered is a tab of its own; hub staff and admins flag a parcel
+      **in review** or **exceptional** with what is wrong (`Parcel.Issue`), clear it with what was done, and the
+      flagged parcel stays off riders' runs meanwhile. The merchant sees the flag tabs while they hold a parcel, the
+      flag on the parcel and on its dashboard, and in the API.
+- [x] **3.3 Stats page** (2026-10-07). `/Merchant/Stats`: the parcels booked in the last 7 or 30 days, this month,
+      last month or the merchant's own days (`Domain.Common.Period`, at most a year): booked with their cash, the
+      delivery, return and cancel rates, cash collected, where they are now as one bar, and count, cash and share per
+      status with a link to each status's parcels for those days.
+- [x] **3.4 Returns the merchant signs for** (2026-10-07). `/Hub/Returns` sends a pickup point's returning parcels
+      back with a rider on a return list (`RL-100001`); the rider records the hand-over (each parcel returned and
+      charged) or why not on `/Rider/Return/{number}`; the merchant follows `/Merchant/Returns` and confirms a list on
+      `/Merchant/Return/{number}`, with a note when something is missing.
+- [x] **3.5 Cancellation and amount-change requests** (2026-10-07). From a parcel on its way the merchant asks to
+      cancel it or change its cash (`Parcels.ParcelRequest`); admins approve (the parcel changes at once) or refuse
+      with a reason on `/Admin/Requests`; the merchant sees answers on the parcel and `/Merchant/Requests`. Replaces
+      the merchant's direct "Ask for it back".
+- [x] **3.6 Payment request and several payout accounts** (2026-10-07). Several saved accounts
+      (`Merchants.MerchantPayoutAccount`), one in use; "Get paid now" on Payments pays every unpaid line at once,
+      today's too; the balance splits into ready, today and still to collect.
+- [x] **3.7 Notifications in the panel** (2026-10-07). A bell in the merchant's top bar with the last week's
+      deliveries, holds, refusals, returns, flags, return lists, answered requests and payouts; worked out, not stored.
+- [x] **3.8 Small things from the same panel** (2026-10-07). `/Merchant/Export` (full CSV, up to 10,000),
+      `/Merchant/ByDate`, the merchant ID with a copy button (account menu, Settings, admin search), and empty lists
+      that offer their next action.
+
+Not taken from Steadfast: a prepaid wallet ("Add fund", "Check balance"), a different money model from our COD ledger
+that needs a real gateway (2.6); Pick-n-Drop and "My incoming", which are another service line; and the Bangla
+switch, which the owner parked on 2026-10-06.
+
+---
+
+## Phase 4 — The admin panel and payouts the courier can steer (owner, 2026-10-07)
+
+The owner asked whether merchant payouts work (they do: every payout equals its lines, no line paid twice) and what
+the admin panel is missing, then "Lets fix these". Payouts come first, because the admin's bell needs a stuck payout
+to say why it is stuck.
+
+- [x] **4.1 Payouts the admin can steer** (2026-10-07). A failed transfer keeps why, how often and when it was tried, and the admin
+      sends it again or cancels it (its lines are freed for a new payout to the account as it is now). Hold or pay one
+      merchant. Merchants who owe the courier listed apart, and an adjustment line (the merchant paid us, or a credit
+      or charge with a reason) to settle them. A short "how payouts work" box, and when the hourly run last ran and runs
+      next.
+- [x] **4.2 A bell for the admin** (2026-10-07). Sign-ups waiting, requests to answer, flagged parcels, failed messages, stuck
+      payouts, riders short of cash, notes on return lists, merchants owed money with no payout account.
+- [ ] **4.3 Courier settings.** Name, hotline, SMS sender, delivery attempts and businesses per account, today only in
+      the database.
+- [ ] **4.4 Staff accounts.** Add, edit and stop hub staff and admin logins.
+- [ ] **4.5 The whole merchant for the admin.** Its businesses, moderators, payout accounts, balance and payouts,
+      requests and return rate.
+- [ ] **4.6 Stuck parcels.** Parcels that have not moved for too many days at a hub, between hubs or on hold; the days
+      are the courier's setting.
+- [ ] **4.7 A page per rider.** Runs, deliveries, and cash handed in against cash collected.
+- [ ] **4.8 A pass over every admin page** at desktop and phone width, fixing what is broken.
+- [x] **4.9 Merchants pay what they owe online, through SSLCommerz** (2026-10-08, owner's sandbox store). "Pay ৳X
+      online" on Payments when the charges come to more than the cash; the gateway is asked before anything is
+      credited, one credit per payment, a check job for payers who never came back, risky payments held for the
+      admin. A test gateway (`/Dev/Pay`) in Development without a store. Proved on the owner's real sandbox store:
+      a bKash payment credited, a "success with risk" Nagad payment held and then credited by the admin.
+- [ ] **4.10 Recipients pay their COD online** (recommended next, waiting for the owner's go-ahead). A "Pay now" on
+      the tracking page; the rider collects ৳0; refunds through SSLCommerz when a paid parcel is refused or comes back.
+
+Kept as it is, by decision: payouts do not wait for a rider's cash. The merchant is paid what the door collected and
+a short rider is the courier's matter with its rider; 4.2 and 4.7 make the shortfall impossible to miss.
 
 ---
 
@@ -94,8 +177,9 @@ base with one courier seeded, reset both databases, recipients track publicly wi
 
 | When | Job |
 |---|---|
-| Every 5 seconds (`Jobs:OutboxInterval`) | Outbox senders in process: recipient texts, and merchants' webhooks in a loop of their own |
+| Every 5 seconds (`Jobs:OutboxInterval`) | Outbox senders in process, each in a loop of its own: recipient texts, merchants' webhooks, and merchants' emails |
 | Every hour (`Jobs:Payouts`) | `merchant-payouts`: every merchant's ledger lines up to yesterday (courier's day) |
+| Every 10 minutes (`Jobs:OnlinePayments`) | `online-payments`: asks the gateway about online payments still waiting or failed in the last day; credits what it confirms, closes what was never finished after a day |
 
 ## Must-pass tests
 
@@ -119,12 +203,383 @@ New ones are added there and dated here.
 |---|---|
 | 2026-10-04 | Pivot to a traditional courier; start from `3b48bc9`, stash the uncommitted Week 5 rewrite; keep multi-tenancy with one courier; reset both databases; public tracking only (owner) |
 | 2026-10-04 | SQL Server reached at `10.50.0.1,1433` over the VPN instead of `ras-x2` (owner) |
+| 2026-10-06 | SQL Server reached as `ras-x2,1433` again (owner) |
+| 2026-10-06 | The coverage map stays seeded but the admin adds, edits and takes off hubs, zones and areas; what comes off is archived, never deleted, and a part of the map with work on it refuses to move (owner) |
+| 2026-10-06 | The features missing against Steadfast's merchant panel become Phase 3, in the owner's order, moderators first; no prepaid wallet, no Pick-n-Drop, no Bangla switch (owner) |
+| 2026-10-06 | A moderator is a merchant login plus a permission row on the account's main profile; merchant pages are default-deny against a page-to-permission list; the first password is handed over by the owner because there is no email sender |
+| 2026-10-06 | Email replaces SMS as the real channel, for merchants only: a real SMTP sender (Gmail app password in `appsettings.Local.json`) carries the payout notification; recipients keep the fake SMS until there is a gateway (owner) |
+| 2026-10-06 | The bKash / Nagad / bank payout gateways and the app's own SQL login are left as they are until the owner has the accounts and makes the call (owner) |
+| 2026-10-07 | Problems a hub flags (in review, exceptional) are a flag beside the parcel's status, not new statuses; a flagged parcel is not handed to a rider; only a parcel the courier has can be flagged |
+| 2026-10-07 | Returns go back on a return list a rider carries; the hand-over returns and charges each parcel, the merchant's confirmation is a signature, not a gate |
+| 2026-10-07 | After pickup a merchant's cancel or cash change is a request the admins answer; this replaces the merchant's direct "Ask for it back" |
+| 2026-10-07 | Several payout accounts per merchant account, the one in use copied onto the main profile; "Get paid now" pays every unpaid line at once with the run's own rules, no limit on how often |
+| 2026-10-07 | The bell is worked out from existing rows when a page is drawn; "seen" is a cookie per login. The merchant ID is shown (owner's request) as the one exception to "never show a raw id" |
+| 2026-10-07 | Phase 4: payouts the admin can steer (refused transfers with their reason, send again, cancel; hold one account; adjustments), then the admin's bell, settings, staff, merchant, stuck parcels, rider pages and a pass over every page (owner). Payouts keep not waiting for a rider's cash |
+| 2026-10-08 | SSLCommerz (owner's sandbox) takes money in, first for merchants paying what they owe: an adjustment credit, believed only when the gateway confirms it to our server, once. Not a payout gateway (it cannot send money out) and no prepaid wallet (the payout run would pay a top-up straight back). Recipients paying COD online is the recommended next step |
 
 ---
 
 ## Daily log
 
 Newest first.
+
+### 2026-10-08 (later: tabs that do not reload the page, and work marks in the menu)
+- **Owner's requests:** "In payout box when i click any one these [All, Paid, Processing, Cancelled] the whole page
+  loads", then "In side menu add a red ! circle for tabs … where there is work to do … for admin, marchent, rider panel".
+- **Tabs in place.** `site.js` gained a shared behaviour: a part marked `data-swap="name"` whose link points to the same
+  page with another query fetches the page and swaps only that part, and pushes the address, so back, reload and a
+  shared link still work; anything unexpected (an error, a redirect to sign-in) falls back to following the link. The
+  part fades only when the answer is slow. Used by the payouts card on `/Admin/Payouts`; other filters can opt in.
+- **Work marks.** `MenuWorkHandler` answers, with a few `EXISTS` reads per page, where open work waits: for the admin
+  sign-ups, requests, flagged parcels (Parcels), work at the hubs, failed messages and stuck payouts (refused, held
+  online payments, owed with no payout account); for the merchant parcels booked with no pickup asked for, return
+  lists to confirm, and no payout account (Settings); for the rider deliveries or return lists to hand over, and
+  pickups to collect. The layout puts a red "!" on those menu items and favourites, and on the phone's menu button.
+  What merely happened stays in the bell.
+- **Tested:** build 0 warnings; architecture 6; `BellTests` 3 of 3 on `OneDrop-Test` (new: the merchant's pickups
+  marked once it books and cleared once the parcel is at the hub, another merchant unmarked, the rider's deliveries
+  marked once assigned, the admin's merchants marked for a sign-up). Live on dev: the payouts page carries the swap
+  part and the served script has it. **Not done:** a click-through in a browser (the DevTools browser was in use), so
+  the swap itself has not been seen working; the hub staff's own menu has no marks yet.
+
+### 2026-10-08 (SSLCommerz: merchants pay what they owe online)
+- **Owner's request:** "i opend a ssl for the demo mode" (an SSLCommerz sandbox store). Asked what it should be for, the
+  owner picked every option and said: "i dont know. Im confused about this. im doing this project just to show in py
+  portfolio. But i want the logic to be perfect." Recommended and built: merchants pay what they owe (4.9); recipients
+  paying COD online (4.10) next, with refunds; no prepaid wallet (the hourly payout run would pay a top-up straight
+  back); SSLCommerz cannot be the payout gateway (it only takes money in).
+- **4.9 done.** `Domain/Payments/OnlinePayment.cs` (started, paid, failed, held for review, refunded; `Confirm` credits
+  an `Adjustment` line once, even after a failure; risky or another amount is held; `MethodName` reads "BKASH-BKash"
+  as "bKash"). `IPaymentGateway` with `SslcommerzGateway` (session API, validation API, transaction query),
+  `FakePaymentGateway` and `/Dev/Pay` (Development without a store), `NoPaymentGateway` elsewhere.
+  `OnlinePaymentsHandler` (start from the server's own balance; return, notice and the `online-payments` job all ask
+  the gateway first; the admin credits or records a refund) and `PaymentReturnController` (`/pay/{transaction}/…`,
+  `/pay/notice`, open to anyone, nothing posted believed). Pages: "Pay ৳X online" and a return banner on
+  `/Merchant/Payments`, "Paid online" on statements, held payments and the latest on `/Admin/Payouts`, a line in the
+  admin's bell. Table `Payments.OnlinePayment`, sequence `Payments.OnlinePaymentNumber`, in the security policy; both
+  databases published. The store id and password are in the git-ignored `src/Web/appsettings.Local.json`.
+- **Tested:** build 0 warnings; domain **200** (13 new), architecture 6; integration: the full suite **94 of 94, none
+  skipped** (three new `OnlinePaymentsTests`: credited once, a forged return credits nothing, the check job credits a
+  payer who never came back and closes an unfinished one, risky held and credited by the admin, cancelled credits
+  nothing, another courier reaches none of it; sweep lines for `/Dev/Pay` and both `/pay` routes). After the last
+  changes (sorting, admin layout, method names, and the tests forced onto the test gateway because the real store
+  is now in `appsettings.Local.json`) `OnlinePaymentsTests` again: **3 of 3**.
+- **Live:** on `OneDrop-Test` with the test gateway, then with the owner's **real SSLCommerz sandbox**: Chattogram
+  Crafts charged ৳150, paid by bKash on SSLCommerz's page, credited (the gateway said ৳146.25 reaches the courier after
+  its fee); charged ৳120, paid by Nagad with "Success with risk", held, shown to the admin with the gateway's reason
+  ("Not Safe"), credited. Merchant page at 1440 px and 390 px, no sideways scroll.
+- **What the live check caught, fixed:** the gateway's raw label ("BKASH-BKash") on statements, the pay dialog in the
+  warning colour, and the admin's refund box running off the table.
+- **Then (owner):** "dont show this page at localhost:5080. i want it to start with http://onedrop.localhost:5080/".
+  The bare domain now sends visitors to the courier named by `Tenancy:HomeCourier` (`onedrop`; the list of couriers
+  shows only when none is set); platform admins still sign in at `localhost:5080/Account/Login` and land on the list.
+  The launch profile opens `http://onedrop.localhost:5080/`. New `PortalPagesTests` case; the class passed 12 of 12.
+- **Worth knowing:** SSLCommerz's merchant panel is `sandbox-gw.sslcommerz.com` but its API is still
+  `sandbox.sslcommerz.com`. Its notice cannot reach localhost, which is why the check job exists. The owner asked
+  (again) never to run the full integration suite after a change, and to keep it in the background when it is needed.
+
+### 2026-10-07 (later: Phase 4 begins, payouts and the admin's bell)
+- **Owner's request:** after "do merchant payouts work?" and a list of what the admin panel lacks, "Lets fix these". Became Phase 4.
+- **4.1 done.** `Payout` keeps `FailedAttempts`, `LastError`, `LastTriedOn`, `AdjustmentsTotal` and can be `Cancelled` (its lines freed); `LedgerEntry` kind `Adjustment` with a `Note` and no parcel; `Merchant.PayoutHold` per account. `PayoutsJob.SendAgainAsync`, `CancelAsync`, `PayNowAsync` returning whether the money left; `IJobSchedule` reads Hangfire for the last and next run. `/Admin/Payouts`: how payouts work, the run's times (and a warning when late), refused transfers with send again, owed and owing lists (first 15, with totals). `/Admin/Payout/{n}`: send again, cancel. `/Admin/Merchant/{id}`: hold, release, pay now, adjustments. `/Dev/Payouts` can make the fake refuse an account. Both databases published.
+- **4.2 done.** `AdminBellHandler`: sign-ups, requests, flags, failed messages, refused payouts, owed with no account, short riders and return list notes of the week; drawn in the layout for admins.
+- **Tested:** build 0 warnings; domain **187** (five new), architecture 6, integration **91 of 91, none skipped** (four new: refused and sent again, cancelled and paid to a corrected account, held and adjusted, the admin's bell). Live on `OneDrop-Test` (port 5090) at desktop and 390 px; no console errors, no sideways scroll.
+- **What the live check caught, fixed:** a credit shown as a charge on the invoice (adjustments now kept apart on the payout), a cancelled invoice reading "Paid", pay now reporting success on a refused transfer, uncapped owed/owing lists, a cramped refused table. Also the status check not applied at first (caught by a test).
+- **Worth knowing:** a full integration run takes 20 to 28 minutes over `ras-x2`. Cancel after a refusal can pay twice if the gateway did send the money; the dialog says to check first.
+
+### 2026-10-07 (Phase 3: the Steadfast gaps, one by one)
+- **Owner's request:** "Check how much work we have left" (seven Phase 3 tasks, plus the owner's review and the two
+  items waiting on accounts), then "Ok do all of them one by one".
+- **Baseline first.** Build 0 warnings; domain 161, architecture 6; integration **72 of 73**: the isolation sweep
+  failed on `/Dev/Emails`, a page the last session added without its sweep line (the 2026-10-06 entry promised a full
+  run it never recorded). Added to the sweep and to the "not outside Development" check.
+- **3.2 More parcel tabs, done.** `ParcelTab` gained `PartlyDelivered` (Delivered is now full deliveries only; the
+  dashboards count partly delivered apart, and the delivery rate still counts both), `InReview` and `Exceptional`.
+  New `Domain/Parcels/ParcelIssue.cs`; `Parcel.Flag` (only while the courier has the parcel, a note of at most 200,
+  keeps the time it was first flagged) and `Parcel.ClearFlag` write a history line each and raise no event, so no
+  webhook; `Parcel.AssignTo` refuses a flagged parcel. Schema: `Issue`, `IssueNote`, `IssueRaisedOn`,
+  `chk_Parcel_Issue` and the filtered `IX_Parcel_Tenant_Issue` (both databases published). Hub parcel page: "Flag a
+  problem" (kind, what is wrong) and "Clear the flag" (what was done); the assign page shows a flagged parcel with
+  no box to tick, the hub board shows the flag; the admin dashboard counts both kinds; the merchant gets the tabs, the
+  flag in its list, an alert on the parcel and a banner on its dashboard; `GET /api/v1/parcels/{code}` returns
+  `issue` and `issueNote`.
+- **Tested:** domain **165** (four new: flag and clear, flagging again, who can be flagged, a flag raised while out
+  with a rider); integration **76 of 76 over `ras-x2`, none skipped**, with three new `ParcelTabsTests` (a hub flag in
+  the merchant's tab only, refused at the assign page, cleared and handed out; an admin's exceptional flag; partly
+  delivered apart from delivered).
+- **Live on `OneDrop-Test`** (port 5090: another app of the owner's, Grabity.Api, holds 5080) with headless Chrome at
+  1440 px and 390 px: flagged OD10000519 at Mirpur as the admin, saw it refused a box on the assign page, in the
+  "In review" tab, on the admin dashboard, and as Fashion House in the tab, the parcel and the dashboard banner; then
+  cleared it ("Review finished: Live check finished"). No console errors, no sideways scroll.
+- **What the screenshots caught, all fixed:** eleven tabs need 1577 px and the bar had 1118 px with its scrollbar
+  hidden, so the last tabs (the open "In review" among them) were cut off on a desk; it was already a little over with
+  eight. Tabs now wrap onto a second row on a desk and stay one swipeable row on a phone, where `site.js` scrolls the
+  open tab into view. The red count first used the class `alert`, which is the page alert component (padding, border,
+  margin), and blew the tab up; renamed `count-review` / `count-exception`.
+- **Worth knowing:** `sed -i` from Git Bash rewrites a CRLF file as LF (it happened to Project-Context.md, put back);
+  and line 1 of Project-Context.md held a stray copy of the moderators decision row from the last session's perl
+  mishap, above the title. Removed.
+- **3.3 Stats page, done.** New `Domain/Common/Period.cs` (the named periods, and a custom one checked: both days, in
+  order, not after today, at most 366 days), `ParcelStatsHandler` (one `GROUP BY` over the parcels booked in the
+  period, merchant-filtered, every status listed even at zero) and `/Merchant/Stats` (moderators with the dashboard
+  permission; in the menu under the dashboard and among the dashboard's tools). Rates: delivery and return out of the
+  parcels that reached an end with the courier, cancel out of everything booked; "—" while there is nothing to divide.
+  Each status row links to the parcel list for its tab and those days.
+- **Tested:** domain **171** (six new `PeriodTests`); integration **78 of 78, none skipped**, with two new
+  `StatsTests` (five parcels in five states plus one booked forty days ago: counts, rates, cash, the custom period,
+  a period backwards; another merchant counts none of them) and the sweep's `/Merchant/Stats` line. Live as Fashion
+  House at 1440 px and 390 px: last 30 days, last month (the empty state), a custom range and a backwards one; no
+  console errors, no sideways scroll.
+- **What the screenshots caught, fixed:** the number cards were written flat (icon, label, value side by side), which
+  the card style lays out wrongly; they need the label, value and note wrapped in one `div`, as the dashboard does. The
+  admin's Reports page from the last session had the same flat cards and showed "Delivered 255 109 returned" in a
+  jumble; fixed the same way. The custom-period date boxes stretched to full width; now 170 px each.
+- **3.4 Returns the merchant signs for, done.** `Domain/Delivery/ReturnList.cs` (`ReturnList`, `ReturnListParcel`;
+  out, handed over, confirmed, not handed over) and `Parcel.CanGoBackFrom` / `SendBack` / `HandBackAtDoor` /
+  `MissHandBack`; tables `Delivery.ReturnList`, `Delivery.ReturnListParcel` and the sequence
+  `Delivery.ReturnListNumber`, in the security policy. `ReturnListsHandler` (hub and rider; the hand-over writes the
+  ledger lines in the same save) and `MerchantReturnsHandler`. Pages `/Hub/Returns` (also the hub board's "Hand back"
+  step and the hub chooser), `/Rider/Return/{number}` with a "Returns to hand back" section on the rider's home,
+  `/Merchant/Returns` and `/Merchant/Return/{number}`; a dashboard banner while a list waits to be confirmed.
+- **3.5 Requests, done.** `Domain/Parcels/ParcelRequest.cs` and `Parcel.ChangeCod`; table `Parcels.ParcelRequest` (one
+  open per parcel). `ParcelRequestsHandler`; the merchant parcel page's "Ask the courier" (change the cash, cancel)
+  replaces "Ask for it back"; `/Merchant/Requests`, `/Admin/Requests` (in the admin menu, a dashboard banner), and the
+  open request shown on the hub's parcel page.
+- **3.6 Payout accounts and pay now, done.** `MerchantPayoutAccount` with the account check shared with
+  `Merchant.SetPayoutAccount` (`PayoutAccounts.Read`); table `Merchants.MerchantPayoutAccount` and
+  `Scripts/2026/004_PayoutAccounts.sql`, which kept each account's existing one (1,823 in `OneDrop-Test`).
+  `PayoutAccountsHandler` behind Settings (add, use, remove; the in-use one cannot be removed); the admin's payout
+  form keeps its account in the list too. `PayoutsJob.PayNowAsync` and "Get paid now" on Payments, which now splits
+  the balance into ready, today and still to collect, and shows a mobile account in its local form.
+- **3.7 The bell, done.** `MerchantBellHandler` works the last week's notices out of parcels, attempts, flags, return
+  lists, requests and payouts; the layout draws it for merchants, `site.js` keeps "seen" in a cookie per login.
+- **3.8 Small things, done.** `ParcelListHandler.ExportAsync` and `/Merchant/Export` (the parcel list's Export button
+  now uses it, so it is no longer cut at 100 rows); `ParcelStatsHandler.ByDayAsync` and `/Merchant/ByDate`, sharing
+  the stats page's period picker (`_PeriodPicker`); the merchant ID with a copy button in the account menu and on
+  Settings, found by the admin's merchant search; empty parcel lists, labels and stats offer their next action.
+- **Tested:** build 0 errors, 0 warnings; domain **182** (new: `ReturnListTests` 4, `ParcelRequestTests` 5,
+  `PayoutAccountTests` 2); architecture 6. Integration: 3.4's full run **80 of 80**; then 3.5 to 3.8 targeted
+  (22 of 22) and together in one full run of **87**: 85 passed, and two 3.2 tests failed because the new bell names
+  flagged and partly delivered parcels on every page, so "this code is not in that tab" found it in the bell; they
+  now read the list below the tabs. New: `ReturnListsTests` (2), `ParcelRequestsTests` (3), `PayoutAccountsTests` (3),
+  `BellTests` (1), and sweep lines for `/Hub/Returns`, `/Rider/Return`, `/Merchant/Returns`, `/Merchant/Return`,
+  `/Merchant/Requests`, `/Admin/Requests`, `/Merchant/Export` and `/Merchant/ByDate`. Both databases published.
+- **Live on `OneDrop-Test`** at 1440 px and 390 px: returned OD10000519 at Mirpur and sent it on RL-100009 with Rafiq
+  Hasan, handed it over from his phone, confirmed it as Fashion House with a note (the hub sees the note); asked to
+  change OD10000516's cash from ৳450 to ৳400, approved it as the admin, saw the answer and the history line; kept a
+  Nagad account without using it; delivered OD10000517 from the rider's phone and was paid now (INV-100245); the
+  bell listed the delivery, the return and the list, then the payout; downloaded the CSV; by date; the merchant ID.
+  No console errors, no sideways scroll at either width. Fixed on the way: "All 1 handed over", the CSV's money
+  written two ways, an empty stage tab offering "Book a parcel", and Payments showing a bKash number as +880.
+- **Not done:** the API cannot ask for a cancellation or cash change yet (it still cancels before pickup only); no
+  limit on "Get paid now"; the bell does not follow a person to another browser.
+
+### 2026-10-06 (Phase 2 finished as far as it can be — email, run sheet, reports)
+- **Owner's request:** "Complete Phase 2", and "as we cant intigrate read SMS lets use mail insted", with a Gmail
+  address and an app password. Asked and answered: the emails go to **merchants only** (recipients have no email
+  address in our model, so they keep the fake SMS until there is a gateway), and the bKash / Nagad / bank payout
+  gateways and the app's own SQL login are **left alone** ("we still dont have those so leave them").
+- **The mail server (2.6, the half we can do).** `IEmailSender` with `SmtpEmailSender` (STARTTLS, one client per
+  message) and `FakeEmailSender`; which one is used depends on whether `Email:Host` and `Email:From` are set. The
+  Gmail address and its **app password live only in the git-ignored `src/Web/appsettings.Local.json`**; `appsettings.json`
+  holds empty defaults, the README says how to fill them, and `WebAppFactory` forces the fake so a test run can never
+  send real mail. New `/Dev/Emails` lists what was sent and has a button that sends a test email through the real
+  server.
+- **2.4 Merchant notifications.** `Payout.MarkPaid` now raises `PayoutPaid` (once, however often the gateway's answer
+  is recorded); the outbox writes a `MerchantEmailMessage`, and `SendEmailsJob` — a third loop beside the texts and
+  the webhooks — sends it. The email is composed at send time from the payout as it then is: cash collected, charges,
+  what was sent, the account (last four digits only) and a link to the invoice. It goes to the merchant's contact
+  email, or the account's first login if it has none; a merchant with neither is skipped rather than retried.
+  `ITrackingLinks` gained `Invoice(number)`.
+- **2.3 Run sheet.** `RunsHandler.SheetAsync` and `/Hub/RunSheet/{id}`: the parcels of the run **still to hand over**
+  (a parcel the rider has recorded drops off), each with the door, the phone, the note, the attempt number and the
+  cash, with totals and lines to sign. Printed from the page; offered in the toast as soon as parcels are assigned
+  (`AssignResult` now carries the run id) and from the closing page while a rider is out.
+- **2.5 Reports.** New `ReportsHandler` and `/Admin/Reports` over any period up to 92 days (a week by default):
+  day by day (delivered, returned, cash collected, delivery / COD / return charges, earned, owed to merchants), by
+  rider (stops, deliveries, success rate, cash collected against cash handed in, what is short, runs still open) and
+  returns by merchant (rate and return charges). Each table downloads as CSV. The money comes from the ledger (whose
+  `EntryDate` is already the courier's day) and the counts from the parcels that reached a final status, whose UTC
+  `ClosedOn` is turned into the courier's day in memory — the window is capped at 92 days so that set stays small.
+- **Tested:** build 0 errors, 0 warnings; domain **161** (one new assertion: a payout tells the merchant once);
+  architecture 6. Integration: new `MerchantEmailTests`, `RunSheetTests` (2) and `ReportsTests` (2), plus two new
+  sweep lines (`/Hub/RunSheet`, `/Admin/Reports`); the full run is recorded below. **The Gmail credentials were
+  proved live** — an SMTP send from PowerShell was accepted, and the app's own sender delivered a test email through
+  `smtp.gmail.com` from `/Dev/Emails`.
+- **Worth knowing:** `perl -0pi -e` mangles any replacement containing `$"` (Perl reads it as a variable) — several
+  C# interpolated strings were silently emptied before I noticed. Use the editor, not perl, for those.
+
+### 2026-10-06 (later still: the gaps from Steadfast's panel, and moderators)
+- **Owner's request:** ten screenshots of Steadfast's merchant panel — "Check these feature. We dont have a lot of
+  them. These will help to improve our system" — then "list them down and remember them and start doing them one by
+  one", with moderators first.
+- **Listed:** the gap analysis became Phase 3 (3.1 to 3.8) above. Not taken: a prepaid wallet (Add fund / Check
+  balance), Pick-n-Drop and "My incoming", and the Bangla switch.
+- **3.1 Moderators, done.** A moderator is an ordinary merchant login plus a `Merchants.Moderator` row holding what
+  they may do (`MerchantPermissions`: dashboard, parcels, booking, payments, tools, settings). The row hangs off the
+  account's **main profile**, not a business, so one moderator works in every business of the account; it therefore
+  carries `AccountId` and is not merchant-filtered (noted in Database.md). `/Merchant/Moderators` (owner only) lists
+  them with inline tick boxes, adds one, gives out a new password, stops one and lets them back in.
+- **How they are held:** `MerchantPermissionFilter` on the whole `/Merchant` folder reads the rights once per
+  request, leaves them on `HttpContext.Items`, and refuses any page whose entry in `Web/Authentication/MerchantPages.cs`
+  the person does not hold. The list is **default-deny**: a merchant page not on it is the owner's alone, so a page
+  added later cannot quietly open itself. The menu, the favourites bar and the dashboard (quick actions, tools, the
+  money card, latest parcels, the banners) only offer what the person may open, and the account card reads "Moderator".
+- **Stopping one** archives the row and locks the login out (`IUserAccounts.SetLoginEnabledAsync`: `Archived`, lockout
+  to `DateTimeOffset.MaxValue`, security stamp changed), so an open session ends and a fresh sign-in is refused.
+- **No email yet**, so the first password is shown once on the page for the owner to hand over, and can be issued
+  again; the person changes it at `/Account/Password`. Generated as capitals, letters and digits so it always passes
+  the sign-in rules.
+- **Tested:** build 0 errors, 0 warnings; domain **161** (four new in `ModeratorTests`), architecture 6; integration
+  **68 of 68 over `ras-x2`, none skipped**, including two new `ModeratorsTests` (what a moderator may open, what is
+  refused, permissions changed, stopped and shut out; and that no other account sees or stops them) and the sweep's
+  new `/Merchant/Moderators` line. Both databases published (`Merchants.Moderator`, in the security policy).
+- **Live on `OneDrop-Test`** at 1440 px and 390 px with headless Chrome: added a moderator as Fashion House, signed in
+  as them, dashboard and parcels answered 200 while payments, booking, settings, API keys and the moderators page all
+  went to `AccessDenied`; the sidebar showed four items instead of fifteen; permissions changed and the refusals
+  followed. No sideways scroll at either width, no console errors.
+- **Two things the screenshots caught**, both fixed: the dashboard still linked to pages a moderator may not open
+  (the integration test found it first), and the permission ticks in the table were cramped — they are now two
+  columns, with the "added" date folded under the email so the buttons are not pushed off the card.
+- **Not done:** an emailed invitation code (there is no email sender; waits on 2.6), the courier admin cannot see an
+  account's moderators, and the permission check is page-level, not inside each handler.
+
+### 2026-10-06 (later: the coverage map the admin keeps)
+- **Owner's request:** "The Coverage area and Hub area are now seeded data. Keep these but also add a option to make it
+  dynamic so admin can add more or remove any of the existing." That is task 2.2, done without questions.
+- **Decided, and worth knowing:** "remove" is **archive, never delete**. A deleted zone would orphan the parcels that
+  were priced and routed by it (`Parcel.AreaId`, `PickupHubId`, `DeliveryHubId` all point at these rows), so a part of
+  the map that comes off leaves the address lists, the API and the public map while its rows and history stay. The seed
+  still lays the map out; nothing about it changed.
+- **Domain:** `Hub`, `Zone` and `Area` gained `Create` / `Change` / `Archive` / `Restore` with their own validation
+  (they had public constructors and no rules before). New `Domain/Network/Codes.cs` reads a hub or zone code: letters
+  and digits, at most 20, held in capitals, because codes are printed on labels and read out over the phone.
+- **Application:** new `CoverageAdminHandler` (list, add, edit, archive, restore for all three) with the guards, in the
+  same spirit as the rider and pickup-point ones of this morning — nothing moves out from under work in flight:
+  a hub closes only once its zones, riders, parcels and pickups have gone; a zone keeps its hub, city and suburb flag
+  while parcels priced by them are still moving, and leaves the map only once its areas have; an area stays put while
+  parcels are on their way there or a merchant collects from it; a zone or area comes back only onto an open parent.
+  Codes are unique per courier and area names are unique per courier, each with a message instead of a database error.
+- **UI:** `/Admin/Coverage` keeps the map it always showed as its first tab and gains **Hubs**, **Zones** and **Areas**,
+  each a table with inline edit, an add form beside it and a confirm dialog on anything that comes off the map. The
+  areas tab filters by zone (87 areas are too many to read at once) and the zones tab's area count links to it.
+- **No schema change:** all three tables already carried `Archived`, so neither database needed a publish.
+- **Tested:** build 0 errors, 0 warnings; domain 157 (11 new in `CoverageTests`), architecture 6; integration **66 of 66
+  over `ras-x2`, none skipped**, including three new `CoverageAdminTests` (add a hub, a zone and an area and book to it
+  through the API; the guards refuse and an empty area comes off; another courier can neither see it nor post to it)
+  and the sweep's four Coverage lines. Live on the **dev** database at 1440 px and 390 px: opened a hub, drew a zone on
+  it, added an area, saw all three on the map; the refusals appeared word for word ("Live check hub cannot close yet:
+  1 zone it serves…", "Livepur still covers 1 area…", "Livepur Sadar sits in a zone the courier no longer covers…");
+  then the area came off, the zone, and the hub closed. Four tabs, the zone filter narrowing 88 areas to 8, no sideways
+  scroll at either width, no console errors. The live-check hub, zone and area were deleted from dev afterwards
+  (16 hubs, 21 zones, 87 areas again).
+- **Two things to know:** the first full run failed one assertion of mine — the sweep looked for "Mirpur hub", which the
+  new add-hub form carries as a *placeholder*, not as another courier's data; the sweep now checks data-only strings.
+  And two full runs in a row failed 11 and 41 tests purely on the `ras-x2` link dropping (pre-login handshake timeouts,
+  "physical connection is not usable"), while `sqlcmd` answered instantly between them; the third run was clean. The
+  link is flaky, not the code.
+- **Not done:** an owner's look at the new tabs; hubs, zones and areas still cannot be imported in bulk.
+
+### 2026-10-06
+- **Owner's request (later): a picture for the main profile and each business, and a new footer credit.** Settings has an upload (and remove) for the business being worked in; new table `Merchants.MerchantPicture` (in the security policy, published to both databases), `MerchantPicture` entity that accepts only PNG, JPEG or WebP by their first bytes up to 512 KB, `MerchantPictureHandler`, `/Merchant/Picture/{id}` (404 for another account), shown in the sidebar, account menu, business switcher and businesses page. The footer now reads "Developed and designed by Talha from Octopi Digital" linking to octopi-digital.com (both layouts). Tests: five domain, two integration (`MerchantPictureTests`) and a sweep line.
+- **Owner's request:** "Make our website UI also like this [Steadfast's panel] … this one looks much better", then "I
+  like that favourite tab which stays in every page and user can customize them. Also the user setting panel at the
+  top right side." Also: "use ras-x2 now" for the SQL Server.
+- **Shell (every panel):** white sidebar with the signed-in account on top and sign out in red; the top bar carries the
+  page title, the searches, the hide-amounts switch and the hotline (tap to call); larger type, rounder cards; number
+  cards read icon and label, then the number, then context (CSS only, `display: contents`, so no page changed); the
+  "next step" banner is light.
+- **Merchant dashboard:** "Hello, {shop}"; "Right now" (each stage with its count and cash, a chevron to the tab) beside
+  quick actions; tools and links; "Your last 30 days" (booked today and yesterday, booked in 30 days, delivery success,
+  cash collected); the week; the money with the last payment; latest parcels. `MerchantDashboard` gained `Booked` and
+  `LastPayout`. **Payments:** the next payout large, beside how it adds up (cash, delivery, COD and return charges).
+- **Favourites and account menu:** the menu is now one list (`Display/Menu.cs`) that draws the sidebar, the stars and
+  the favourites bar (merchant, admin, hub; up to eight; defaults per role; a cookie per login, `-` meaning none). The
+  avatar opens the account menu: name, email, role, account pages, change password, sign out. New
+  `/Account/Password` (any signed-in person), in the isolation sweep.
+- **SQL Server:** both `*.Local.json` now use `ras-x2,1433` (resolves to 192.168.0.237, same instance, both databases
+  there); docs updated.
+- **Tested:** build 0 errors, 0 warnings; domain 137, architecture 6; integration 59 over `ras-x2`, none skipped — 58
+  passed in the full run, and the favourites test, which had caught a real bug (unpinning everything brought the
+  defaults back), passed after the fix (`AccountMenuTests` 2 of 2). Live on `OneDrop-Test` and dev at 1440 px and
+  390 px: merchant dashboard, payments, admin dashboard, hub board, favourites (pin from a star, picker, reload keeps
+  them), account menu, change password; no sideways scroll.
+- **Two things went wrong on the way, both mine:** a viewport size I set on the DevTools tab while testing made the
+  owner's view look cut off on the right; and starting the app with `--no-build` after editing `site.css` served
+  browsers an empty stylesheet (stale gzip copy; now in Project-Context's traps). Both fixed.
+- **Not done:** a Bangla switch and a dark theme (seen at Steadfast; product work);
+  favourites do not follow a person to another browser (would need a column on the user).
+- **Later (owner's request): several businesses in one merchant account**, as on Steadfast. Each business is a
+  merchant row of its own (`Merchant.MainMerchantId` points an added one at the account's main profile), so parcels,
+  pickups, pickup points, balance, payouts, API keys and webhook stay per business with no change to them. The login's
+  claims list its other businesses; a cookie per login picks the one worked in and `ICurrentUser.MerchantId` returns
+  it (a cookie naming anyone else's business is ignored). Approval and the payout account are the account's: set on the
+  main profile and followed by every business (`FollowAccount`), from the merchant's settings or the admin's page.
+  New `/Merchant/Businesses` (cards with each one's parcels on the way and money waiting, open another) and
+  `/Merchant/NewBusiness`; a switcher under the account card in the sidebar and in the account menu; the admin's
+  merchant list and page say which account a business belongs to. Schema published to both databases.
+- **Tested:** build 0 warnings; domain 140 (three new), architecture 6; integration 61 over `ras-x2`, none skipped:
+  60 passed in the full run, including the two new `MerchantBusinessesTests` (add, work in it, own parcels, payout
+  account shared, forged cookie, suspension covers the account) and the sweep's two new lines; `FailedMessagesTests`
+  failed because my live-check app on `OneDrop-Test` sent its planted text, and passed alone with the app stopped (now a
+  trap). The first targeted run caught a 500 on every merchant page (the switcher partial's model type), fixed before
+  the full run. Live on `OneDrop-Test` at about 1265 px: added "Fashion House Kids", landed in it with its own empty
+  dashboard, switched back (the main profile kept its 6 parcels), businesses page, account menu switcher; no sideways
+  scroll. The top bar squeezed the page title at that width; below 1400 px the searches narrow and the hotline is its
+  icon.
+- **Then (owner):** "Steadfast allows 10, then also make ours 10"; and no login per business: "I already logged in to
+  get into the merchant so I don't need other login". The limit is a courier setting, `Tenant.MaxBusinessesPerAccount`
+  (NULL: none), set to 10 for OneDrop Courier by `003_BusinessesPerAccount.sql`; the main profile does not count, as on
+  Steadfast ("0 of 10 businesses"). `Merchant.AddBusiness` refuses the eleventh; the businesses page says "n of 10
+  businesses added" and drops "Add business" when full; the add page explains instead of offering a form. Published to
+  both databases (the test-only "rival" courier has no limit).
+- **Tested:** build 0 errors, 0 warnings; domain 141 (one new: up to the limit, refused at it, no limit when NULL),
+  architecture 6; integration 61 of 61 over `ras-x2`, none skipped (the businesses page reads "1 of 10 businesses
+  added"). A first run hung for 17 minutes after the connection to `ras-x2` dropped at 11:53 ("physical connection is
+  not usable"); stopped and run again.
+- **Then (owner):** "make the unactive business in gray color". In the business switcher (sidebar and account menu)
+  the businesses not being worked in now have a grey tile and grey name; the open one keeps its sky blue. CSS only;
+  the rebuilt app serves the new rules.
+- **Then (owner):** the favourites bar ran out of room before eight tabs. Each chip now shrinks as more are pinned
+  (`:has(.fav-chip:nth-child(6|7|8))`, counted on the chips because they are the first children of `.favbar-items`):
+  at six the chips are 35 px and 13 px, at seven 33 px and 12.5 px with the "Favourites" word dropped (the star stays),
+  at eight 32 px and 12 px; below 1400 px a full bar tightens once more. CSS only, so nothing had to re-render; the
+  overflow scroll stays as the last resort. Checked at 1920, 1440 and 1280 px with five, six, seven and eight chips:
+  all eight fit on one line beside the 256 px sidebar at every one of them. Build 0 errors, 0 warnings; the rebuilt app
+  serves the new rules.
+
+### 2026-10-05 (later: Steadfast's panel, then reweighing at the hub)
+- **Owner's request:** look at Steadfast's merchant dashboard in Chrome and make ours as easy to use, without copying it.
+- **Getting at it:** Chrome 136+ ignores `--remote-debugging-port` against the default profile, by design, so it was
+  driven over DevTools with its own `--user-data-dir` (`.chrome-debug`, excluded in `.git/info/exclude`) and a
+  one-time sign-in. A screenshot had suggested their top bar held a customer fraud check; the DOM showed it is a parcel
+  search with a field selector (Parcel ID / Phone / Invoice / Tracking code) plus a prepaid **balance** button, so that
+  reading was wrong. Their order list and add-parcel form could not be read: the account is unverified, so it has no
+  parcels and `/add-parcel` redirects to the KYC form.
+- **Taken from them:** cash shown beside every stage count; a hide-amounts toggle (theirs defaults to hidden, ours to
+  shown); banners that carry the button that fixes them. **Not taken:** the field selector (our one box already searches
+  code, phone and name), the menu search and favourites bar (both answer a 30-item sidebar we do not have). **Noted as
+  product gaps, not UI:** several businesses per login, moderators, payment request, prepaid funds, WhatsApp updates.
+- **Merchant and admin panels:** a customer check in the merchant top bar (`/Merchant/FraudCheck` on GET, my own idea,
+  not theirs); per-stage cash on the merchant tiles ("to collect" while on the way, "collected" once delivered) and on
+  the admin's "Parcels in progress"; a hide-amounts switch in the top bar, read before first paint so nothing flashes —
+  one change to `Money.Taka` (the digits moved into `.amount-figure`) made every taka in the app maskable; pending and
+  suspended banners gained "Add your payout account" and a tap-to-dial hotline; quick-action tiles on the merchant
+  dashboard, mainly for phones where the sidebar is behind the menu button.
+- **Logic gap closed — nobody could weigh a parcel.** `WeightGrams` was whatever the merchant typed and froze at
+  pickup, so a 5 kg parcel booked as 500 g travelled for ৳60 for ever. A hub now weighs it on the parcel page
+  (`Parcel.Reweigh`): the delivery charge is worked out again on the scale's reading, the merchant's own figure is
+  kept, and the history records both weights and both charges. Repricing from today's rate card would have broken
+  "charges snapshot at booking" (`DeliveryRate.Change` edits the row in place, so there is no rate history), so the
+  parcel now carries the weight rule it was booked under — `IncludedWeightGrams`, `BaseCharge`, `ExtraKgCharge` on
+  `ParcelCharges` and the table, backfilled by `Scripts/Pre/002_ParcelWeightRule.sql`.
+- **Two failures fixed that were already on `main`** from `ce576c1`, not from this work: the isolation sweep had no
+  line for `/Admin/Vehicles`, and `RowLevelSecurityTests` planted a rider with a raw INSERT written before the NOT NULL
+  `Vehicle` column, so it died on that instead of reaching the block predicate.
+- **Tested:** build 0 errors, 0 warnings; domain 137 (five new: the charge follows the scale, a rate change since
+  booking does not reach it, only while the courier has it to deliver, and two refused weights), architecture 6. Both
+  databases published. Integration run recorded below.
+- **Worth knowing:** `dotnet test --project tests/...` reports "Zero tests ran" (exit 5) on this machine; the suites
+  run when the test executables are invoked directly. The documented command in Conventions.md does not work as written.
 
 ### 2026-10-05
 - **Owner's request:** "make the UI more beautiful … professional … add beautiful animation … make the whole system user

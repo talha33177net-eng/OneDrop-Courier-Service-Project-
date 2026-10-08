@@ -1,0 +1,68 @@
+@page "{number}"
+@using Domain.Delivery
+@model Web.Pages.Merchant.ReturnModel
+@{
+    var l = Model.List.List;
+    ViewData["Title"] = $"Return list {l.Number}";
+}
+
+<div class="page-head">
+    <div>
+        <div class="breadcrumb"><a asp-page="/Merchant/Returns">Returns</a> <span>/</span> <span>@l.Number</span></div>
+        <h1 class="mono">@l.Number</h1>
+        <p>@l.Parcels parcel@(l.Parcels == 1 ? "" : "s") back to @l.PickupPoint, @l.Address · sent @l.Sent.ToString("d MMM yyyy, h:mm tt") with @l.Rider (@Money.Phone(l.RiderPhone))</p>
+    </div>
+    <div class="page-actions">@Statuses.Badge(l.Status)</div>
+</div>
+
+<partial name="_Alerts" />
+
+@if (l.Status == ReturnListStatus.HandedOver)
+{
+    <div class="card mb">
+        <div class="card-head">
+            <div>
+                <h2>@Icons.Get("clipboard") Did these parcels arrive?</h2>
+                <p>The rider handed them over on @l.HandedOverOn?.ToString("d MMM, h:mm tt"). Confirming is your signature for them. If something is missing or damaged, say what, and we look into it.</p>
+            </div>
+        </div>
+        <div class="card-body">
+            <form method="post" asp-page-handler="Confirm" asp-route-number="@l.Number" class="gap">
+                <input type="text" name="note" maxlength="300" placeholder="Anything missing or damaged? (optional)" style="max-width:420px" />
+                <button class="btn btn-primary" type="submit">@Icons.Get("check") Confirm I received them</button>
+            </form>
+        </div>
+    </div>
+}
+else if (l.Status == ReturnListStatus.Confirmed)
+{
+    <div class="alert alert-success">@Icons.Get("check-circle")<div><strong>You confirmed these parcels arrived</strong> on @l.ConfirmedOn?.ToString("d MMM yyyy, h:mm tt").@(l.Note is null ? "" : $" Your note: {l.Note}")</div></div>
+}
+else if (l.Status == ReturnListStatus.NotHandedOver)
+{
+    <div class="alert alert-warning">@Icons.Get("alert")<div><strong>The rider could not hand these over:</strong> @l.Note. They are back at the hub and will come again.</div></div>
+}
+else
+{
+    <div class="alert alert-info">@Icons.Get("bike")<div><strong>On the way to you.</strong> @l.Rider is bringing these parcels; you confirm them here once they arrive.</div></div>
+}
+
+<div class="card">
+    <div class="card-head"><div><h2>The parcels</h2></div></div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead><tr><th>Parcel</th><th>Recipient</th><th>Why it came back</th><th class="num">COD</th></tr></thead>
+            <tbody>
+                @foreach (var p in Model.List.Parcels)
+                {
+                    <tr>
+                        <td><a class="code-link" asp-page="/Merchant/Parcel" asp-route-code="@p.TrackingCode">@p.TrackingCode</a></td>
+                        <td>@p.RecipientName<div class="cell-sub">@p.Area</div></td>
+                        <td>@(p.Reason ?? "—")</td>
+                        <td class="num">@Money.Taka(p.CodAmount)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

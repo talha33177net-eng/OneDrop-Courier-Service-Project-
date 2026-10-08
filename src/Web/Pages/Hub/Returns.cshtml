@@ -1,0 +1,147 @@
+@page
+@using Domain.Delivery
+@model Web.Pages.Hub.ReturnsModel
+@{
+    ViewData["Title"] = "Returns to merchants";
+    var data = Model.Data;
+}
+
+<div class="page-head">
+    <div>
+        <h1>Returns to merchants</h1>
+        <p>Returning parcels this hub collected, by the pickup point they go back to. Send them with a rider on a return list, or hand them over at the counter in the scan page's hand-back mode.</p>
+    </div>
+    <div class="page-actions">
+        @await Html.PartialAsync("_HubSwitch", (Model.Work, Model.Hub))
+        <a class="btn btn-outline" asp-page="/Hub/Scan" asp-route-hub="@Model.Hub?.Code" asp-route-mode="HandBack">@Icons.Get("scan") Hand back at the counter</a>
+    </div>
+</div>
+
+<partial name="_Alerts" />
+
+@if (data is null)
+{
+    <div class="card"><div class="empty">@Icons.Get("warehouse")<h3>No hubs yet</h3></div></div>
+    return;
+}
+
+<div class="tip" data-tip="hub-returns">
+    @Icons.Get("bulb")
+    <div>
+        <div class="tip-title">How a return list works</div>
+        <ol>
+            <li>Tick the parcels going back to a pickup point and choose a rider</li>
+            <li>The rider takes them to the merchant and records the hand-over on their phone; the merchant is charged then</li>
+            <li>The merchant confirms in their panel that the parcels arrived, or says what is missing</li>
+        </ol>
+    </div>
+</div>
+
+@if (data.Waiting.Count == 0)
+{
+    <div class="card mb">
+        <div class="empty">@Icons.Get("check-circle")<h3>Nothing to send back</h3><p>Returning parcels this hub collected show up here once they are scanned in.</p></div>
+    </div>
+}
+@foreach (var (group, index) in data.Waiting.Select((group, index) => (group, index)))
+{
+    var sendable = group.Parcels.Where(p => p.Issue is null).ToList();
+    <form method="post" asp-route-hub="@Model.Hub?.Code" class="card mb">
+        <div class="card-head">
+            <div>
+                <h2>@Icons.Get("store") @group.Merchant <span class="muted" style="font-weight:500">· @group.PickupPoint</span></h2>
+                <p>@group.Address · <a href="tel:@Money.Phone(group.Phone)">@Money.Phone(group.Phone)</a> · @group.Parcels.Count parcel@(group.Parcels.Count == 1 ? "" : "s")</p>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table class="table compact">
+                <thead><tr><th class="check-col"></th><th>Parcel</th><th>Recipient</th><th>Why it came back</th><th class="num">COD</th></tr></thead>
+                <tbody>
+                    @foreach (var p in group.Parcels)
+                    {
+                        <tr class="@(p.Issue is null ? "" : "later")">
+                            <td class="check-col">
+                                @if (p.Issue is null)
+                                {
+                                    <input type="checkbox" name="codes" value="@p.TrackingCode" checked aria-label="Send @p.TrackingCode back" />
+                                }
+                                else
+                                {
+                                    <span title="Flagged: clear it on the parcel's page first">@Icons.Get("flag")</span>
+                                }
+                            </td>
+                            <td><a class="code-link" asp-page="/Hub/Parcel" asp-route-code="@p.TrackingCode">@p.TrackingCode</a>@if (p.Issue is { } issue) { <div class="mt-xs">@Statuses.Badge(issue)</div> }</td>
+                            <td>@p.RecipientName<div class="cell-sub">@p.Area</div></td>
+                            <td>@(p.Reason ?? "—")</td>
+                            <td class="num">@Money.Taka(p.CodAmount)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="card-foot spread">
+            @if (data.Riders.Count == 0)
+            {
+                <span class="muted">This hub has no active riders. An admin adds them under Riders.</span>
+            }
+            else if (sendable.Count == 0)
+            {
+                <span class="muted">Every parcel here is flagged; clear the flags first.</span>
+            }
+            else
+            {
+                <div class="gap">
+                    <label class="sr-only" for="rider-@index">Rider</label>
+                    <select name="riderId" id="rider-@index" required style="max-width:260px">
+                        <option value="">Choose a rider</option>
+                        @foreach (var rider in data.Riders)
+                        {
+                            <option value="@rider.Id">@rider.Name (@Money.Phone(rider.Phone))</option>
+                        }
+                    </select>
+                    <button class="btn btn-primary" type="submit">@Icons.Get("send") Send with the rider</button>
+                </div>
+                <span class="muted">The ticked parcels go on one return list.</span>
+            }
+        </div>
+    </form>
+}
+
+<div class="card">
+    <div class="card-head"><div><h2>@Icons.Get("clipboard") Return lists</h2><p>Out with riders, waiting for the merchant to confirm, and those finished in the last two weeks</p></div></div>
+    @if (data.Lists.Count == 0)
+    {
+        <div class="empty">@Icons.Get("inbox")<h3>No return lists yet</h3><p>A list shows up here when parcels go back with a rider.</p></div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table compact">
+                <thead><tr><th>List</th><th>Merchant</th><th>Rider</th><th class="num">Parcels</th><th>Status</th><th>Note</th></tr></thead>
+                <tbody>
+                    @foreach (var list in data.Lists)
+                    {
+                        <tr>
+                            <td><span class="mono strong">@list.Number</span><div class="cell-sub">@list.Sent.ToString("d MMM, h:mm tt")</div></td>
+                            <td>@list.Merchant<div class="cell-sub">@list.PickupPoint</div></td>
+                            <td>@list.Rider<div class="cell-sub">@Money.Phone(list.RiderPhone)</div></td>
+                            <td class="num">@list.Parcels</td>
+                            <td>
+                                @Statuses.Badge(list.Status)
+                                @if (list.ConfirmedOn is { } confirmed)
+                                {
+                                    <div class="cell-sub">@confirmed.ToString("d MMM, h:mm tt")</div>
+                                }
+                                else if (list.HandedOverOn is { } handed)
+                                {
+                                    <div class="cell-sub">handed over @handed.ToString("d MMM, h:mm tt")</div>
+                                }
+                            </td>
+                            <td>@(list.Note ?? "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

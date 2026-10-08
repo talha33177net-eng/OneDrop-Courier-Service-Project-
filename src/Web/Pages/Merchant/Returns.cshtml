@@ -1,0 +1,82 @@
+@page
+@using Domain.Delivery
+@model Web.Pages.Merchant.ReturnsModel
+@{
+    ViewData["Title"] = "Returns";
+    var d = Model.Data;
+}
+
+<div class="page-head">
+    <div>
+        <h1>Returns</h1>
+        <p>Parcels coming back to you, and the return lists our riders bring. Confirm a list once its parcels have arrived.</p>
+    </div>
+</div>
+
+<partial name="_Alerts" />
+
+@if (d.ToConfirm > 0)
+{
+    <div class="alert alert-warning">@Icons.Get("clipboard")<div><strong>@d.ToConfirm return list@(d.ToConfirm == 1 ? " was" : "s were") handed over to you.</strong> Open @(d.ToConfirm == 1 ? "it" : "each") and confirm the parcels arrived, or tell us what is missing.</div></div>
+}
+
+<div class="card mb">
+    <div class="card-head"><div><h2>@Icons.Get("return") Coming back</h2><p>@d.ComingBack.Count parcel@(d.ComingBack.Count == 1 ? "" : "s") on the way back to you, and where each one is</p></div></div>
+    @if (d.ComingBack.Count == 0)
+    {
+        <div class="empty">@Icons.Get("check-circle")<h3>Nothing is coming back</h3><p>A parcel the customer refused, or one you asked back, shows up here until it reaches you.</p></div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Parcel</th><th>Recipient</th><th>Why</th><th>Where it is</th></tr></thead>
+                <tbody>
+                    @foreach (var p in d.ComingBack)
+                    {
+                        <tr>
+                            <td><a class="code-link" asp-page="/Merchant/Parcel" asp-route-code="@p.TrackingCode">@p.TrackingCode</a></td>
+                            <td>@p.RecipientName<div class="cell-sub">@p.Area</div></td>
+                            <td>@(p.Reason ?? "—")</td>
+                            <td>@p.Where</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<div class="card">
+    <div class="card-head"><div><h2>@Icons.Get("clipboard") Return lists</h2><p>Parcels a rider brings back to you together, newest first</p></div></div>
+    @if (d.Lists.Count == 0)
+    {
+        <div class="empty">@Icons.Get("inbox")<h3>No return lists yet</h3><p>When a rider brings your returns, their list shows up here for you to confirm.</p></div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>List</th><th>To</th><th>Rider</th><th class="num">Parcels</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var list in d.Lists)
+                    {
+                        <tr>
+                            <td><a class="code-link" asp-page="/Merchant/Return" asp-route-number="@list.Number">@list.Number</a><div class="cell-sub">@list.Sent.ToString("d MMM, h:mm tt")</div></td>
+                            <td>@list.PickupPoint<div class="cell-sub">@list.Address</div></td>
+                            <td>@list.Rider<div class="cell-sub">@Money.Phone(list.RiderPhone)</div></td>
+                            <td class="num">@list.Parcels</td>
+                            <td>@Statuses.Badge(list.Status)</td>
+                            <td class="text-right">
+                                @if (list.Status == ReturnListStatus.HandedOver)
+                                {
+                                    <a class="btn btn-primary btn-sm" asp-page="/Merchant/Return" asp-route-number="@list.Number">Confirm</a>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

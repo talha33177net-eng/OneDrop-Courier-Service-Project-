@@ -19,4 +19,13 @@ public interface IUserAccounts
 
     /// <summary>The email of a merchant's first login, or null.</summary>
     Task<string?> MerchantEmailAsync(long merchantId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lets a login in or shuts it out, for a person stopped by whoever added them. A shut-out login is refused at
+    /// sign-in, and a session already open ends at its next security check.
+    /// </summary>
+    Task SetLoginEnabledAsync(long userId, bool enabled, CancellationToken cancellationToken = default);
+
+    /// <summary>Gives a login a new password, for an owner who has to hand one out again.</summary>
+    Task<Result> ResetPasswordAsync(long userId, string password, CancellationToken cancellationToken = default);
 }

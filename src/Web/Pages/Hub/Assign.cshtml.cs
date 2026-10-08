@@ -49,6 +49,8 @@ public class AssignModel(HubOverviewHandler hubs, HubBoardHandler board, AssignP
             if (assigned.Value.Assigned > 0)
             {
                 TempData["Done"] = $"{assigned.Value.Assigned} parcel{(assigned.Value.Assigned == 1 ? "" : "s")} handed over.";
+                TempData["DoneLink"] = $"/Hub/RunSheet/{assigned.Value.RunId}?hub={Hub.Code}";
+                TempData["DoneLinkText"] = "Print the run sheet";
             }
 
             if (assigned.Value.Problems.Count > 0)
